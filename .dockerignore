@@ -4,6 +4,7 @@
 .githooks
 docs
 **/docs
+CONTRIBUTING.md
 
 .env
 **/.env
