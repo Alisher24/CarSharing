@@ -1,5 +1,6 @@
 # Local planning documents stay outside Git, including all nested files.
 /docs/
+/CONTRIBUTING.md
 
 # Local configuration and credentials. Only explicit examples are versioned.
 .env
