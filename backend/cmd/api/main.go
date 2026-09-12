@@ -48,11 +48,12 @@ func application(cfg config.Config, pool *pgxpool.Pool) httpapi.Application {
 		KeyLength:   auth.KeyLength,
 	})
 	return httpapi.Application{
-		Probe:    httpapi.DatabaseProbe(pool),
-		Pool:     pool,
-		Sessions: sessions.NewManager(pool, cfg.SessionCookieSecure),
-		Auth:     auth.NewService(users, hasher),
-		Users:    users,
+		Probe:          httpapi.DatabaseProbe(pool),
+		AllowedOrigins: cfg.AllowedOrigins,
+		Pool:           pool,
+		Sessions:       sessions.NewManager(pool, cfg.SessionCookieSecure),
+		Auth:           auth.NewService(users, hasher),
+		Users:          users,
 	}
 }
 

@@ -12,7 +12,12 @@ import (
 // Application is everything the HTTP layer needs from the process around it. The health operations
 // need only the readiness probe, so a caller that serves nothing else may leave the rest unset.
 type Application struct {
-	Probe    ReadinessProbe
+	Probe ReadinessProbe
+
+	// AllowedOrigins are the browser origins a mutation may come from. An origin outside this set
+	// is refused before the request can create an account, a session or a cookie.
+	AllowedOrigins []string
+
 	Pool     *pgxpool.Pool
 	Sessions *sessions.Manager
 	Auth     *auth.Service
@@ -58,5 +63,15 @@ func Router(app Application) http.Handler {
 	handler := servedapi.NewStrictHandlerWithOptions(implementation, nil, options)
 	// The session is attached before the boundary so that the boundary's credential check and the
 	// handler below it read one resolved session rather than querying the store twice.
-	return withSession(app.Sessions, boundary(spec, servedapi.Handler(handler), authenticateSession))
+	policy := transport{allowedOrigins: originSet(app.AllowedOrigins), authenticate: authenticateSession}
+	return withSession(app.Sessions, boundary(spec, servedapi.Handler(handler), policy))
+}
+
+// originSet indexes the allowed origins for lookup, so the check is a comparison rather than a scan.
+func originSet(origins []string) map[string]bool {
+	allowed := make(map[string]bool, len(origins))
+	for _, origin := range origins {
+		allowed[origin] = true
+	}
+	return allowed
 }

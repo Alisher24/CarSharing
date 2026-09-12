@@ -41,6 +41,8 @@ const (
 // the point of use instead.
 const (
 	messageAuthenticationRequired = "Authentication required"
+	messageCSRFInvalid            = "Invalid CSRF token"
+	messageOriginNotAllowed       = "Origin not allowed"
 	messageInternalError          = "Internal server error"
 	messageInvalidHeader          = "Invalid header"
 	messageMalformedJSON          = "Malformed JSON"
@@ -187,11 +189,11 @@ func headerFailure(r *http.Request, name string) *apiError {
 		return &apiError{code: codeIdempotencyKeyInvalid, message: messageInvalidHeader}
 	case "Origin":
 		if absent {
-			return &apiError{code: codeOriginNotAllowed, message: "Origin not allowed"}
+			return &apiError{code: codeOriginNotAllowed, message: messageOriginNotAllowed}
 		}
 	case "X-CSRF-Token":
 		if absent {
-			return &apiError{code: codeCSRFInvalid, message: "Invalid CSRF token"}
+			return &apiError{code: codeCSRFInvalid, message: messageCSRFInvalid}
 		}
 	}
 	return &apiError{code: codeInvalidHeader, message: messageInvalidHeader}

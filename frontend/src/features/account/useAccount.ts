@@ -61,13 +61,14 @@ export function useAccount() {
   );
 
   const leave = useCallback(async () => {
+    if (account.state !== 'signed-in') return;
     setSubmission({ state: 'sending' });
-    const revoked = await signOut();
+    const revoked = await signOut(account.snapshot.csrf_token);
     setSubmission({ state: 'idle' });
     // The signed-out state is entered only once the server confirms the revocation, so clearing
     // the screen never claims a session was ended when it was not.
     if (revoked) setAccount({ state: 'signed-out' });
-  }, []);
+  }, [account]);
 
   return { account, submission, submit, leave };
 }

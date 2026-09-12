@@ -35,10 +35,11 @@ type requestSession struct {
 // resolve reports the session this request carries. An absent, unknown or expired token is not an
 // error: it is a caller who is not signed in.
 func (s *requestSession) resolve(ctx context.Context) (sessions.Snapshot, bool, error) {
-	// An application assembled without a session store cannot check credentials at all, which is a
-	// service failure rather than a caller who is signed out.
+	// A router assembled without a session store — the isolated contract routers — serves no
+	// session-bearing operation, so a request through it is simply not signed in. A store that is
+	// present but fails is a different matter and is reported below as the error it is.
 	if s == nil || s.manager == nil {
-		return sessions.Snapshot{}, false, errSessionStoreUnavailable
+		return sessions.Snapshot{}, false, nil
 	}
 	s.once.Do(func() { s.snapshot, s.live, s.err = s.manager.Restore(ctx, s.token) })
 	return s.snapshot, s.live, s.err

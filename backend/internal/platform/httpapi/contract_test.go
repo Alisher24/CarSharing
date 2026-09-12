@@ -35,6 +35,7 @@ const (
 	registerNbspBody         = `{"email":"user@example.test","password":"Example Password42"}`
 
 	testCredential = "Bearer example-test-credential"
+	testOrigin     = "http://127.0.0.1:8080"
 )
 
 // The isolated router only returns a fixture. It shares HTTP validation/error adapters
@@ -44,7 +45,10 @@ func contractRouter(t *testing.T, spec *openapi3.T) http.Handler {
 	return boundary(spec, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", jsonMediaType)
 		w.WriteHeader(http.StatusNoContent)
-	}), openapi3filter.NoopAuthenticationFunc)
+	}), transport{
+		allowedOrigins: originSet([]string{testOrigin}),
+		authenticate:   openapi3filter.NoopAuthenticationFunc,
+	})
 }
 
 func TestCommandAndPaginationRequestBoundaries(t *testing.T) {
@@ -74,7 +78,7 @@ func TestCommandAndPaginationRequestBoundaries(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
 			r.Header.Set("Content-Type", jsonMediaType)
-			r.Header.Set("Origin", "http://127.0.0.1:8080")
+			r.Header.Set("Origin", testOrigin)
 			r.Header.Set("X-CSRF-Token", "example-csrf-value")
 			if tc.key != "" {
 				r.Header.Set("Idempotency-Key", tc.key)
@@ -132,7 +136,10 @@ func TestInternalContractsAuthenticateBeforePayloadAndUseLargerBodyLimit(t *test
 			accepted := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusNoContent)
 			})
-			handler := boundary(spec, accepted, authenticate)
+			handler := boundary(spec, accepted, transport{
+				allowedOrigins: originSet([]string{testOrigin}),
+				authenticate:   authenticate,
+			})
 			overPublicLimit := `{"unexpected":"` + strings.Repeat("x", 64<<10) + `"}`
 			overInternalLimit := strings.Repeat("x", 256<<10+1)
 			for _, tc := range []struct {
@@ -183,7 +190,7 @@ func TestSessionContractReportsRequestErrors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := httptest.NewRequest("POST", registerPath, strings.NewReader(tc.body))
 			r.Header.Set("Content-Type", tc.media)
-			r.Header.Set("Origin", "http://127.0.0.1:8080")
+			r.Header.Set("Origin", testOrigin)
 			if tc.requestID != "" {
 				r.Header.Set("X-Request-ID", tc.requestID)
 			}

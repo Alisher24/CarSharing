@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"io"
@@ -43,18 +44,29 @@ type boundaryRequest struct {
 // step may replace the request to buffer the body or to carry its results to a later step.
 type boundaryStep func(*boundaryRequest) *apiError
 
+// transport is the policy the boundary applies to every request: which browser origins may make a
+// mutation, and how a session credential is checked. The owning application supplies it; the
+// isolated contract routers supply their own so that they exercise the same steps.
+type transport struct {
+	allowedOrigins map[string]bool
+	authenticate   openapi3filter.AuthenticationFunc
+}
+
 // boundary applies the same transport contract to the production router and to the isolated
-// contract routers: request identity, panic recovery, authentication, body limits, media type and
-// schema validation. Authentication is supplied by the owning application; the health projection
-// has no security requirements.
-func boundary(spec *openapi3.T, next http.Handler, authenticate ...openapi3filter.AuthenticationFunc) http.Handler {
+// contract routers: request identity, panic recovery, origin and CSRF checks, authentication, body
+// limits, media type and schema validation.
+func boundary(spec *openapi3.T, next http.Handler, policy transport) http.Handler {
 	routes := mustResolveRoutes(spec)
 	validate := schemaValidated(spec, next)
-	// The order is load-bearing. Credentials are checked before any step touches the body, so an
-	// unauthenticated caller cannot learn whether its payload would have parsed, and the body is
-	// buffered before the schema validator, which reads it a second time.
+	// The order is load-bearing. A request from a foreign origin is refused before anything else
+	// looks at it, so it can create no account, session or cookie on the way past. Credentials are
+	// then checked before any step touches the body, so an unauthenticated caller cannot learn
+	// whether its payload would have parsed, and the body is buffered before the schema validator,
+	// which reads it a second time.
 	steps := []boundaryStep{
-		requireCredentials(spec, singleAuthenticationFunc(authenticate)),
+		requireAllowedOrigin(policy.allowedOrigins),
+		requireSessionCSRFToken,
+		requireCredentials(spec, policy.authenticate),
 		bufferBodyWithinLimit,
 		requireJSONRequestBody,
 		requireSingleValuedHeaders,
@@ -88,11 +100,54 @@ func mustResolveRoutes(spec *openapi3.T) routers.Router {
 	return routes
 }
 
-func singleAuthenticationFunc(authenticate []openapi3filter.AuthenticationFunc) openapi3filter.AuthenticationFunc {
-	if len(authenticate) > 0 {
-		return authenticate[0]
+// requireAllowedOrigin refuses a browser mutation that did not come from this application. The
+// contract names the operations that check it by declaring a required Origin parameter, so this
+// step follows the contract instead of a list of paths maintained beside it. An absent Origin is
+// refused by the same rule as a foreign one: neither is an origin this application allows.
+func requireAllowedOrigin(allowed map[string]bool) boundaryStep {
+	return func(b *boundaryRequest) *apiError {
+		if !declaresHeader(b.route.Operation, "Origin", true) {
+			return nil
+		}
+		if !allowed[b.request.Header.Get("Origin")] {
+			return &apiError{code: codeOriginNotAllowed, message: messageOriginNotAllowed}
+		}
+		return nil
+	}
+}
+
+// requireSessionCSRFToken refuses a mutation made with a live session but without the token only
+// this application can read. A request carrying no live session is left alone: there is nothing to
+// protect, which is what keeps a repeated sign-out safe.
+func requireSessionCSRFToken(b *boundaryRequest) *apiError {
+	if !declaresHeader(b.route.Operation, "X-CSRF-Token", false) {
+		return nil
+	}
+	ctx := b.request.Context()
+	snapshot, live, err := sessionOf(ctx).resolve(ctx)
+	if err != nil {
+		return &apiError{code: codeServiceUnavailable, message: messageServiceUnavailable}
+	}
+	if !live {
+		return nil
+	}
+	// Constant time, so a wrong token does not reveal how much of it was right.
+	presented := b.request.Header.Get("X-CSRF-Token")
+	if subtle.ConstantTimeCompare([]byte(presented), []byte(snapshot.CSRFToken)) != 1 {
+		return &apiError{code: codeCSRFInvalid, message: messageCSRFInvalid}
 	}
 	return nil
+}
+
+// declaresHeader reports whether an operation declares a header parameter, optionally demanding
+// that the contract marks it required.
+func declaresHeader(operation *openapi3.Operation, name string, required bool) bool {
+	for _, parameter := range operation.Parameters {
+		if parameter.Value.In == "header" && parameter.Value.Name == name {
+			return !required || parameter.Value.Required
+		}
+	}
+	return false
 }
 
 // withRequestIdentity assigns the request an identifier and echoes it on the response together with

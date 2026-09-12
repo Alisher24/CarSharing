@@ -13,6 +13,10 @@ import (
 // hand-edited secret cannot quietly weaken it.
 const minPasswordLength = 32
 
+// defaultAllowedOrigins is the documented local profile: the application served over plain HTTP on
+// the loopback address under either spelling a browser may use.
+const defaultAllowedOrigins = "http://127.0.0.1:8080,http://localhost:8080"
+
 // Starting Argon2id cost from Q19 of the T05 specification: 19 MiB of memory, two passes and one
 // thread. Each is overridable, because the values that ship are the measured ones.
 const (
@@ -37,6 +41,9 @@ type Config struct {
 	DBName     string
 	DBUser     string
 	DBPassword string
+
+	// AllowedOrigins are the browser origins a mutation may come from.
+	AllowedOrigins []string
 
 	// SessionCookieSecure adds Secure to the session cookie. It is off only for the documented
 	// local HTTP profile; any deployment over HTTPS turns it on.
@@ -67,6 +74,7 @@ func Load() (Config, error) {
 	if len(cfg.DBPassword) < minPasswordLength {
 		return cfg, errors.New("database password must contain at least 32 characters; run setup")
 	}
+	cfg.AllowedOrigins = splitOrigins(envOrDefault("ALLOWED_ORIGINS", defaultAllowedOrigins))
 	cfg.SessionCookieSecure = os.Getenv("SESSION_COOKIE_SECURE") == "true"
 	cfg.Argon2, err = loadArgon2()
 	if err != nil {
@@ -112,4 +120,16 @@ func envOrDefault(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// splitOrigins reads the comma-separated origin list, ignoring blanks so that a trailing comma or a
+// value spread over several lines does not allow the empty origin.
+func splitOrigins(raw string) []string {
+	var origins []string
+	for _, origin := range strings.Split(raw, ",") {
+		if trimmed := strings.TrimSpace(origin); trimmed != "" {
+			origins = append(origins, trimmed)
+		}
+	}
+	return origins
 }

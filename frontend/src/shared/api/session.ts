@@ -44,11 +44,15 @@ export async function currentSession(signal?: AbortSignal): Promise<SessionResul
 
 /**
  * signOut revokes this browser's session and reports whether the server confirmed it. Clearing the
- * screen revokes nothing, so an unconfirmed sign-out is reported as such rather than assumed.
+ * screen revokes nothing, so an unconfirmed sign-out is reported as such rather than assumed. The
+ * CSRF token comes from the session being ended, which is the only session it authorizes.
  */
-export async function signOut(): Promise<boolean> {
+export async function signOut(csrfToken: string): Promise<boolean> {
   try {
-    const answer = await logout({ headers: browserOrigin(), ...sameOriginRequest });
+    const answer = await logout({
+      headers: { ...browserOrigin(), 'X-CSRF-Token': csrfToken },
+      ...sameOriginRequest,
+    });
     return answer.response?.status === 204;
   } catch {
     return false;
