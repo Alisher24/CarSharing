@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { AccountPanel } from '../features/account/AccountPanel';
 import { getHealth, type ReadyStatus } from '../shared/api/health';
 
 type Connection = { state: 'loading' } | { state: 'error' } | { state: 'ready'; data: ReadyStatus };
@@ -69,6 +70,8 @@ export function App() {
             <span className="notice-dot" />Локальная версия · в разработке
           </div>
         </section>
+
+        <AccountPanel />
 
         <section className="connection" aria-labelledby="connection-title">
           <div className="connection-top">

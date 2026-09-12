@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/Alisher24/CarSharing/backend/internal/contracts/formats"
-	healthapi "github.com/Alisher24/CarSharing/backend/internal/contracts/healthapi"
+	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/getkin/kin-openapi/routers"
@@ -168,7 +168,10 @@ func requireCredentials(spec *openapi3.T, authenticate openapi3filter.Authentica
 			Options:    &openapi3filter.Options{AuthenticationFunc: authenticate},
 		}
 		if err := openapi3filter.ValidateSecurityRequirements(b.request.Context(), input, *requirements); err != nil {
-			return &apiError{code: authenticationCode(b.request.URL.Path), message: "Authentication required"}
+			if errors.Is(err, errSessionStoreUnavailable) {
+				return &apiError{code: codeServiceUnavailable, message: messageServiceUnavailable}
+			}
+			return &apiError{code: authenticationCode(b.request.URL.Path), message: messageAuthenticationRequired}
 		}
 		return nil
 	}
@@ -176,7 +179,7 @@ func requireCredentials(spec *openapi3.T, authenticate openapi3filter.Authentica
 
 // authenticationCode keeps the internal API's authentication failure distinguishable from a public
 // one, so a caller of /internal cannot read it as an expired session.
-func authenticationCode(path string) healthapi.ErrorCode {
+func authenticationCode(path string) servedapi.ErrorCode {
 	if strings.HasPrefix(path, "/internal/") {
 		return codeInternalAuthenticationRequired
 	}

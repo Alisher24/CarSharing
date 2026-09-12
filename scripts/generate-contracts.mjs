@@ -11,6 +11,6 @@ for (const name of ['public', 'internal', 'mailstub']) {
   go('run', './cmd/contracts', `../openapi/${name}.yaml`, `../.tools/contracts/${name}.json`);
   go('tool', 'oapi-codegen', '--config', `../openapi/${name}.codegen.yaml`, `../.tools/contracts/${name}.json`);
 }
-// Derive a small interface from the same public source so planned operations cannot be registered accidentally.
-go('tool', 'oapi-codegen', '--config', '../openapi/health.codegen.yaml', '../.tools/contracts/public.json');
+// Derive the served interface from the same public source so planned operations cannot be registered accidentally.
+go('tool', 'oapi-codegen', '--config', '../openapi/served.codegen.yaml', '../.tools/contracts/public.json');
 execFileSync(process.execPath, [resolve(root, 'tools/openapi/generate.mjs')], { cwd: root, stdio: 'inherit' });

@@ -49,3 +49,9 @@ footer { color: #748075; border-top: 1px solid #d9ded2; padding: 24px 0; font-si
   .desktop-break { display: none; }
   dl { font-size: 12px; }
 }
+
+.account { display: grid; gap: 12px; }
+.account form { display: grid; gap: 6px; }
+.account input { padding: 10px; font: inherit; }
+.account-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.account-error { color: #b00020; margin: 0; }

@@ -67,6 +67,11 @@ var contracts = map[string]struct {
 	}},
 }
 
+// implementationStatuses is the closed set an operation may declare. An operation is routed only
+// once it is marked implemented, and the router tests hold the two halves to each other: a planned
+// operation must answer as an unknown resource, an implemented one must not.
+var implementationStatuses = map[any]bool{"implemented": true, "planned": true}
+
 func TestContractInventorySchemasAndExamples(t *testing.T) {
 	for name, contract := range contracts {
 		t.Run(name, func(t *testing.T) {
@@ -84,8 +89,8 @@ func TestContractInventorySchemasAndExamples(t *testing.T) {
 			for path, item := range spec.Paths.Map() {
 				for method, op := range item.Operations() {
 					operations = append(operations, method+" "+path)
-					if !strings.Contains(path, "/health/") && op.Extensions["x-implementation-status"] != "planned" {
-						t.Errorf("%s is not planned", path)
+					if !implementationStatuses[op.Extensions["x-implementation-status"]] {
+						t.Errorf("%s %s declares no known implementation status", method, path)
 					}
 					if op.RequestBody != nil {
 						checkContentExamples(t, op.OperationID+" request", op.RequestBody.Value.Content)

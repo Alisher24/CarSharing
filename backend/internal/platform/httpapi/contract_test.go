@@ -223,7 +223,7 @@ func TestPlannedRoutesRemainAbsentFromProduction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := Router(func(context.Context) (Status, error) { return Status{}, nil })
+	handler := Router(Application{Probe: func(context.Context) (Status, error) { return Status{}, nil }})
 	for path, item := range spec.Paths.Map() {
 		for method, op := range item.Operations() {
 			if op.Extensions["x-implementation-status"] != "planned" {
@@ -236,6 +236,34 @@ func TestPlannedRoutesRemainAbsentFromProduction(t *testing.T) {
 				t.Errorf("%s %s: %d %s", method, path, w.Code, w.Body.String())
 			}
 		}
+	}
+}
+
+// TestImplementedRoutesAreServed is the other half of TestPlannedRoutesRemainAbsentFromProduction:
+// an operation the contract marks implemented must be reachable. Together the two tests keep the
+// declared status and the router from drifting apart, in either direction.
+func TestImplementedRoutesAreServed(t *testing.T) {
+	spec, err := publicapi.GetSwagger()
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := Router(Application{Probe: func(context.Context) (Status, error) { return Status{}, nil }})
+	served := 0
+	for path, item := range spec.Paths.Map() {
+		for method, op := range item.Operations() {
+			if op.Extensions["x-implementation-status"] != "implemented" {
+				continue
+			}
+			served++
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, httptest.NewRequest(method, path, nil))
+			if w.Code == 404 && hasErrorCode(w, "RESOURCE_NOT_FOUND") {
+				t.Errorf("%s %s is marked implemented but is not routed", method, path)
+			}
+		}
+	}
+	if served == 0 {
+		t.Fatal("no operation is marked implemented, so this test proved nothing")
 	}
 }
 

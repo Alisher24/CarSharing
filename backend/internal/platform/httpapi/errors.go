@@ -1,54 +1,59 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"sort"
 	"strings"
 
-	healthapi "github.com/Alisher24/CarSharing/backend/internal/contracts/healthapi"
+	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/routers"
+	"github.com/go-chi/chi/v5/middleware"
 )
 
 // Transport error codes the boundary can answer with. Every specification declares the same error
 // enum, so the health projection's generated constants are the single source for their spelling.
 const (
-	codeAuthenticationRequired         = healthapi.AUTHENTICATIONREQUIRED
-	codeBodyTooLarge                   = healthapi.BODYTOOLARGE
-	codeCSRFInvalid                    = healthapi.CSRFINVALID
-	codeIdempotencyKeyInvalid          = healthapi.IDEMPOTENCYKEYINVALID
-	codeIdempotencyKeyRequired         = healthapi.IDEMPOTENCYKEYREQUIRED
-	codeInternalAuthenticationRequired = healthapi.INTERNALAUTHENTICATIONREQUIRED
-	codeInternalError                  = healthapi.INTERNALERROR
-	codeInvalidCursor                  = healthapi.INVALIDCURSOR
-	codeInvalidHeader                  = healthapi.INVALIDHEADER
-	codeMalformedJSON                  = healthapi.MALFORMEDJSON
-	codeMethodNotAllowed               = healthapi.METHODNOTALLOWED
-	codeOriginNotAllowed               = healthapi.ORIGINNOTALLOWED
-	codeResourceNotFound               = healthapi.RESOURCENOTFOUND
-	codeServiceUnavailable             = healthapi.SERVICEUNAVAILABLE
-	codeUnsupportedMediaType           = healthapi.UNSUPPORTEDMEDIATYPE
-	codeValidationFailed               = healthapi.VALIDATIONFAILED
+	codeAuthenticationRequired         = servedapi.AUTHENTICATIONREQUIRED
+	codeEmailAlreadyRegistered         = servedapi.EMAILALREADYREGISTERED
+	codeInvalidCredentials             = servedapi.INVALIDCREDENTIALS
+	codeBodyTooLarge                   = servedapi.BODYTOOLARGE
+	codeCSRFInvalid                    = servedapi.CSRFINVALID
+	codeIdempotencyKeyInvalid          = servedapi.IDEMPOTENCYKEYINVALID
+	codeIdempotencyKeyRequired         = servedapi.IDEMPOTENCYKEYREQUIRED
+	codeInternalAuthenticationRequired = servedapi.INTERNALAUTHENTICATIONREQUIRED
+	codeInternalError                  = servedapi.INTERNALERROR
+	codeInvalidCursor                  = servedapi.INVALIDCURSOR
+	codeInvalidHeader                  = servedapi.INVALIDHEADER
+	codeMalformedJSON                  = servedapi.MALFORMEDJSON
+	codeMethodNotAllowed               = servedapi.METHODNOTALLOWED
+	codeOriginNotAllowed               = servedapi.ORIGINNOTALLOWED
+	codeResourceNotFound               = servedapi.RESOURCENOTFOUND
+	codeServiceUnavailable             = servedapi.SERVICEUNAVAILABLE
+	codeUnsupportedMediaType           = servedapi.UNSUPPORTEDMEDIATYPE
+	codeValidationFailed               = servedapi.VALIDATIONFAILED
 )
 
 // Messages shared by more than one failure. A message specific to a single failure is spelled at
 // the point of use instead.
 const (
-	messageInternalError    = "Internal server error"
-	messageInvalidHeader    = "Invalid header"
-	messageMalformedJSON    = "Malformed JSON"
-	messageMethodNotAllowed = "Method not allowed"
-	messageResourceNotFound = "Resource not found"
-	messageValidationFailed = "Request validation failed"
+	messageAuthenticationRequired = "Authentication required"
+	messageInternalError          = "Internal server error"
+	messageInvalidHeader          = "Invalid header"
+	messageMalformedJSON          = "Malformed JSON"
+	messageMethodNotAllowed       = "Method not allowed"
+	messageResourceNotFound       = "Resource not found"
+	messageValidationFailed       = "Request validation failed"
 )
 
 // transportErrorStatus is the status each transport code carries. The specifications declare one
 // status per code, so deriving it here keeps every response consistent with the contract by
 // construction. Domain failures are answered by generated response types rather than writeError
 // and therefore do not appear here.
-var transportErrorStatus = map[healthapi.ErrorCode]int{
+var transportErrorStatus = map[servedapi.ErrorCode]int{
 	codeAuthenticationRequired:         http.StatusUnauthorized,
 	codeBodyTooLarge:                   http.StatusRequestEntityTooLarge,
 	codeCSRFInvalid:                    http.StatusForbidden,
@@ -67,10 +72,16 @@ var transportErrorStatus = map[healthapi.ErrorCode]int{
 	codeValidationFailed:               http.StatusUnprocessableEntity,
 }
 
+// apiErrorBody renders the JSON error contract for a handler, which returns its response rather
+// than writing one. writeError covers the boundary, where there is no generated response type yet.
+func apiErrorBody(ctx context.Context, code servedapi.ErrorCode, message string) servedapi.ApiError {
+	return servedapi.ApiError{Code: code, Message: message, RequestId: middleware.GetReqID(ctx)}
+}
+
 // apiError is a transport failure a boundary step reports instead of writing a response itself, so
 // that a step stays independent of the response writer.
 type apiError struct {
-	code       healthapi.ErrorCode
+	code       servedapi.ErrorCode
 	message    string
 	violations []violation
 }
@@ -78,12 +89,12 @@ type apiError struct {
 // writeError emits the single JSON error contract. All four specifications declare the same
 // envelope, so the health projection supplies its generated type for every router on this boundary.
 func writeError(w http.ResponseWriter, r *http.Request,
-	code healthapi.ErrorCode, message string, violations ...violation) {
+	code servedapi.ErrorCode, message string, violations ...violation) {
 	status, declared := transportErrorStatus[code]
 	if !declared {
 		status = http.StatusInternalServerError
 	}
-	body := healthapi.ApiError{Code: code, Message: message, RequestId: requestID(r)}
+	body := servedapi.ApiError{Code: code, Message: message, RequestId: requestID(r)}
 	if len(violations) > 0 {
 		body.Details = violationDetails(violations)
 	}

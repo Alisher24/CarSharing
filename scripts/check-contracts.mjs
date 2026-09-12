@@ -15,7 +15,7 @@ async function generatedFiles() {
       else result.set(relative(root, file), createHash('sha256').update(await readFile(file)).digest('hex'));
     }
   }
-  for (const name of ['publicapi', 'healthapi', 'internalapi', 'mailstubapi']) {
+  for (const name of ['publicapi', 'servedapi', 'internalapi', 'mailstubapi']) {
     await walk(join(root, 'backend/internal/contracts', name));
   }
   await walk(join(root, 'frontend/src/shared/api/generated'));

@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"github.com/Alisher24/CarSharing/backend/internal/contracts/formats"
-	healthapi "github.com/Alisher24/CarSharing/backend/internal/contracts/healthapi"
+	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
 )
@@ -40,12 +40,12 @@ func bodyViolation(pointer, code, message string) violation {
 
 // violationDetails renders violations into the free-form details object of the error contract, in a
 // stable order and without repeats so that an identical request always produces an identical body.
-func violationDetails(violations []violation) *healthapi.ApiError_Details {
+func violationDetails(violations []violation) *servedapi.ApiError_Details {
 	sortViolations(violations)
 	data, _ := json.Marshal(struct {
 		Violations []violation `json:"violations"`
 	}{dedupeViolations(violations)})
-	details := healthapi.ApiError_Details{}
+	details := servedapi.ApiError_Details{}
 	_ = details.UnmarshalJSON(data)
 	return &details
 }

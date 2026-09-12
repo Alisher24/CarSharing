@@ -11,9 +11,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Alisher24/CarSharing/backend/internal/auth"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/config"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/httpapi"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/sessions"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const (
@@ -33,6 +36,26 @@ func main() {
 	}
 }
 
+// application assembles what the HTTP layer serves: the readiness probe, the session store and the
+// account rules, all over the one pool so that a request can commit a user and its session together.
+func application(cfg config.Config, pool *pgxpool.Pool) httpapi.Application {
+	users := auth.NewUserStore(pool)
+	hasher := auth.NewPasswordHasher(auth.HashingParameters{
+		MemoryKiB:   cfg.Argon2.MemoryKiB,
+		Passes:      cfg.Argon2.Passes,
+		Parallelism: cfg.Argon2.Parallelism,
+		SaltLength:  auth.SaltLength,
+		KeyLength:   auth.KeyLength,
+	})
+	return httpapi.Application{
+		Probe:    httpapi.DatabaseProbe(pool),
+		Pool:     pool,
+		Sessions: sessions.NewManager(pool, cfg.SessionCookieSecure),
+		Auth:     auth.NewService(users, hasher),
+		Users:    users,
+	}
+}
+
 func run() error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -48,7 +71,7 @@ func run() error {
 	}
 	defer pool.Close()
 	server := &http.Server{
-		Addr: cfg.HTTPAddr, Handler: httpapi.Router(httpapi.DatabaseProbe(pool)),
+		Addr: cfg.HTTPAddr, Handler: httpapi.Router(application(cfg, pool)),
 		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second,
 		WriteTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second,
 		MaxHeaderBytes: 16 << 10,

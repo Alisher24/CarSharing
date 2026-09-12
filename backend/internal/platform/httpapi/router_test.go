@@ -19,7 +19,7 @@ func TestRoutingErrorsUseTheAPIErrorContract(t *testing.T) {
 		{"POST", "/api/v1/health/live", "METHOD_NOT_ALLOWED", 405},
 	} {
 		t.Run(tc.method+tc.path, func(t *testing.T) {
-			r := Router(func(context.Context) (Status, error) { return Status{}, nil })
+			r := Router(Application{Probe: func(context.Context) (Status, error) { return Status{}, nil }})
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, httptest.NewRequest(tc.method, tc.path, nil))
 			var body struct {
