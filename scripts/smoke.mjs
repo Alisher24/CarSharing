@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
-import { SERVICE_ORIGIN, composeWith, sql } from './service.mjs';
+import { POSTGRES_DATABASE, SERVICE_ORIGIN, composeWith, sql } from './service.mjs';
 
 const LOCAL_ORIGIN_PATTERN = /^http:\/\/(127\.0\.0\.1|localhost):\d+$/;
 const ORIGIN_ARGUMENT_INDEX = 2;
@@ -50,9 +50,13 @@ const UNREACHABLE_PATHS = [
 /**
  * The role the API runs as, read from the database rather than restated here. The service records
  * it when it connects, so this is the role actually in use and not the one the deployment intended.
+ * The migrator's own sessions are the ones psql names, which is how they are filtered out; pgx
+ * connects without an application name of its own.
  */
 function applicationRole() {
-  return sql("SELECT usename FROM pg_stat_activity WHERE application_name = 'carsharing' AND usename <> '' LIMIT 1");
+  const roles = sql(`SELECT DISTINCT usename FROM pg_stat_activity
+     WHERE datname = '${POSTGRES_DATABASE}' AND coalesce(application_name, '') <> 'psql'`);
+  return roles.split('\n').find((role) => role !== '') ?? '';
 }
 
 /** Runs a one-off compose service, as the migration and seed containers are meant to be run. */

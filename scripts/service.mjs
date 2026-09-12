@@ -24,7 +24,7 @@ export const SESSION_COOKIE_NAME = 'carsharing_session';
 /** The database the stack runs on, reached through the migrator role that owns its schema. */
 const POSTGRES_SERVICE = 'postgres';
 const POSTGRES_ROLE = 'carsharing_migrator';
-const POSTGRES_DATABASE = 'carsharing';
+export const POSTGRES_DATABASE = 'carsharing';
 
 const COMPOSE_TIMEOUT_MS = 180_000;
 

@@ -20,6 +20,9 @@ const (
 	// container that published another one still reaches it here.
 	readyHost = "127.0.0.1"
 
+	// readyPort is the port the probe looks on when HTTP_ADDR names no port at all.
+	readyPort = "8080"
+
 	probeTimeout = 3 * time.Second
 )
 
@@ -27,25 +30,15 @@ func main() {
 	os.Exit(probe(readyURL()))
 }
 
-// readyURL is the readiness URL of the API in this container. The address comes from the same
-// setting the API listens on, so a deployment that moves the listener does not leave the health
-// check probing the port it used to be on.
+// readyURL is the readiness URL of the API in this container. The port comes from the same setting
+// the API listens on, so a deployment that moves the listener does not leave the health check
+// probing the port it used to be on, and the path comes from the operation the API serves.
 func readyURL() string {
-	host, port, err := net.SplitHostPort(envOrDefault("HTTP_ADDR", config.DefaultHTTPAddr))
-	if err != nil {
-		host, port = readyHost, ""
+	_, port, err := net.SplitHostPort(config.HTTPAddrFromEnvironment())
+	if err != nil || port == "" {
+		port = readyPort
 	}
-	if host == "" || host == "0.0.0.0" || host == "::" {
-		host = readyHost
-	}
-	return readyScheme + net.JoinHostPort(host, port) + httpapi.ReadyPath
-}
-
-func envOrDefault(key, fallback string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return fallback
+	return readyScheme + net.JoinHostPort(readyHost, port) + httpapi.ReadyPath
 }
 
 func probe(url string) int {

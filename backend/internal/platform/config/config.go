@@ -19,10 +19,22 @@ const (
 	DemoEnvironment       = "demo"
 )
 
-// DefaultHTTPAddr is the address the API listens on unless HTTP_ADDR names another one. It is
-// exported because the container's own health check reaches the same listener and must not carry a
-// second copy of the port.
-const DefaultHTTPAddr = ":8080"
+// The setting that names the listener, the address it defaults to, and the reader a process uses
+// when it needs only this setting — the container's own health check, which cannot load the rest of
+// the configuration because it is given no database secret.
+const (
+	HTTPAddrVariable = "HTTP_ADDR"
+	DefaultHTTPAddr  = ":8080"
+)
+
+// HTTPAddrFromEnvironment reports the listener the API was started with, applying the default when
+// the setting is absent.
+func HTTPAddrFromEnvironment() string {
+	if value := os.Getenv(HTTPAddrVariable); value != "" {
+		return value
+	}
+	return DefaultHTTPAddr
+}
 
 // minPasswordLength is the shortest database password setup generates, restated here so a
 // hand-edited secret cannot quietly weaken it. Its length is the one the failure below states.
@@ -98,7 +110,7 @@ type Config struct {
 
 func Load() (Config, error) {
 	var cfg Config
-	cfg.HTTPAddr = envOrDefault("HTTP_ADDR", DefaultHTTPAddr)
+	cfg.HTTPAddr = HTTPAddrFromEnvironment()
 	cfg.DBHost = envOrDefault("DB_HOST", "postgres")
 	cfg.DBName = envOrDefault("DB_NAME", "carsharing")
 	cfg.DBUser = envOrDefault("DB_USER", "carsharing_app")
