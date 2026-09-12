@@ -53,7 +53,6 @@ const unreachable = [
   '/health/ready',
   '/api/health',
   '/api/v1/vehicles',
-  '/api/v1/me',
   '/internal/v1/simulation/tick',
 ];
 for (const path of unreachable) {
@@ -64,6 +63,12 @@ for (const path of unreachable) {
   assert.equal(error.request_id, response.headers.get('x-request-id'));
   assert.equal(response.headers.get('cache-control'), 'no-store');
 }
+// An implemented operation behind a session answers as unauthenticated rather than as absent, so a
+// caller can tell "sign in" from "no such resource".
+const unauthenticated = await fetch(`${base}/api/v1/me`);
+assert.equal(unauthenticated.status, 401);
+assert.equal((await unauthenticated.json()).code, 'AUTHENTICATION_REQUIRED');
+
 const appRolePrivileged = 'SELECT rolsuper OR rolcreatedb OR rolcreaterole'
   + " FROM pg_roles WHERE rolname = 'carsharing_app'";
 assert.equal(sql(appRolePrivileged), 'f');
