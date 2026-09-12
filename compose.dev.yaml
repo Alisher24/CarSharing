@@ -1,0 +1,14 @@
+services:
+  frontend:
+    image: carsharing-frontend-dev:local
+    build:
+      target: dev
+    command: [npm, run, dev, --, --port, "8080"]
+    read_only: false
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/index.html:/app/index.html:ro
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, "http://127.0.0.1:8080/"]

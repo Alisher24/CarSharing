@@ -1,0 +1,106 @@
+name: carsharing
+
+x-backend: &backend
+  image: carsharing-backend:local
+  build:
+    context: .
+    dockerfile: infra/backend.Dockerfile
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+
+x-database: &database
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_NAME: carsharing
+
+services:
+  postgres:
+    image: postgis/postgis:18-3.6@sha256:60f6ad1d21ea86a67d47780b9a0d1e1d200500f62b19293fa834d0dea80b8677
+    platform: linux/amd64
+    environment:
+      POSTGRES_DB: carsharing
+      POSTGRES_USER: carsharing_migrator
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_admin_password
+    secrets: [db_admin_password, db_app_password]
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ./infra/postgres/20-app-role.sql:/docker-entrypoint-initdb.d/20-app-role.sql:ro
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U carsharing_migrator -d carsharing -h 127.0.0.1"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+    restart: unless-stopped
+
+  migrate:
+    <<: *backend
+    entrypoint: [/usr/local/bin/migrate]
+    environment:
+      <<: *database
+      DB_USER: carsharing_migrator
+      DB_PASSWORD_FILE: /run/secrets/db_admin_password
+    secrets: [db_admin_password]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  api:
+    <<: *backend
+    environment:
+      <<: *database
+      DB_USER: carsharing_app
+      DB_PASSWORD_FILE: /run/secrets/db_app_password
+    secrets: [db_app_password]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: [CMD, /usr/local/bin/healthcheck]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+    stop_grace_period: 15s
+
+  frontend:
+    image: carsharing-frontend:local
+    build:
+      context: .
+      dockerfile: infra/frontend.Dockerfile
+      target: runtime
+    ports: ["127.0.0.1:${APP_PORT:-8080}:8080"]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, "http://127.0.0.1:8080/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  seed:
+    <<: *backend
+    profiles: [demo]
+    entrypoint: [/usr/local/bin/seed]
+    environment:
+      <<: *database
+      APP_ENV: demo
+      DB_USER: carsharing_migrator
+      DB_PASSWORD_FILE: /run/secrets/db_admin_password
+    secrets: [db_admin_password]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+volumes:
+  postgres_data:
+
+secrets:
+  db_admin_password:
+    file: ./.secrets/db_admin_password
+  db_app_password:
+    file: ./.secrets/db_app_password
