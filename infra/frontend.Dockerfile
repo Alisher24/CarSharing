@@ -1,4 +1,4 @@
-FROM node:26.8-alpine@sha256:ef24c5053d50fdc3e4e56eb4e7ddb7861874ab0fdc797046ba897581deb8e868 AS dev
+FROM node:24.21.0-alpine@sha256:be80f76cf40ec8e42b9bec49f60a55e0660f30af58d3e5a25530785b30ea67e2 AS dev
 WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
