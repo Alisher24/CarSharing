@@ -23,6 +23,16 @@ type Limit struct {
 	Window   time.Duration
 }
 
+// Limits is the configured budget of each counted operation the platform knows about. A feature
+// reads the budget it counts under from here and pairs it with the scope it counts against, so the
+// loader and the feature cannot disagree about which settings exist.
+type Limits struct {
+	SignInByEmailAndAddress Limit
+	SignInByEmail           Limit
+	SignInByAddress         Limit
+	RegistrationByAddress   Limit
+}
+
 // Reached reports a limit that is currently exhausted, and how long until it recovers. The wait is
 // what the caller advertises in Retry-After, so it is the real remaining time rather than the whole
 // window.

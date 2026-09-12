@@ -16,13 +16,13 @@ func TestHealthSeparatesProcessFromDependencies(t *testing.T) {
 	for _, path := range []string{"/api/v1/health/live", "/api/v1/health/ready"} {
 		t.Run(path, func(t *testing.T) {
 			probed := false
-			r := Router(Application{Probe: func(ctx context.Context) (servedapi.ReadyStatus, error) {
+			r := NewProbeRouter(func(ctx context.Context) (servedapi.ReadyStatus, error) {
 				probed = true
 				if _, ok := ctx.Deadline(); !ok {
 					t.Error("readiness check has no deadline")
 				}
 				return servedapi.ReadyStatus{}, errors.New("private database error")
-			}})
+			})
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
 			want := 503
@@ -43,9 +43,9 @@ func TestHealthSeparatesProcessFromDependencies(t *testing.T) {
 }
 
 func TestReadyReturnsServerMetadataWithoutCaching(t *testing.T) {
-	r := Router(Application{Probe: func(context.Context) (servedapi.ReadyStatus, error) {
+	r := NewProbeRouter(func(context.Context) (servedapi.ReadyStatus, error) {
 		return servedapi.ReadyStatus{City: "Бишкек", Currency: "KGS", Timezone: "Asia/Bishkek"}, nil
-	}})
+	})
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("GET", "/api/v1/health/ready", nil))
 	var body servedapi.ReadyStatus

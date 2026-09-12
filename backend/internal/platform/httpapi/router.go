@@ -3,77 +3,70 @@ package httpapi
 import (
 	"net/http"
 
-	"github.com/Alisher24/CarSharing/backend/internal/auth"
 	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
-	"github.com/Alisher24/CarSharing/backend/internal/platform/sessions"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/getkin/kin-openapi/openapi3"
 )
 
-// Application is everything the HTTP layer needs from the process around it. The health operations
-// need only the readiness probe, so a caller that serves nothing else may leave the rest unset.
-type Application struct {
-	Probe ReadinessProbe
-
-	// AllowedOrigins are the browser origins a mutation may come from. An origin outside this set
-	// is refused before the request can create an account, a session or a cookie.
-	AllowedOrigins []string
-
-	Pool     *pgxpool.Pool
-	Sessions *sessions.Manager
-	Auth     *auth.Service
-	Users    *auth.UserStore
-	Throttle *auth.Throttle
+// NewProbeRouter serves the health operations over one readiness probe and nothing else, which is
+// what a probe outside the application and a routing test need. It refuses the operations that
+// depend on the account rules before reaching for a handler they were not given.
+func NewProbeRouter(probe ReadinessProbe) http.Handler {
+	served := server{health: health{probe: probe}}
+	policy := transport{allowedOrigins: map[string]bool{}, authenticate: refuseCredentials}
+	return servedRouter(servedapi.Handler(servedapi.NewStrictHandler(served, nil)), policy)
 }
 
-// server implements every served operation by delegating to the handler that owns its concern, so
-// that the generated interface is satisfied in one place without collecting unrelated methods on
-// one type.
-type server struct {
-	health
-	accounts
+// NewHandler builds the router this process serves. It reports the dependencies it was not given
+// rather than deferring the failure to the first request that reaches one.
+func NewHandler(dependencies Dependencies) (http.Handler, error) {
+	accounts, err := newAccounts(dependencies)
+	if err != nil {
+		return nil, err
+	}
+	served := server{health: health{probe: dependencies.Probe}, accounts: accounts}
+	strict := servedapi.NewStrictHandlerWithOptions(served, nil, strictErrorHandlers())
+	policy := transport{
+		allowedOrigins: originSet(dependencies.AllowedOrigins),
+		authenticate:   authenticateSession,
+	}
+	// The session is attached before the boundary so that the boundary's credential check and the
+	// handler below it read one resolved session rather than querying the store twice.
+	return withClientAddress(withSession(dependencies.Sessions, servedRouter(servedapi.Handler(strict), policy))), nil
 }
 
-// Router serves the operations this application implements. The generated projection also declares
-// the planned operations, but with no operation left on their paths, so those paths are dropped
-// from the specification before routing and answer as an unknown resource rather than as a method
-// that exists but is not allowed.
-func Router(app Application) http.Handler {
+// strictErrorHandlers answers the two failures the generated strict layer reports: a request it
+// could not decode and a handler that returned a value outside the contract. Both must leave as
+// the JSON error envelope rather than as the strict layer's own text.
+func strictErrorHandlers() servedapi.StrictHTTPServerOptions {
+	return servedapi.StrictHTTPServerOptions{
+		RequestErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, _ error) {
+			writeError(w, r, codeMalformedJSON, messageMalformedJSON)
+		},
+		ResponseErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, _ error) {
+			writeError(w, r, codeInternalError, messageInternalError)
+		},
+	}
+}
+
+// servedRouter wraps one implementation in the transport contract the whole served API shares: the
+// specification router and the request-validation boundary. Only the transport policy and the
+// implementation differ between the routers this package builds.
+func servedRouter(implementation http.Handler, policy transport) http.Handler {
 	spec, err := servedapi.GetSwagger()
 	if err != nil {
 		panic(err)
 	}
+	dropUnimplementedPaths(spec)
+	return boundary(spec, implementation, policy)
+}
+
+// dropUnimplementedPaths removes the operations this application does not serve. The generated
+// projection also declares the planned operations, but with no operation left on their paths, so
+// those paths answer as an unknown resource rather than as a method that exists but is not allowed.
+func dropUnimplementedPaths(spec *openapi3.T) {
 	for path, pathItem := range spec.Paths.Map() {
 		if len(pathItem.Operations()) == 0 {
 			spec.Paths.Delete(path)
 		}
 	}
-	options := servedapi.StrictHTTPServerOptions{
-		RequestErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
-			writeError(w, r, codeMalformedJSON, messageMalformedJSON)
-		},
-		ResponseErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
-			writeError(w, r, codeInternalError, messageInternalError)
-		},
-	}
-	implementation := server{
-		health: health{probe: app.Probe},
-		accounts: accounts{
-			pool: app.Pool, sessions: app.Sessions, service: app.Auth, users: app.Users,
-			throttle: app.Throttle,
-		},
-	}
-	handler := servedapi.NewStrictHandlerWithOptions(implementation, nil, options)
-	// The session is attached before the boundary so that the boundary's credential check and the
-	// handler below it read one resolved session rather than querying the store twice.
-	policy := transport{allowedOrigins: originSet(app.AllowedOrigins), authenticate: authenticateSession}
-	return withClientAddress(withSession(app.Sessions, boundary(spec, servedapi.Handler(handler), policy)))
-}
-
-// originSet indexes the allowed origins for lookup, so the check is a comparison rather than a scan.
-func originSet(origins []string) map[string]bool {
-	allowed := make(map[string]bool, len(origins))
-	for _, origin := range origins {
-		allowed[origin] = true
-	}
-	return allowed
 }

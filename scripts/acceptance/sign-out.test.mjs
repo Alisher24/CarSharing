@@ -13,12 +13,13 @@ import {
   SIGN_OUT_PATH,
   waitForReady,
 } from './client.mjs';
+import { SESSION_COOKIE_NAME } from '../service.mjs';
 
 const SIGNED_OUT_STATUS = 204;
 const REFUSED_STATUS = 403;
 const ORIGIN_NOT_ALLOWED_CODE = 'ORIGIN_NOT_ALLOWED';
 const CLEARED_COOKIE_PATTERN = /Max-Age=0|Expires=Thu, 01 Jan 1970/i;
-const UNKNOWN_SESSION_COOKIE = 'carsharing_session=a-token-that-names-no-session';
+const UNKNOWN_SESSION_COOKIE = `${SESSION_COOKIE_NAME}=a-token-that-names-no-session`;
 
 before(waitForReady);
 

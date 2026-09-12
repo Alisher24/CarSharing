@@ -2,15 +2,9 @@
 // HTTP, so cookie attributes, status codes and transaction outcomes are observed the way the
 // running service presents them rather than asserted about the code that produces them.
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { SERVICE_ORIGIN, SESSION_COOKIE_NAME, compose, composeWith, sql } from '../service.mjs';
 
-const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-
-const DEFAULT_SERVICE_ORIGIN = 'http://127.0.0.1:8080';
-const COMPOSE_TIMEOUT_MS = 180_000;
 const READINESS_ATTEMPTS = 60;
 const READINESS_RETRY_DELAY_MS = 1_000;
 const READINESS_REQUEST_TIMEOUT_MS = 3_000;
@@ -23,10 +17,11 @@ export const SIGN_IN_PATH = `${AUTH_PREFIX}/login`;
 export const SIGN_OUT_PATH = `${AUTH_PREFIX}/logout`;
 export const CURRENT_USER_PATH = '/api/v1/me';
 
-const SESSION_COOKIE_NAME = 'carsharing_session';
 const SESSION_COOKIE_PREFIX = `${SESSION_COOKIE_NAME}=`;
 
-export const serviceOrigin = process.env.ACCEPTANCE_BASE ?? DEFAULT_SERVICE_ORIGIN;
+export const serviceOrigin = SERVICE_ORIGIN;
+
+export { compose, composeWith, sql };
 
 /** The origin the local profile allows. A suite uses it unless it is testing a refusal. */
 export const allowedOrigin = serviceOrigin;
@@ -119,48 +114,6 @@ export async function signInFromSecondDevice(email) {
   const response = await call(SIGN_IN_PATH, signInRequest(email, true));
   assert.equal(response.status, 200, response.text);
   return { response, cookie: sessionCookie(response), csrfToken: response.json.csrf_token };
-}
-
-export function compose(...args) {
-  return composeWith({}, ...args);
-}
-
-/**
- * Runs a compose command with extra environment. Compose substitutes these into the service
- * definition, so recreating a service this way is how a suite proves the running service reads its
- * configuration rather than a constant compiled into it.
- */
-export function composeWith(environment, ...args) {
-  return execFileSync('docker', ['compose', ...args], {
-    cwd: repositoryRoot,
-    encoding: 'utf8',
-    timeout: COMPOSE_TIMEOUT_MS,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, ...environment },
-  }).trim();
-}
-
-/**
- * The psql invocation every suite shares: the migrator owns the database the assembled stack runs
- * on, and a query that fails must stop the compose command rather than return partial output.
- */
-const DATABASE_QUERY_ARGUMENTS = [
-  'exec',
-  '-T',
-  'postgres',
-  'psql',
-  '-U',
-  'carsharing_migrator',
-  '-d',
-  'carsharing',
-  '-At',
-  '-v',
-  'ON_ERROR_STOP=1',
-  '-c',
-];
-
-export function sql(query) {
-  return compose(...DATABASE_QUERY_ARGUMENTS, query);
 }
 
 /** Waits for the API to answer, so a suite started beside a restart does not race it. */

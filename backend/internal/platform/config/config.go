@@ -12,6 +12,18 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/platform/ratelimit"
 )
 
+// The profile a process is started as. Only the demo profile seeds data a deployment must not
+// carry, so the command that writes it refuses every other value.
+const (
+	ProductionEnvironment = "production"
+	DemoEnvironment       = "demo"
+)
+
+// DefaultHTTPAddr is the address the API listens on unless HTTP_ADDR names another one. It is
+// exported because the container's own health check reaches the same listener and must not carry a
+// second copy of the port.
+const DefaultHTTPAddr = ":8080"
+
 // minPasswordLength is the shortest database password setup generates, restated here so a
 // hand-edited secret cannot quietly weaken it. Its length is the one the failure below states.
 const minPasswordLength = 32
@@ -67,6 +79,11 @@ type Config struct {
 	DBUser     string
 	DBPassword string
 
+	// Environment is what the process was started as: the demo profile adds data a deployment
+	// must not seed, so the commands that change stored data read it from here rather than from
+	// the environment directly.
+	Environment string
+
 	// AllowedOrigins are the browser origins a mutation may come from.
 	AllowedOrigins []string
 
@@ -74,23 +91,18 @@ type Config struct {
 	// local HTTP profile; any deployment over HTTPS turns it on.
 	SessionCookieSecure bool
 	Argon2              Argon2Config
-	RateLimits          RateLimitConfig
-}
 
-// RateLimitConfig is how many attempts each counted subject may make, and over what window.
-type RateLimitConfig struct {
-	SignInByEmailAndAddress ratelimit.Limit
-	SignInByEmail           ratelimit.Limit
-	SignInByAddress         ratelimit.Limit
-	RegistrationByAddress   ratelimit.Limit
+	// RateLimits is the budget of each counted account operation.
+	RateLimits ratelimit.Limits
 }
 
 func Load() (Config, error) {
 	var cfg Config
-	cfg.HTTPAddr = envOrDefault("HTTP_ADDR", ":8080")
+	cfg.HTTPAddr = envOrDefault("HTTP_ADDR", DefaultHTTPAddr)
 	cfg.DBHost = envOrDefault("DB_HOST", "postgres")
 	cfg.DBName = envOrDefault("DB_NAME", "carsharing")
 	cfg.DBUser = envOrDefault("DB_USER", "carsharing_app")
+	cfg.Environment = envOrDefault("APP_ENV", ProductionEnvironment)
 	port, err := strconv.ParseUint(envOrDefault("DB_PORT", "5432"), 10, 16)
 	if err != nil || port == 0 {
 		return cfg, errors.New("DB_PORT must be between 1 and 65535")
@@ -127,26 +139,26 @@ type rateLimitSetting struct {
 	name     string
 	attempts uint64
 	window   time.Duration
-	assign   func(*RateLimitConfig, ratelimit.Limit)
+	assign   func(*ratelimit.Limits, ratelimit.Limit)
 }
 
-func loadRateLimits() (RateLimitConfig, error) {
+func loadRateLimits() (ratelimit.Limits, error) {
 	settings := []rateLimitSetting{
 		{"SIGNIN_EMAIL_ADDRESS", defaultSignInEmailAddressAttempts, defaultSignInWindow,
-			func(limits *RateLimitConfig, limit ratelimit.Limit) { limits.SignInByEmailAndAddress = limit }},
+			func(limits *ratelimit.Limits, limit ratelimit.Limit) { limits.SignInByEmailAndAddress = limit }},
 		{"SIGNIN_EMAIL", defaultSignInEmailAttempts, defaultSignInWindow,
-			func(limits *RateLimitConfig, limit ratelimit.Limit) { limits.SignInByEmail = limit }},
+			func(limits *ratelimit.Limits, limit ratelimit.Limit) { limits.SignInByEmail = limit }},
 		{"SIGNIN_ADDRESS", defaultSignInAddressAttempts, defaultSignInWindow,
-			func(limits *RateLimitConfig, limit ratelimit.Limit) { limits.SignInByAddress = limit }},
+			func(limits *ratelimit.Limits, limit ratelimit.Limit) { limits.SignInByAddress = limit }},
 		{"REGISTRATION_ADDRESS", defaultRegistrationAddressAttempts, defaultRegistrationWindow,
-			func(limits *RateLimitConfig, limit ratelimit.Limit) { limits.RegistrationByAddress = limit }},
+			func(limits *ratelimit.Limits, limit ratelimit.Limit) { limits.RegistrationByAddress = limit }},
 	}
 
-	var limits RateLimitConfig
+	var limits ratelimit.Limits
 	for _, setting := range settings {
 		limit, err := loadLimit(setting.name, setting.attempts, setting.window)
 		if err != nil {
-			return RateLimitConfig{}, err
+			return ratelimit.Limits{}, err
 		}
 		setting.assign(&limits, limit)
 	}

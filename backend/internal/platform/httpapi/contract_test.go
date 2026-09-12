@@ -269,12 +269,12 @@ func TestImplementedRoutesAreServed(t *testing.T) {
 	}
 }
 
-// testRouter is the production router over a probe that answers with the given readiness, so a test
-// that is about routing does not have to build an application of its own.
+// testRouter is the router over a probe that answers with the given readiness, so a test that is
+// about which paths are served does not have to build an application of its own.
 func testRouter(readiness servedapi.ReadyStatus) http.Handler {
-	return Router(Application{Probe: func(context.Context) (servedapi.ReadyStatus, error) {
+	return NewProbeRouter(func(context.Context) (servedapi.ReadyStatus, error) {
 		return readiness, nil
-	}})
+	})
 }
 
 func hasErrorCode(w *httptest.ResponseRecorder, code string) bool {

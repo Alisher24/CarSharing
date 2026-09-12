@@ -26,6 +26,7 @@ import {
   waitForReady,
   wrongPassword,
 } from './client.mjs';
+import { SESSION_COOKIE_NAME } from '../service.mjs';
 
 const SESSION_LIFETIME_HOURS = 12;
 const SESSION_LIFETIME_TOLERANCE_HOURS = 0.02;
@@ -77,7 +78,7 @@ describe('registration establishes a session', () => {
     assert.ok(response.json.csrf_token);
     assert.ok(response.json.server_time);
     assert.ok(response.json.session_expires_at);
-    assert.ok(!response.text.includes('carsharing_session'), 'the body names the session cookie');
+    assert.ok(!response.text.includes(SESSION_COOKIE_NAME), 'the body names the session cookie');
   });
 
   test('issues an HttpOnly, Path=/, SameSite=Lax cookie lasting an absolute 12 hours', async () => {

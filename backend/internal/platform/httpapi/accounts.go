@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"time"
 
@@ -20,7 +21,6 @@ const (
 	messageEmailAlreadyRegistered = "Email is already registered"
 	messageInvalidCredentials     = "Invalid email or password"
 	messageRateLimited            = "Too many attempts; try again later"
-	messageServiceUnavailable     = "Service unavailable"
 )
 
 // Messages the account operations answer a malformed field with. Unlike the pair above, these name
@@ -39,6 +39,34 @@ type accounts struct {
 	service  *auth.Service
 	users    *auth.UserStore
 	throttle *auth.Throttle
+}
+
+// newAccounts builds the account handlers, or names the dependency that is missing. Each of these
+// is refused rather than defaulted, because a handler that reached a nil one would answer a request
+// it never checked.
+func newAccounts(dependencies Dependencies) (accounts, error) {
+	if dependencies.Pool == nil {
+		return accounts{}, fmt.Errorf("%w: database pool", ErrIncompleteApplication)
+	}
+	if dependencies.Sessions == nil {
+		return accounts{}, fmt.Errorf("%w: session manager", ErrIncompleteApplication)
+	}
+	if dependencies.Auth == nil {
+		return accounts{}, fmt.Errorf("%w: account service", ErrIncompleteApplication)
+	}
+	if dependencies.Users == nil {
+		return accounts{}, fmt.Errorf("%w: user store", ErrIncompleteApplication)
+	}
+	if dependencies.Throttle == nil {
+		return accounts{}, fmt.Errorf("%w: rate-limit throttle", ErrIncompleteApplication)
+	}
+	return accounts{
+		pool:     dependencies.Pool,
+		sessions: dependencies.Sessions,
+		service:  dependencies.Auth,
+		users:    dependencies.Users,
+		throttle: dependencies.Throttle,
+	}, nil
 }
 
 func (a accounts) Register(
@@ -64,7 +92,7 @@ func (a accounts) Register(
 	}
 
 	if err != nil {
-		return serviceUnavailableResponse(ctx), nil
+		return servedapi.Register503JSONResponse{Body: serviceUnavailable(ctx)}, nil
 	}
 
 	cookie := a.sessions.Cookie(issued)
@@ -97,7 +125,7 @@ func (a accounts) registrationPreflight(
 
 	wait, allowed, err := a.throttle.RegistrationAllowed(ctx, clientAddress(ctx))
 	if err != nil {
-		return "", serviceUnavailableResponse(ctx), nil
+		return "", servedapi.Register503JSONResponse{Body: serviceUnavailable(ctx)}, nil
 	}
 
 	if allowed {
@@ -115,7 +143,9 @@ func (a accounts) registrationPreflight(
 // counted before it is carried out, so one that fails or is refused still spends the budget.
 func (a accounts) recordRegistrationAttempt(ctx context.Context) *servedapi.RegisterResponseObject {
 	if err := a.throttle.RecordRegistrationAttempt(ctx, clientAddress(ctx)); err != nil {
-		refused := servedapi.RegisterResponseObject(serviceUnavailableResponse(ctx))
+		refused := servedapi.RegisterResponseObject(servedapi.Register503JSONResponse{
+			Body: serviceUnavailable(ctx),
+		})
 		return &refused
 	}
 
@@ -154,9 +184,7 @@ func (a accounts) Login(
 	address := clientAddress(ctx)
 	wait, allowed, err := a.throttle.SignInAllowed(ctx, email, address)
 	if err != nil {
-		return servedapi.Login503JSONResponse{
-			Body: apiErrorBody(ctx, codeServiceUnavailable, messageServiceUnavailable),
-		}, nil
+		return loginUnavailable(ctx), nil
 	}
 
 	// The limit is consulted before the password is verified, so a throttled attempt never pays
@@ -170,20 +198,15 @@ func (a accounts) Login(
 	}
 
 	if err = a.throttle.RecordSignInAttempt(ctx, address); err != nil {
-		return servedapi.Login503JSONResponse{
-			Body: apiErrorBody(ctx, codeServiceUnavailable, messageServiceUnavailable),
-		}, nil
+		return loginUnavailable(ctx), nil
 	}
 
 	user, issued, err := a.signIn(ctx, email, request.Body.Password)
 	if errors.Is(err, auth.ErrInvalidCredentials) {
 		return a.recordFailedSignIn(ctx, email, address)
 	}
-
 	if err != nil {
-		return servedapi.Login503JSONResponse{
-			Body: apiErrorBody(ctx, codeServiceUnavailable, messageServiceUnavailable),
-		}, nil
+		return loginUnavailable(ctx), nil
 	}
 
 	cookie := a.sessions.Cookie(issued)
@@ -226,9 +249,7 @@ func (a accounts) recordFailedSignIn(
 	ctx context.Context, email auth.Email, address string,
 ) (servedapi.LoginResponseObject, error) {
 	if err := a.throttle.RecordSignInFailure(ctx, email, address); err != nil {
-		return servedapi.Login503JSONResponse{
-			Body: apiErrorBody(ctx, codeServiceUnavailable, messageServiceUnavailable),
-		}, nil
+		return loginUnavailable(ctx), nil
 	}
 	return a.invalidCredentials(ctx), nil
 }
@@ -242,9 +263,7 @@ func (a accounts) Logout(
 		return a.sessions.Revoke(txCtx, sessionToken(ctx))
 	})
 	if err != nil {
-		return servedapi.Logout503JSONResponse{
-			Body: apiErrorBody(ctx, codeServiceUnavailable, messageServiceUnavailable),
-		}, nil
+		return servedapi.Logout503JSONResponse{Body: serviceUnavailable(ctx)}, nil
 	}
 	cleared := a.sessions.ClearedCookie()
 	return servedapi.Logout204Response{
@@ -259,27 +278,27 @@ func (a accounts) GetMe(
 ) (servedapi.GetMeResponseObject, error) {
 	snapshot, live, err := sessionOf(ctx).resolve(ctx)
 	if err != nil {
-		return servedapi.GetMe503JSONResponse{
-			Body: apiErrorBody(ctx, codeServiceUnavailable, messageServiceUnavailable),
-		}, nil
+		return servedapi.GetMe503JSONResponse{Body: serviceUnavailable(ctx)}, nil
 	}
 	if !live {
-		return servedapi.GetMe401JSONResponse{
-			Body: apiErrorBody(ctx, codeAuthenticationRequired, messageAuthenticationRequired),
-		}, nil
+		return authenticationRequired(ctx), nil
 	}
 	user, err := a.users.ByID(ctx, snapshot.UserID)
 	if errors.Is(err, auth.ErrUserNotFound) {
-		return servedapi.GetMe401JSONResponse{
-			Body: apiErrorBody(ctx, codeAuthenticationRequired, messageAuthenticationRequired),
-		}, nil
+		return authenticationRequired(ctx), nil
 	}
 	if err != nil {
-		return servedapi.GetMe503JSONResponse{
-			Body: apiErrorBody(ctx, codeServiceUnavailable, messageServiceUnavailable),
-		}, nil
+		return servedapi.GetMe503JSONResponse{Body: serviceUnavailable(ctx)}, nil
 	}
 	return servedapi.GetMe200JSONResponse{Body: snapshotOf(user, snapshot)}, nil
+}
+
+// authenticationRequired answers a caller who is not signed in. It covers both a request without a
+// live session and a session whose account is gone, because the caller's next step is the same.
+func authenticationRequired(ctx context.Context) servedapi.GetMe401JSONResponse {
+	return servedapi.GetMe401JSONResponse{
+		Body: apiErrorBody(ctx, codeAuthenticationRequired, messageAuthenticationRequired),
+	}
 }
 
 func (a accounts) invalidCredentials(ctx context.Context) servedapi.Login401JSONResponse {
@@ -288,14 +307,8 @@ func (a accounts) invalidCredentials(ctx context.Context) servedapi.Login401JSON
 	}
 }
 
-// Each operation declares its own 503 shape, while the body they carry is the same, so the answer
-// is built at the point of use rather than through one shared constructor.
-func serviceUnavailableResponse(ctx context.Context) servedapi.Register503JSONResponse {
-	return servedapi.Register503JSONResponse{
-		Body: apiErrorBody(ctx, codeServiceUnavailable, messageServiceUnavailable),
-	}
-}
-
+// validationError renders the contract's validation failure with the one field it reports, so the
+// client learns which part of the payload the contract rejected.
 func (a accounts) validationError(ctx context.Context, failed violation) servedapi.ApiError {
 	body := apiErrorBody(ctx, codeValidationFailed, messageValidationFailed)
 	body.Details = violationDetails([]violation{failed})

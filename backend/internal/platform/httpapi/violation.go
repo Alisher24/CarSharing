@@ -21,15 +21,6 @@ type violation struct {
 // handlers that report them.
 type constraintsKey struct{}
 
-// The locations a violation addresses. They are the parameter locations the contract uses, and the
-// boundary reports them in the order locationOrder gives.
-const (
-	locationBody   = "body"
-	locationQuery  = "query"
-	locationPath   = "path"
-	locationHeader = "header"
-)
-
 // locationOrder is the order violations are reported in: the body first, then the parameters from
 // the most to the least specific to the resource.
 var locationOrder = map[string]int{

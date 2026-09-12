@@ -1,13 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  currentSession,
-  registerAccount,
-  signIn,
-  signOut,
-  type Credentials,
-  type SessionResult,
-  type SessionSnapshot,
-} from '../../shared/api/session';
+import type { AccountIntent } from './accountIntent';
+import { currentSession, registerAccount, signIn, signOut } from '../../shared/api/session';
+import type { Credentials, SessionResult, SessionSnapshot } from '../../shared/api/session';
 
 /**
  * Account is what the interface knows about the signed-in person. It is held in memory only: the
@@ -23,7 +17,11 @@ export type Submission =
   | { state: 'sending' }
   | { state: 'failed'; result: Exclude<SessionResult, { outcome: 'session' }> };
 
-type Intent = 'register' | 'sign-in';
+/** The operation each intent calls. A lookup rather than a branch, so a third intent is one entry. */
+const SUBMIT_OPERATIONS: Record<AccountIntent, (credentials: Credentials) => Promise<SessionResult>> = {
+  register: registerAccount,
+  'sign-in': signIn,
+};
 
 export function useAccount() {
   const [account, setAccount] = useState<Account>({ state: 'checking' });
@@ -45,9 +43,9 @@ export function useAccount() {
     };
   }, []);
 
-  const submit = useCallback(async (intent: Intent, credentials: Credentials) => {
+  const submit = useCallback(async (intent: AccountIntent, credentials: Credentials) => {
     setSubmission({ state: 'sending' });
-    const result = await (intent === 'register' ? registerAccount(credentials) : signIn(credentials));
+    const result = await SUBMIT_OPERATIONS[intent](credentials);
 
     if (result.outcome !== 'session') {
       // A failed replacement leaves an account that is already signed in untouched, so only the

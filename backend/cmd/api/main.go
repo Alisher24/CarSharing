@@ -16,7 +16,6 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/platform/config"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/httpapi"
-	"github.com/Alisher24/CarSharing/backend/internal/platform/ratelimit"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/sessions"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -51,7 +50,7 @@ func main() {
 
 // application assembles what the HTTP layer serves: the readiness probe, the session store and the
 // account rules, all over the one pool so that a request can commit a user and its session together.
-func application(cfg config.Config, pool *pgxpool.Pool) (httpapi.Application, error) {
+func application(cfg config.Config, pool *pgxpool.Pool) (httpapi.Dependencies, error) {
 	users := auth.NewUserStore(pool)
 	hasher := auth.NewPasswordHasher(auth.HashingParameters{
 		MemoryKiB:   cfg.Argon2.MemoryKiB,
@@ -62,35 +61,25 @@ func application(cfg config.Config, pool *pgxpool.Pool) (httpapi.Application, er
 	}, cfg.Argon2.Concurrent)
 	service, err := auth.NewService(users, hasher)
 	if err != nil {
-		return httpapi.Application{}, err
+		return httpapi.Dependencies{}, err
 	}
-	return httpapi.Application{
+	return httpapi.Dependencies{
 		Probe:          httpapi.DatabaseProbe(pool),
 		AllowedOrigins: cfg.AllowedOrigins,
 		Pool:           pool,
 		Sessions:       sessions.NewManager(pool, cfg.SessionCookieSecure),
 		Auth:           service,
 		Users:          users,
-		Throttle:       auth.NewThrottle(ratelimit.NewCounter(pool, countedLimits(cfg))),
+		Throttle:       auth.NewThrottle(pool, cfg.RateLimits),
 	}, nil
-}
-
-// countedLimits maps the configured limits onto the scopes the account operations count under.
-func countedLimits(cfg config.Config) map[ratelimit.Scope]ratelimit.Limit {
-	return map[ratelimit.Scope]ratelimit.Limit{
-		auth.SignInByEmailAndAddress: cfg.RateLimits.SignInByEmailAndAddress,
-		auth.SignInByEmail:           cfg.RateLimits.SignInByEmail,
-		auth.SignInByAddress:         cfg.RateLimits.SignInByAddress,
-		auth.RegistrationByAddress:   cfg.RateLimits.RegistrationByAddress,
-	}
 }
 
 // newServer is the HTTP server this process runs, with the timeouts a publicly reachable listener
 // needs: a request that stalls at any stage is given up on rather than held.
-func newServer(cfg config.Config, app httpapi.Application) *http.Server {
+func newServer(cfg config.Config, handler http.Handler) *http.Server {
 	return &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpapi.Router(app),
+		Handler:           handler,
 		ReadHeaderTimeout: readHeaderTimeout,
 		ReadTimeout:       readTimeout,
 		WriteTimeout:      writeTimeout,
@@ -120,7 +109,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	return serve(ctx, newServer(cfg, served))
+	handler, err := httpapi.NewHandler(served)
+	if err != nil {
+		return err
+	}
+	return serve(ctx, newServer(cfg, handler))
 }
 
 // serve answers requests until the server fails or the context is cancelled, and then gives the

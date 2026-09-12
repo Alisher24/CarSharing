@@ -7,6 +7,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// ReadyPath is the path of the readiness operation. It is exported because the container's own
+// health check calls the same operation and must not carry a second copy of the path.
+const ReadyPath = "/api/v1/health/ready"
+
 // ReadinessProbe reports whether the dependencies this deployment needs are usable, along with the
 // metadata they carry. The owning application supplies it, so the HTTP layer stays independent of
 // the store behind it and the tests can answer without a database.
