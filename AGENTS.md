@@ -14,7 +14,10 @@ This is a single-context repository. See `docs/agents/domain.md`.
 
 ### Commit messages
 
-Write the entire commit message as one concise sentence that states only the change.
+Write the entire commit message in English as one concise sentence using the format
+`T<task number>: <what was done>`, for example `T05: add the vehicle availability endpoint`.
+Use only that single subject line: do not add a body, bullet list, pull request reference, author credit,
+`Co-authored-by` trailer, or any other metadata.
 
 ### Code style
 
