@@ -11,11 +11,11 @@ import (
 )
 
 func TestHealthSeparatesProcessFromDependencies(t *testing.T) {
-	for _, path := range []string{"/health/live", "/health/ready", "/api/health"} {
+	for _, path := range []string{"/api/v1/health/live", "/api/v1/health/ready"} {
 		t.Run(path, func(t *testing.T) {
-			called := false
+			probed := false
 			r := Router(func(ctx context.Context) (Status, error) {
-				called = true
+				probed = true
 				if _, ok := ctx.Deadline(); !ok {
 					t.Error("readiness check has no deadline")
 				}
@@ -24,13 +24,13 @@ func TestHealthSeparatesProcessFromDependencies(t *testing.T) {
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
 			want := 503
-			if path == "/health/live" {
+			if path == "/api/v1/health/live" {
 				want = 200
 			}
 			if w.Code != want {
 				t.Fatalf("status = %d, want %d", w.Code, want)
 			}
-			if called != (path != "/health/live") {
+			if probed != (path != "/api/v1/health/live") {
 				t.Error("liveness queried the database")
 			}
 			if strings.Contains(w.Body.String(), "private") {
@@ -45,7 +45,7 @@ func TestReadyReturnsServerMetadataWithoutCaching(t *testing.T) {
 		return Status{City: "Бишкек", Currency: "KGS", Timezone: "Asia/Bishkek"}, nil
 	})
 	w := httptest.NewRecorder()
-	r.ServeHTTP(w, httptest.NewRequest("GET", "/api/health", nil))
+	r.ServeHTTP(w, httptest.NewRequest("GET", "/api/v1/health/ready", nil))
 	var body Status
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)

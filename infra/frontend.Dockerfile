@@ -10,5 +10,7 @@ RUN npm run build
 
 FROM nginxinc/nginx-unprivileged:stable-alpine@sha256:442753882674b49ae2c1de83ed67896131c0777f56df5005e356e62bc3f7e7ce AS runtime
 COPY infra/nginx.conf /etc/nginx/conf.d/default.conf
+COPY infra/security-headers.conf /etc/nginx/security-headers.conf
+COPY infra/error-json.conf /etc/nginx/error-json.conf
 COPY --from=build /app/dist/ /usr/share/nginx/html/
 EXPOSE 8080

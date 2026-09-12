@@ -1,0 +1,753 @@
+openapi: 3.0.3
+info:
+  title: CarSharing internal simulation and demo API
+  version: 1.0.0
+  description: >-
+    Planned MVP contract; no production handlers. JSON responses use Cache-Control no-store. Only local schema
+    references are allowed. Internal network only; external proxy returns 404. Bodies are limited to 262144
+    bytes. Bearer tokens are separate per capability, never cookies or CSRF, and must be checked before
+    parsing the domain payload. Missing and invalid tokens yield identical 401
+    INTERNAL_AUTHENTICATION_REQUIRED. Unsupported methods are 405 METHOD_NOT_ALLOWED with Allow;
+    unknown/foreign resources and unimplemented production paths are 404 RESOURCE_NOT_FOUND. Errors use
+    ApiError, X-Request-ID and no-store. Syntax/header errors are 400; parsed field errors are 422. Validation
+    details enumerate all independently detectable violations in deterministic body/query/path/header and
+    pointer/parameter order.
+paths:
+  /internal/v1/simulation/tick:
+    post:
+      operationId: simulationTick
+      summary: simulation Tick
+      x-implementation-status: planned
+      x-body-limit: 262144
+      description: >-
+        Atomically acquire one database timestamp, advance all simulation states and save tick ID, processed
+        moment and result. Repeat returns the original result without extra motion or energy use. Same ID with
+        another payload conflicts. No client timestamp. Request body is required.
+      parameters:
+        - name: X-Request-ID
+          in: header
+          required: false
+          schema:
+            $ref: ./components/identifiers.yaml#/components/schemas/RequestId
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TickResult'
+              example:
+                tick_id: 11111111-1111-4111-8111-111111111111
+                server_time: '2026-09-12T07:15:30.123456Z'
+                processed_at: '2026-09-12T07:15:30.123456Z'
+                changed_vehicle_ids:
+                  - 01994342-6ba7-7000-8000-000000000001
+                completed_rental_ids: []
+        '400':
+          description: INVALID_HEADER, MALFORMED_JSON
+          x-error-codes:
+            - INVALID_HEADER
+            - MALFORMED_JSON
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                INVALID_HEADER:
+                  value:
+                    code: INVALID_HEADER
+                    message: Request could not be completed
+                    request_id: example-request-1
+                MALFORMED_JSON:
+                  value:
+                    code: MALFORMED_JSON
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '401':
+          description: INTERNAL_AUTHENTICATION_REQUIRED
+          x-error-codes:
+            - INTERNAL_AUTHENTICATION_REQUIRED
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                INTERNAL_AUTHENTICATION_REQUIRED:
+                  value:
+                    code: INTERNAL_AUTHENTICATION_REQUIRED
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '409':
+          description: IDEMPOTENCY_CONFLICT, IDEMPOTENCY_IN_PROGRESS
+          x-error-codes:
+            - IDEMPOTENCY_CONFLICT
+            - IDEMPOTENCY_IN_PROGRESS
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+            Retry-After:
+              $ref: '#/components/headers/RetryAfter'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                IDEMPOTENCY_CONFLICT:
+                  value:
+                    code: IDEMPOTENCY_CONFLICT
+                    message: Request could not be completed
+                    request_id: example-request-1
+                IDEMPOTENCY_IN_PROGRESS:
+                  value:
+                    code: IDEMPOTENCY_IN_PROGRESS
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '413':
+          description: BODY_TOO_LARGE
+          x-error-codes:
+            - BODY_TOO_LARGE
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                BODY_TOO_LARGE:
+                  value:
+                    code: BODY_TOO_LARGE
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '415':
+          description: UNSUPPORTED_MEDIA_TYPE
+          x-error-codes:
+            - UNSUPPORTED_MEDIA_TYPE
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                UNSUPPORTED_MEDIA_TYPE:
+                  value:
+                    code: UNSUPPORTED_MEDIA_TYPE
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '422':
+          description: VALIDATION_FAILED
+          x-error-codes:
+            - VALIDATION_FAILED
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                VALIDATION_FAILED:
+                  value:
+                    code: VALIDATION_FAILED
+                    message: Request could not be completed
+                    request_id: example-request-1
+                    details:
+                      violations:
+                        - location: body
+                          pointer: /email
+                          code: required
+                          message: Required value is missing
+        '500':
+          description: INTERNAL_ERROR
+          x-error-codes:
+            - INTERNAL_ERROR
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                INTERNAL_ERROR:
+                  value:
+                    code: INTERNAL_ERROR
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '503':
+          description: SERVICE_UNAVAILABLE
+          x-error-codes:
+            - SERVICE_UNAVAILABLE
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                SERVICE_UNAVAILABLE:
+                  value:
+                    code: SERVICE_UNAVAILABLE
+                    message: Request could not be completed
+                    request_id: example-request-1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TickRequest'
+            example:
+              tick_id: 11111111-1111-4111-8111-111111111111
+      security:
+        - SimulatorToken: []
+  /internal/v1/demo/actions:
+    post:
+      operationId: applyDemoAction
+      summary: apply Demo Action
+      x-implementation-status: planned
+      x-body-limit: 262144
+      description: >-
+        Set-to-value operations use server time and replay the saved result for action_id; changed payload
+        conflicts. Next payment outcome is scoped to one rental, never global. Request body is required.
+      parameters:
+        - name: X-Request-ID
+          in: header
+          required: false
+          schema:
+            $ref: ./components/identifiers.yaml#/components/schemas/RequestId
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoResult'
+              example:
+                action_id: 11111111-1111-4111-8111-111111111111
+                server_time: '2026-09-12T07:15:30.123456Z'
+        '400':
+          description: INVALID_HEADER, MALFORMED_JSON
+          x-error-codes:
+            - INVALID_HEADER
+            - MALFORMED_JSON
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                INVALID_HEADER:
+                  value:
+                    code: INVALID_HEADER
+                    message: Request could not be completed
+                    request_id: example-request-1
+                MALFORMED_JSON:
+                  value:
+                    code: MALFORMED_JSON
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '401':
+          description: INTERNAL_AUTHENTICATION_REQUIRED
+          x-error-codes:
+            - INTERNAL_AUTHENTICATION_REQUIRED
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                INTERNAL_AUTHENTICATION_REQUIRED:
+                  value:
+                    code: INTERNAL_AUTHENTICATION_REQUIRED
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '404':
+          description: RESOURCE_NOT_FOUND
+          x-error-codes:
+            - RESOURCE_NOT_FOUND
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                RESOURCE_NOT_FOUND:
+                  value:
+                    code: RESOURCE_NOT_FOUND
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '409':
+          description: IDEMPOTENCY_CONFLICT, IDEMPOTENCY_IN_PROGRESS
+          x-error-codes:
+            - IDEMPOTENCY_CONFLICT
+            - IDEMPOTENCY_IN_PROGRESS
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+            Retry-After:
+              $ref: '#/components/headers/RetryAfter'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                IDEMPOTENCY_CONFLICT:
+                  value:
+                    code: IDEMPOTENCY_CONFLICT
+                    message: Request could not be completed
+                    request_id: example-request-1
+                IDEMPOTENCY_IN_PROGRESS:
+                  value:
+                    code: IDEMPOTENCY_IN_PROGRESS
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '413':
+          description: BODY_TOO_LARGE
+          x-error-codes:
+            - BODY_TOO_LARGE
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                BODY_TOO_LARGE:
+                  value:
+                    code: BODY_TOO_LARGE
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '415':
+          description: UNSUPPORTED_MEDIA_TYPE
+          x-error-codes:
+            - UNSUPPORTED_MEDIA_TYPE
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                UNSUPPORTED_MEDIA_TYPE:
+                  value:
+                    code: UNSUPPORTED_MEDIA_TYPE
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '422':
+          description: VALIDATION_FAILED
+          x-error-codes:
+            - VALIDATION_FAILED
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                VALIDATION_FAILED:
+                  value:
+                    code: VALIDATION_FAILED
+                    message: Request could not be completed
+                    request_id: example-request-1
+                    details:
+                      violations:
+                        - location: body
+                          pointer: /email
+                          code: required
+                          message: Required value is missing
+        '500':
+          description: INTERNAL_ERROR
+          x-error-codes:
+            - INTERNAL_ERROR
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                INTERNAL_ERROR:
+                  value:
+                    code: INTERNAL_ERROR
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '503':
+          description: SERVICE_UNAVAILABLE
+          x-error-codes:
+            - SERVICE_UNAVAILABLE
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                SERVICE_UNAVAILABLE:
+                  value:
+                    code: SERVICE_UNAVAILABLE
+                    message: Request could not be completed
+                    request_id: example-request-1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DemoAction'
+            examples:
+              set_telemetry_state:
+                value:
+                  action_id: 11111111-1111-4111-8111-111111111111
+                  action: set_telemetry_state
+                  vehicle_id: 01994342-6ba7-7000-8000-000000000001
+                  telemetry_state: offline
+              set_position:
+                value:
+                  action_id: 11111111-1111-4111-8111-111111111111
+                  action: set_position
+                  vehicle_id: 01994342-6ba7-7000-8000-000000000001
+                  position:
+                    type: Point
+                    coordinates:
+                      - 74.6
+                      - 42.87
+              set_energy_remaining:
+                value:
+                  action_id: 11111111-1111-4111-8111-111111111111
+                  action: set_energy_remaining
+                  vehicle_id: 01994342-6ba7-7000-8000-000000000001
+                  source_kind: battery
+                  remaining: '0'
+              mark_serviced:
+                value:
+                  action_id: 11111111-1111-4111-8111-111111111111
+                  action: mark_serviced
+                  vehicle_id: 01994342-6ba7-7000-8000-000000000001
+              set_next_payment_outcome:
+                value:
+                  action_id: 11111111-1111-4111-8111-111111111111
+                  action: set_next_payment_outcome
+                  rental_id: 01994342-6ba7-7000-8000-000000000001
+                  outcome: failed
+      security:
+        - DemoToken: []
+components:
+  headers:
+    CacheControl:
+      description: Responses must not be cached.
+      schema:
+        type: string
+        enum:
+          - no-store
+    IdempotencyReplayed:
+      description: true only for a replay of the saved original status and body.
+      schema:
+        type: boolean
+    RequestId:
+      description: Identifier of this HTTP attempt. Replays retain the original body request_id.
+      schema:
+        $ref: ./components/identifiers.yaml#/components/schemas/RequestId
+    RetryAfter:
+      description: Retry after one second for an in-flight command.
+      schema:
+        type: integer
+        enum:
+          - 1
+  schemas:
+    ApiError:
+      $ref: ./components/errors.yaml#/components/schemas/ApiError
+    Point:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - coordinates
+      properties:
+        type:
+          type: string
+          enum:
+            - Point
+        coordinates:
+          $ref: '#/components/schemas/Position'
+    Position:
+      type: array
+      items:
+        type: number
+        minimum: -180
+        maximum: 180
+      minItems: 2
+      maxItems: 2
+      description: WGS84 [longitude, latitude]. Latitude must be within -90..90.
+      x-coordinate-order: longitude-latitude
+    SourceKind:
+      type: string
+      enum:
+        - battery
+        - gasoline
+        - diesel
+        - lpg
+        - cng
+    TickRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - tick_id
+      properties:
+        tick_id:
+          $ref: ./components/identifiers.yaml#/components/schemas/CommandId
+    TickResult:
+      type: object
+      additionalProperties: false
+      required:
+        - tick_id
+        - server_time
+        - processed_at
+        - changed_vehicle_ids
+        - completed_rental_ids
+      properties:
+        tick_id:
+          $ref: ./components/identifiers.yaml#/components/schemas/CommandId
+        server_time:
+          $ref: ./components/common.yaml#/components/schemas/Timestamp
+        processed_at:
+          $ref: ./components/common.yaml#/components/schemas/Timestamp
+        changed_vehicle_ids:
+          type: array
+          items:
+            $ref: ./components/identifiers.yaml#/components/schemas/ResourceId
+        completed_rental_ids:
+          type: array
+          items:
+            $ref: ./components/identifiers.yaml#/components/schemas/ResourceId
+    SetTelemetryState:
+      type: object
+      additionalProperties: false
+      required:
+        - action_id
+        - action
+        - vehicle_id
+        - telemetry_state
+      properties:
+        action_id:
+          $ref: ./components/identifiers.yaml#/components/schemas/CommandId
+        action:
+          type: string
+          enum:
+            - set_telemetry_state
+        vehicle_id:
+          $ref: ./components/identifiers.yaml#/components/schemas/ResourceId
+        telemetry_state:
+          type: string
+          enum:
+            - online
+            - offline
+      example:
+        action_id: 11111111-1111-4111-8111-111111111111
+        action: set_telemetry_state
+        vehicle_id: 01994342-6ba7-7000-8000-000000000001
+        telemetry_state: offline
+    SetPosition:
+      type: object
+      additionalProperties: false
+      required:
+        - action_id
+        - action
+        - vehicle_id
+        - position
+      properties:
+        action_id:
+          $ref: ./components/identifiers.yaml#/components/schemas/CommandId
+        action:
+          type: string
+          enum:
+            - set_position
+        vehicle_id:
+          $ref: ./components/identifiers.yaml#/components/schemas/ResourceId
+        position:
+          $ref: '#/components/schemas/Point'
+      example:
+        action_id: 11111111-1111-4111-8111-111111111111
+        action: set_position
+        vehicle_id: 01994342-6ba7-7000-8000-000000000001
+        position:
+          type: Point
+          coordinates:
+            - 74.6
+            - 42.87
+    SetEnergyRemaining:
+      type: object
+      additionalProperties: false
+      required:
+        - action_id
+        - action
+        - vehicle_id
+        - source_kind
+        - remaining
+      properties:
+        action_id:
+          $ref: ./components/identifiers.yaml#/components/schemas/CommandId
+        action:
+          type: string
+          enum:
+            - set_energy_remaining
+        vehicle_id:
+          $ref: ./components/identifiers.yaml#/components/schemas/ResourceId
+        source_kind:
+          $ref: '#/components/schemas/SourceKind'
+        remaining:
+          $ref: ./components/common.yaml#/components/schemas/EnergyDecimal
+      example:
+        action_id: 11111111-1111-4111-8111-111111111111
+        action: set_energy_remaining
+        vehicle_id: 01994342-6ba7-7000-8000-000000000001
+        source_kind: battery
+        remaining: '0'
+    MarkServiced:
+      type: object
+      additionalProperties: false
+      required:
+        - action_id
+        - action
+        - vehicle_id
+      properties:
+        action_id:
+          $ref: ./components/identifiers.yaml#/components/schemas/CommandId
+        action:
+          type: string
+          enum:
+            - mark_serviced
+        vehicle_id:
+          $ref: ./components/identifiers.yaml#/components/schemas/ResourceId
+      example:
+        action_id: 11111111-1111-4111-8111-111111111111
+        action: mark_serviced
+        vehicle_id: 01994342-6ba7-7000-8000-000000000001
+    SetNextPaymentOutcome:
+      type: object
+      additionalProperties: false
+      required:
+        - action_id
+        - action
+        - rental_id
+        - outcome
+      properties:
+        action_id:
+          $ref: ./components/identifiers.yaml#/components/schemas/CommandId
+        action:
+          type: string
+          enum:
+            - set_next_payment_outcome
+        rental_id:
+          $ref: ./components/identifiers.yaml#/components/schemas/ResourceId
+        outcome:
+          type: string
+          enum:
+            - paid
+            - failed
+      example:
+        action_id: 11111111-1111-4111-8111-111111111111
+        action: set_next_payment_outcome
+        rental_id: 01994342-6ba7-7000-8000-000000000001
+        outcome: failed
+    DemoAction:
+      oneOf:
+        - $ref: '#/components/schemas/SetTelemetryState'
+        - $ref: '#/components/schemas/SetPosition'
+        - $ref: '#/components/schemas/SetEnergyRemaining'
+        - $ref: '#/components/schemas/MarkServiced'
+        - $ref: '#/components/schemas/SetNextPaymentOutcome'
+      discriminator:
+        propertyName: action
+        mapping:
+          set_telemetry_state: '#/components/schemas/SetTelemetryState'
+          set_position: '#/components/schemas/SetPosition'
+          set_energy_remaining: '#/components/schemas/SetEnergyRemaining'
+          mark_serviced: '#/components/schemas/MarkServiced'
+          set_next_payment_outcome: '#/components/schemas/SetNextPaymentOutcome'
+    DemoResult:
+      type: object
+      additionalProperties: false
+      required:
+        - action_id
+        - server_time
+      properties:
+        action_id:
+          $ref: ./components/identifiers.yaml#/components/schemas/CommandId
+        server_time:
+          $ref: ./components/common.yaml#/components/schemas/Timestamp
+  securitySchemes:
+    SimulatorToken:
+      type: http
+      scheme: bearer
+      description: simulator_token
+    DemoToken:
+      type: http
+      scheme: bearer
+      description: demo_control_token

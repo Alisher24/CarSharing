@@ -1,0 +1,9 @@
+package: mailstubapi
+generate:
+  models: true
+  chi-server: true
+  strict-server: true
+  embedded-spec: true
+output: internal/contracts/mailstubapi/generated.go
+output-options:
+  skip-prune: true

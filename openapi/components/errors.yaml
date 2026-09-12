@@ -1,0 +1,61 @@
+components:
+  schemas:
+    ErrorCode:
+      type: string
+      enum: [MALFORMED_JSON, INVALID_HEADER, INVALID_CURSOR, BODY_TOO_LARGE, UNSUPPORTED_MEDIA_TYPE, VALIDATION_FAILED, METHOD_NOT_ALLOWED, AUTHENTICATION_REQUIRED, INVALID_CREDENTIALS, EMAIL_ALREADY_REGISTERED, ORIGIN_NOT_ALLOWED, CSRF_INVALID, INTERNAL_AUTHENTICATION_REQUIRED, IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_KEY_INVALID, IDEMPOTENCY_CONFLICT, IDEMPOTENCY_IN_PROGRESS, RESOURCE_NOT_FOUND, VEHICLE_UNAVAILABLE, ACTIVE_RENTAL_EXISTS, OUTSTANDING_INVOICE, RESERVATION_EXPIRED, RENTAL_COMPLETED, INVALID_RENTAL_STATE, OUTSIDE_SERVICE_ZONE, TELEMETRY_STALE, PAYMENT_IN_PROGRESS, DELIVERY_CONFLICT, RATE_LIMITED, CLOCK_OUT_OF_SYNC, CONCURRENCY_RETRY_EXHAUSTED, SERVICE_UNAVAILABLE, INTERNAL_ERROR]
+    BodyViolation:
+      type: object
+      additionalProperties: false
+      required: [location, pointer, code, message]
+      properties:
+        location: {type: string, enum: [body]}
+        pointer: {type: string, pattern: '^(/.*)?$', description: JSON Pointer without the fragment marker.}
+        code: {type: string}
+        message: {type: string}
+    ParameterViolation:
+      type: object
+      additionalProperties: false
+      required: [location, parameter, code, message]
+      properties:
+        location: {type: string, enum: [query, path, header]}
+        parameter: {type: string}
+        code: {type: string}
+        message: {type: string}
+    Violation:
+      oneOf:
+        - {$ref: '#/components/schemas/BodyViolation'}
+        - {$ref: '#/components/schemas/ParameterViolation'}
+    ValidationDetails:
+      type: object
+      additionalProperties: false
+      required: [violations]
+      properties:
+        violations:
+          type: array
+          minItems: 1
+          items: {$ref: '#/components/schemas/Violation'}
+    UnavailableReason:
+      type: string
+      enum: [insufficient_energy, telemetry_stale, outside_service_zone, service_required, technical_unavailable]
+    UnavailableDetails:
+      type: object
+      additionalProperties: false
+      required: [unavailable_reasons]
+      properties:
+        unavailable_reasons:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/UnavailableReason'}
+    ApiError:
+      type: object
+      additionalProperties: false
+      required: [code, message, request_id]
+      properties:
+        code: {$ref: '#/components/schemas/ErrorCode'}
+        message: {type: string, description: Safe English message; clients translate known codes.}
+        request_id: {$ref: './identifiers.yaml#/components/schemas/RequestId'}
+        details:
+          oneOf:
+            - {$ref: '#/components/schemas/ValidationDetails'}
+            - {$ref: '#/components/schemas/UnavailableDetails'}
