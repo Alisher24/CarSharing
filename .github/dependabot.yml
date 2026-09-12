@@ -24,6 +24,13 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     target-branch: master
+    ignore:
+      # The contract generator drives the classic TypeScript compiler API, which the native port in
+      # TypeScript 7 no longer exposes: ts.SyntaxKind is undefined there and generation dies. The
+      # generator's own peer range stops at 6.x and 0.99.0 is its newest release, so this pin lifts
+      # only once @hey-api/openapi-ts supports 7. The frontend is unaffected and tracks 7 normally.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: docker
     directory: /infra
     schedule:
