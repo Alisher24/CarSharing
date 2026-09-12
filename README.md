@@ -116,19 +116,26 @@ docker compose -f compose.yaml -f compose.dev.yaml up --build -d
 ```sh
 go -C backend test ./...
 go -C backend vet ./...
-cd frontend
 npm ci
-npm run build
-npm audit
+npm run format:check
+npm --prefix frontend ci
+npm --prefix frontend run build
 ```
+
+Форматирование и линт стилей обязательны для каждого изменения; правила чтения кода
+описаны в `AGENTS.md`. Prettier выравнивает TypeScript, JavaScript, CSS и JSON,
+Stylelint проверяет CSS, `gofmt` — Go. Хук `pre-commit` форматирует файлы из индекса
+той же конфигурацией, а `npm run format` выравнивает репозиторий целиком.
+Сгенерированный код исключён из форматирования: он обновляется только генерацией.
 
 Версии Go/Node и образы закреплены в Dockerfiles/Compose, зависимости — в
 `go.mod`/`go.sum` и `package-lock.json`. Использованы React 19.3, TypeScript 7.0,
 Vite 8.3, chi 5.3, pgx 5.11 и goose 3.28. [Vite поддерживает Node 24](https://vite.dev/guide/),
 [PostGIS использует путь volume PostgreSQL 18](https://github.com/postgis/docker-postgis).
-Обязательный Repository checks параллельно проверяет Go, TypeScript-сборку,
-воспроизводимость контрактов, npm/Go-зависимости, историю секретов и полный Compose smoke
-с тестовой PostGIS. Итоговый check проходит только при успехе всех этих задач.
+Обязательный Repository checks параллельно проверяет форматирование и стили,
+Go, TypeScript-сборку, воспроизводимость контрактов, npm/Go-зависимости, историю
+секретов и полный Compose smoke с тестовой PostGIS. Итоговый check проходит только
+при успехе всех этих задач.
 
 ## Учётные записи и сессии
 

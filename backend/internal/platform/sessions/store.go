@@ -1,8 +1,3 @@
-// Package sessions keeps server-side sessions in PostgreSQL. The browser holds only an opaque
-// token; the store holds its SHA-256 hash, so reading the table yields nothing that can be
-// presented as a session. Every statement goes through the transaction of the request being
-// served when there is one, which is what lets a registration create its user and its session as
-// a single committed unit.
 package sessions
 
 import (
@@ -15,7 +10,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// store implements the session library's context-aware store interface over PostgreSQL.
+// store implements the session library's context-aware store interface over PostgreSQL. The
+// library's context-free methods answer an error rather than a session, because this application
+// always has the context of the request being served and a session that escaped its request must
+// not silently succeed.
 type store struct{ pool *pgxpool.Pool }
 
 func (s store) FindCtx(ctx context.Context, hashedToken string) ([]byte, bool, error) {
@@ -45,11 +43,12 @@ func (s store) DeleteCtx(ctx context.Context, hashedToken string) error {
 	return err
 }
 
+// errNoRequestContext reports a context-free method of the store, which this application never
+// reaches: every statement runs through the context of the request being served.
+var errNoRequestContext = errors.New("session store reached without the context of a request")
+
 // The library's interface also declares these context-free methods and prefers the context-aware
-// ones when a store provides them. This application always supplies a context, so reaching one of
-// these would mean a session escaped its request and must not silently succeed.
+// ones when a store provides them.
 func (s store) Find(string) ([]byte, bool, error)      { return nil, false, errNoRequestContext }
 func (s store) Commit(string, []byte, time.Time) error { return errNoRequestContext }
 func (s store) Delete(string) error                    { return errNoRequestContext }
-
-var errNoRequestContext = errors.New("session store reached without the context of a request")

@@ -3,39 +3,95 @@
 // rather than what it computes.
 import assert from 'node:assert/strict';
 import { before, beforeEach, describe, test } from 'node:test';
-import { call, newEmail, password, registerAccount, resetRateLimits, sql, waitForReady } from './client.mjs';
-
-before(waitForReady);
-beforeEach(resetRateLimits);
+import { ARGON2ID_PHC_PATTERN, PASSWORD_HASH_COLUMN, PHC_SALT_FIELD } from './accounts.mjs';
+import {
+  call,
+  newEmail,
+  registerAccount,
+  resetRateLimits,
+  SIGN_IN_PATH,
+  signInRequest,
+  sql,
+  waitForReady,
+  wrongPassword,
+} from './client.mjs';
 
 /**
  * The parameters recorded in the README beside the measurements. A stored hash carries the
  * parameters it was produced with, so comparing the two is how the deployed cost and the documented
  * cost are held together.
  */
-const recorded = { memoryKiB: 19456, passes: 2, parallelism: 1 };
+const recordedHashingParameters = {
+  memoryKiB: 19456,
+  passes: 2,
+  parallelism: 1,
+};
 
 /** How many hashes the instance admits at once, per the recorded configuration. */
-const recordedConcurrent = 2;
+const recordedConcurrentHashes = 2;
+
+// Comfortably more than the ceiling, so the surplus has to be refused rather than queued. The
+// address limit is high enough that these are refused for being surplus rather than for being too
+// many attempts.
+const REQUEST_BURST_MULTIPLIER = 6;
+
+// Several rounds, comparing the fastest of each: a minimum is far less sensitive to scheduling
+// noise than a mean, and a skipped hash would show up as a floor an order of magnitude lower.
+const TIMING_ROUNDS = 5;
+const MINIMUM_KNOWN_ADDRESS_SPEED_RATIO = 0.5;
+
+const ACCEPTED_SIGN_IN_STATUS = 200;
+const REFUSED_SIGN_IN_STATUS = 401;
+const OVERLOADED_STATUS = 503;
+const SERVICE_UNAVAILABLE_CODE = 'SERVICE_UNAVAILABLE';
+
+const SHARED_PASSWORD = 'sharedpasswordvalue';
+
+/** How many sign-ins the suite asks for at once, which is comfortably more than the ceiling. */
+const REQUEST_BURST_SIZE = recordedConcurrentHashes * REQUEST_BURST_MULTIPLIER;
+
+before(waitForReady);
+beforeEach(resetRateLimits);
+
+function assertRecordedParameters(storedHash) {
+  const match = storedHash.match(ARGON2ID_PHC_PATTERN);
+  assert.ok(match, `the stored hash is not a recognisable Argon2id PHC string: ${storedHash}`);
+  assert.equal(
+    Number(match[1]),
+    recordedHashingParameters.memoryKiB,
+    'deployed memory differs from the recorded value',
+  );
+  assert.equal(Number(match[2]), recordedHashingParameters.passes, 'deployed passes differ from the recorded value');
+  assert.equal(
+    Number(match[3]),
+    recordedHashingParameters.parallelism,
+    'deployed parallelism differs from the recorded value',
+  );
+}
+
+/** Asks for more sign-ins at once than the instance can hash, and returns every answer. */
+function askForMoreSignInsThanTheCeilingAllows(email) {
+  return Promise.all(Array.from({ length: REQUEST_BURST_SIZE }, () => call(SIGN_IN_PATH, signInRequest(email))));
+}
+
+/** The salt each account was hashed with, read back from the stored PHC strings. */
+function storedSalts(firstEmail, secondEmail) {
+  const query =
+    `SELECT split_part(${PASSWORD_HASH_COLUMN}, '$', ${PHC_SALT_FIELD}) FROM users` +
+    ` WHERE email IN ('${firstEmail}', '${secondEmail}')`;
+  return sql(query).split('\n');
+}
 
 describe('the deployed hashing parameters are the recorded ones', () => {
   test('a freshly stored hash carries the parameters the README records', async () => {
     const { email } = await registerAccount('parameters');
-    const stored = sql(`SELECT password_hash FROM users WHERE email = '${email}'`);
-    const match = stored.match(/^\$argon2id\$v=19\$m=(\d+),t=(\d+),p=(\d+)\$/);
-    assert.ok(match, `the stored hash is not a recognisable Argon2id PHC string: ${stored}`);
-    assert.equal(Number(match[1]), recorded.memoryKiB, 'deployed memory differs from the recorded value');
-    assert.equal(Number(match[2]), recorded.passes, 'deployed passes differ from the recorded value');
-    assert.equal(Number(match[3]), recorded.parallelism, 'deployed parallelism differs from the recorded value');
+    assertRecordedParameters(sql(`SELECT ${PASSWORD_HASH_COLUMN} FROM users WHERE email = '${email}'`));
   });
 
   test('every account is hashed with its own salt', async () => {
-    const shared = 'sharedpasswordvalue';
-    const one = await registerAccount('own-salt', { password: shared });
-    const two = await registerAccount('own-salt', { password: shared });
-    const salts = sql(
-      `SELECT split_part(password_hash, '$', 5) FROM users WHERE email IN ('${one.email}', '${two.email}')`,
-    ).split('\n');
+    const firstAccount = await registerAccount('own-salt', { password: SHARED_PASSWORD });
+    const secondAccount = await registerAccount('own-salt', { password: SHARED_PASSWORD });
+    const salts = storedSalts(firstAccount.email, secondAccount.email);
     assert.equal(salts.length, 2);
     assert.notEqual(salts[0], salts[1]);
   });
@@ -46,41 +102,35 @@ describe('an instance admits only its ceiling of concurrent hashes', () => {
     const { email } = await registerAccount('ceiling');
     resetRateLimits();
 
-    // Comfortably more than the ceiling, all in flight at once. The address limit is high enough
-    // that these are refused for being surplus rather than for being too many attempts.
-    const inFlight = recordedConcurrent * 6;
-    const answers = await Promise.all(
-      Array.from({ length: inFlight }, () =>
-        call('/api/v1/auth/login', { method: 'POST', body: { email, password } })),
-    );
+    const answers = await askForMoreSignInsThanTheCeilingAllows(email);
     const statuses = answers.map((answer) => answer.status);
-    const unavailable = answers.filter((answer) => answer.status === 503);
-    const succeeded = statuses.filter((status) => status === 200).length;
+    const unavailable = answers.filter((answer) => answer.status === OVERLOADED_STATUS);
+    const succeeded = statuses.filter((status) => status === ACCEPTED_SIGN_IN_STATUS).length;
 
     assert.ok(
       unavailable.length > 0,
-      `no request was refused while ${inFlight} hashes were asked for at once: ${statuses.join(',')}`,
+      `no request was refused while ${REQUEST_BURST_SIZE} hashes were asked for at once: ${statuses.join(',')}`,
     );
     assert.ok(succeeded > 0, `every request was refused: ${statuses.join(',')}`);
     for (const refused of unavailable) {
-      assert.equal(refused.json.code, 'SERVICE_UNAVAILABLE', refused.text);
+      assert.equal(refused.json.code, SERVICE_UNAVAILABLE_CODE, refused.text);
     }
     // Nothing may answer with anything else: a queued request would eventually appear as a
     // timeout or a gateway error rather than as an honest refusal.
     for (const status of statuses) {
-      assert.ok([200, 503].includes(status), `an unexpected status appeared under pressure: ${status}`);
+      assert.ok(
+        [ACCEPTED_SIGN_IN_STATUS, OVERLOADED_STATUS].includes(status),
+        `an unexpected status appeared under pressure: ${status}`,
+      );
     }
   });
 
   test('recovers as soon as the pressure is gone', async () => {
     const { email } = await registerAccount('recovers');
     resetRateLimits();
-    await Promise.all(
-      Array.from({ length: recordedConcurrent * 6 }, () =>
-        call('/api/v1/auth/login', { method: 'POST', body: { email, password } })),
-    );
-    const afterwards = await call('/api/v1/auth/login', { method: 'POST', body: { email, password } });
-    assert.equal(afterwards.status, 200, `the instance did not recover: ${afterwards.text}`);
+    await askForMoreSignInsThanTheCeilingAllows(email);
+    const afterwards = await call(SIGN_IN_PATH, signInRequest(email));
+    assert.equal(afterwards.status, ACCEPTED_SIGN_IN_STATUS, `the instance did not recover: ${afterwards.text}`);
   });
 });
 
@@ -88,27 +138,28 @@ describe('an unknown address costs the same work as a known one', () => {
   test('does not answer an unregistered address markedly faster', async () => {
     const { email } = await registerAccount('timing');
     resetRateLimits();
-    const unknown = newEmail('never-registered');
+    const unknownAddress = newEmail('never-registered');
 
-    // Several rounds, comparing the fastest of each: a minimum is far less sensitive to scheduling
-    // noise than a mean, and a skipped hash would show up as a floor an order of magnitude lower.
-    const fastest = { known: Infinity, unknown: Infinity };
-    for (let round = 0; round < 5; round += 1) {
-      for (const [label, address] of [['known', email], ['unknown', unknown]]) {
+    const fastestMilliseconds = { known: Infinity, unknown: Infinity };
+    for (let round = 0; round < TIMING_ROUNDS; round += 1) {
+      for (const [addressKind, address] of [
+        ['known', email],
+        ['unknown', unknownAddress],
+      ]) {
         resetRateLimits();
-        const started = performance.now();
-        const answer = await call('/api/v1/auth/login', {
+        const startedAt = performance.now();
+        const answer = await call(SIGN_IN_PATH, {
           method: 'POST',
-          body: { email: address, password: 'wrongpasswordvalue' },
+          body: { email: address, password: wrongPassword },
         });
-        assert.equal(answer.status, 401, answer.text);
-        fastest[label] = Math.min(fastest[label], performance.now() - started);
+        assert.equal(answer.status, REFUSED_SIGN_IN_STATUS, answer.text);
+        fastestMilliseconds[addressKind] = Math.min(fastestMilliseconds[addressKind], performance.now() - startedAt);
       }
     }
     assert.ok(
-      fastest.unknown > fastest.known / 2,
-      `an unknown address answered in ${fastest.unknown.toFixed(1)}ms against ${fastest.known.toFixed(1)}ms `
-        + 'for a known one, which suggests the hash was skipped',
+      fastestMilliseconds.unknown > fastestMilliseconds.known * MINIMUM_KNOWN_ADDRESS_SPEED_RATIO,
+      `an unknown address answered in ${fastestMilliseconds.unknown.toFixed(1)}ms against ` +
+        `${fastestMilliseconds.known.toFixed(1)}ms for a known one, which suggests the hash was skipped`,
     );
   });
 });

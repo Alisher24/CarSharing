@@ -95,7 +95,7 @@ func (h *PasswordHasher) Hash(password string) (string, error) {
 // hash rather than the configured ones. A wrong password is reported as false; a hash this build
 // cannot read is reported as an error, because it must not be mistaken for a failed guess.
 func (h *PasswordHasher) Verify(encoded, password string) (bool, error) {
-	parameters, salt, want, err := decodeHash(encoded)
+	parameters, salt, storedKey, err := decodeHash(encoded)
 	if err != nil {
 		return false, err
 	}
@@ -103,9 +103,9 @@ func (h *PasswordHasher) Verify(encoded, password string) (bool, error) {
 		return false, ErrHashingBusy
 	}
 	defer h.release()
-	got := h.derive(parameters, password, salt)
+	derivedKey := h.derive(parameters, password, salt)
 	// Constant time, so the answer does not depend on how much of the hash matched.
-	return subtle.ConstantTimeCompare(got, want) == 1, nil
+	return subtle.ConstantTimeCompare(derivedKey, storedKey) == 1, nil
 }
 
 func (h *PasswordHasher) derive(parameters HashingParameters, password string, salt []byte) []byte {

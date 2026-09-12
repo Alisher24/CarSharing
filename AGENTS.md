@@ -21,24 +21,36 @@ Use only that single subject line: do not add a body, bullet list, pull request 
 
 ### Code style
 
-Readability is a requirement, not a preference. Every change must satisfy the rules below.
+Readable, extensible code is the deliverable; working code that nobody can read is not finished.
+These rules are enforced by the checks named at the end of this section, so a change that breaks
+them fails the pipeline rather than waiting for a reviewer.
+
+Reach for a name before a comment, and a smaller unit before a longer one. Code answers *what*;
+a comment exists only to answer *why*. When you cannot name a thing clearly, that is the
+instruction: restructure it until you can.
 
 **Names**
 
 - A name states what the thing is. No abbreviations that are not already domain words
-  (`cfg`, `pc`, `pool` over `p`; `status` over `s`). The idiomatic Go short names
-  `ctx`, `err`, `w`, `r`, `i`, `ok` stay.
+  (`status` over `s`, `configuration` over `cfg`, `connectionPool` over `pool`). The idiomatic Go
+  short names `ctx`, `err`, `w`, `r`, `i`, `ok` stay, as does a receiver or a request parameter
+  that names its own type.
 - Name length follows scope length: one letter only inside a few-line block.
+- A name is read far more often than it is written. `formatCheckedAt` over `fmt`, `refusalText`
+  over `text`, `submission` over `data`.
 - A file is named after what it contains. A file carrying its package's name is acceptable only
   while it holds that package's single concern, and is split the moment it holds more: `httpapi.go`
   holding a router, a handler and a probe was the defect, `config.go` holding only the config
   loader is not.
-- One file holds one concern. If the name cannot describe the contents without "and", split the file.
+- One file holds one concern. If the name cannot describe the contents without "and", split the
+  file.
 - A type alias is justified only when it hides a real dependency; never to rename a generated type.
 
 **Functions**
 
 - A function does one thing at one level of abstraction. Target under 40 lines; over 60 is a defect.
+- A function that config, transport and teardown all pass through is three functions. Extract
+  `newServer` and `serve` rather than writing one long `run`.
 - Prefer early returns to nested conditions. Never invert a check to `if err == nil { ... }`.
 - Go `main` packages use `func run() error`; `main` only logs the error and sets the exit code.
 - A nested closure that needs more than a few lines becomes a named function or method.
@@ -47,26 +59,60 @@ Readability is a requirement, not a preference. Every change must satisfy the ru
 
 - No magic numbers or repeated string literals. Use `http.Status*`, generated contract
   constants, or a named constant declared next to its meaning.
-- A limit, timeout or size gets a named constant stating its unit (`maxPublicBodyBytes`).
-- A value enumerated in more than one place becomes a single source and is derived elsewhere.
+- A limit, timeout or size gets a named constant stating its unit (`maxPublicBodyBytes`,
+  `HEALTH_REQUEST_TIMEOUT_MS`).
+- A value enumerated in more than one place becomes a single source and is derived elsewhere —
+  including a value that a human-readable message spells out.
 
 **Comments**
 
 - Code answers *what*. A comment exists only to answer *why*, when the reason is not derivable
   from the code: a non-obvious ordering constraint, a workaround with its cause, a domain rule.
-- Never restate the code, the log message next to it, the README, or the roadmap.
+- Never restate the code, the log message next to it, the README, or the roadmap. Delete
+  commented-out code.
+- A comment that a rename or an extracted function makes unnecessary is deleted, not reworded.
 - Every package has a package doc comment. Every exported identifier whose purpose is not
   obvious from its name has a doc comment.
 - A doc comment on a function describes that function's contract, not a detail beside it.
-- Delete a comment that a rename or an extracted function makes unnecessary.
+- Ticket numbers and specification question numbers mean nothing to a reader of the code. State
+  the rule itself.
 
-**Layout**
+**Layout and separation**
 
-- Lines stay under 120 characters. Wrap struct literals, table-test rows and JSX one field per line.
-- No conditional logic inside a long inline expression: no chained ternaries in JSX, no map
-  literal inside an `if` condition.
+- Lines stay under 120 characters. Wrap struct literals, object literals, argument lists,
+  table-test rows and JSX one field per line.
+- One statement per line, one CSS declaration per line, one intent per block.
+- Separate distinct meanings with a blank line: between declarations, between the phases of a
+  function, between CSS rule blocks, between `@media` blocks. A blank line is how a reader sees
+  where one thought ends.
+- No conditional logic inside a long inline expression: no chained ternaries, no ternaries in JSX,
+  no map literal inside an `if` condition. Extract a named helper or a lookup table.
+- A rule is not a licence for a one-liner: `.connection { padding: 30px; background: #fffefa; }`
+  is the defect this section exists to prevent.
 
 **Review gate**
 
-Before proposing a change: reread the diff as a stranger would. Anything that needs a comment to
-be understood, or that cannot be named clearly, is a signal to restructure rather than annotate.
+Before proposing a change:
+
+1. Reread the diff as a stranger would. Anything that needs a comment to be understood, or that
+   cannot be named clearly, is a signal to restructure rather than annotate.
+2. Reread the modified file as a whole, not only the diff. A function that grew past 40 lines, a
+   file that grew a second concern and a comment that the change made redundant are visible only
+   in the whole.
+3. Run the formatting gates below and fix what they report. A check that fails is not a reviewer's
+   problem to raise later.
+
+**Formatting gates**
+
+- Go files: `gofmt -w <files>`, then from `backend/`: `go build ./... && go vet ./... && go test ./...`.
+- JavaScript, TypeScript, CSS, JSON: from the repository root, `npm run format:check` and, from
+  `frontend/`, `npm run typecheck && npm run lint:css`. Run `npm run format` at the root to fix
+  what the check reports.
+- The pre-commit hook formats staged files with the same Prettier configuration, so hand-written
+  code arrives already aligned; a repository-wide `npm run format` is available when a change
+  reorders many files at once.
+- Prettier and Stylelint decide formatting, and their configuration is the single source of truth
+  for it: never hand-format what the tools format, and never disable a rule to land a change.
+  Write the code the rule wants.
+- Generated code is exempt from every rule here. It is reformatted only by regenerating it:
+  `npm --prefix tools/openapi run generate`.

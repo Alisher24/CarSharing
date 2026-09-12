@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -67,6 +68,19 @@ var contracts = map[string]struct {
 	}},
 }
 
+// The OpenAPI version every source contract declares, how a status key from a contract is read,
+// and the first status that makes a response an error rather than a result.
+const (
+	openAPIVersion   = "3.0.3"
+	firstErrorStatus = 400
+	statusBase       = 10
+	statusBits       = 16
+)
+
+// transportHeaders are the headers every response declares, because the transport boundary answers
+// each of them whether or not the operation itself does.
+var transportHeaders = []string{"X-Request-ID", "Cache-Control"}
+
 // implementationStatuses is the closed set an operation may declare. An operation is routed only
 // once it is marked implemented, and the router tests hold the two halves to each other: a planned
 // operation must answer as an unknown resource, an implemented one must not.
@@ -79,44 +93,101 @@ func TestContractInventorySchemasAndExamples(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if spec.OpenAPI != "3.0.3" {
-				t.Fatalf("OpenAPI %s", spec.OpenAPI)
-			}
-			if err := spec.Validate(context.Background()); err != nil {
-				t.Fatal(err)
-			}
-			var operations []string
-			for path, item := range spec.Paths.Map() {
-				for method, op := range item.Operations() {
-					operations = append(operations, method+" "+path)
-					if !implementationStatuses[op.Extensions["x-implementation-status"]] {
-						t.Errorf("%s %s declares no known implementation status", method, path)
-					}
-					if op.RequestBody != nil {
-						checkContentExamples(t, op.OperationID+" request", op.RequestBody.Value.Content)
-					}
-					for status, res := range op.Responses.Map() {
-						checkContentExamples(t, op.OperationID+" response "+status, res.Value.Content)
-						if res.Value.Headers["X-Request-ID"] == nil || res.Value.Headers["Cache-Control"] == nil {
-							t.Errorf("%s %s lacks transport headers", op.OperationID, status)
-						}
-						if status >= "400" {
-							checkErrorCodes(t, op.OperationID, status, res.Value)
-						}
-					}
-				}
-			}
-			sort.Strings(operations)
-			want := append([]string(nil), contract.operations...)
-			sort.Strings(want)
-			if strings.Join(operations, "\n") != strings.Join(want, "\n") {
-				t.Fatalf("operation inventory differs:\n%s", strings.Join(operations, "\n"))
-			}
-			seen := map[*openapi3.Schema]bool{}
-			for name, schema := range spec.Components.Schemas {
-				checkSchema(t, spec, name, schema, seen)
-			}
+			checkContractDocument(t, spec)
+			operations := checkContractOperations(t, spec)
+			checkOperationInventory(t, operations, contract.operations)
+			checkComponentSchemas(t, spec)
 		})
+	}
+}
+
+// checkContractDocument holds the document itself to the version and the validity the generators
+// and this repository's checks both assume.
+func checkContractDocument(t *testing.T, spec *openapi3.T) {
+	t.Helper()
+	if spec.OpenAPI != openAPIVersion {
+		t.Fatalf("OpenAPI %s", spec.OpenAPI)
+	}
+	if err := spec.Validate(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// checkContractOperations walks every operation, holds it to a known implementation status and
+// checks the examples and error codes of every response it declares. It returns the inventory it
+// saw, as "METHOD /path", so the caller can compare it with the one the contract promises.
+func checkContractOperations(t *testing.T, spec *openapi3.T) []string {
+	t.Helper()
+	var operations []string
+	for path, pathItem := range spec.Paths.Map() {
+		for method, operation := range pathItem.Operations() {
+			operations = append(operations, method+" "+path)
+			checkOperation(t, method, path, operation)
+		}
+	}
+	return operations
+}
+
+func checkOperation(t *testing.T, method, path string, operation *openapi3.Operation) {
+	t.Helper()
+	if !implementationStatuses[operation.Extensions["x-implementation-status"]] {
+		t.Errorf("%s %s declares no known implementation status", method, path)
+	}
+	if operation.RequestBody != nil {
+		checkContentExamples(t, operation.OperationID+" request", operation.RequestBody.Value.Content)
+	}
+	for status, response := range operation.Responses.Map() {
+		checkResponse(t, operation.OperationID, status, response.Value)
+	}
+}
+
+func checkResponse(t *testing.T, operationID, status string, response *openapi3.Response) {
+	t.Helper()
+	checkContentExamples(t, operationID+" response "+status, response.Content)
+	for _, header := range transportHeaders {
+		if response.Headers[header] == nil {
+			t.Errorf("%s %s lacks transport header %s", operationID, status, header)
+		}
+	}
+	statusCode, ok := parseStatus(status)
+	if !ok {
+		t.Errorf("%s declares unreadable status %q", operationID, status)
+		return
+	}
+	if statusCode >= firstErrorStatus {
+		checkErrorCodes(t, operationID, status, response)
+	}
+}
+
+// parseStatus reads a status key from a contract, which is the status as a decimal string.
+func parseStatus(status string) (int, bool) {
+	code, err := strconv.ParseInt(status, statusBase, statusBits)
+	if err != nil {
+		return 0, false
+	}
+	return int(code), true
+}
+
+// checkOperationInventory holds the contract to the operations this repository promises it serves.
+// Both sides are sorted, so a contract that merely reorders its paths is not reported as a change.
+func checkOperationInventory(t *testing.T, served, promised []string) {
+	t.Helper()
+	sortedServed := append([]string(nil), served...)
+	sort.Strings(sortedServed)
+	sortedPromised := append([]string(nil), promised...)
+	sort.Strings(sortedPromised)
+	if strings.Join(sortedServed, "\n") != strings.Join(sortedPromised, "\n") {
+		t.Fatalf("operation inventory differs:\n%s", strings.Join(sortedServed, "\n"))
+	}
+}
+
+// checkComponentSchemas checks every named schema once. The schemas are visited transitively, so a
+// shared schema reached from two places is still checked only once.
+func checkComponentSchemas(t *testing.T, spec *openapi3.T) {
+	t.Helper()
+	seen := map[*openapi3.Schema]bool{}
+	for name, schema := range spec.Components.Schemas {
+		checkSchema(t, spec, name, schema, seen)
 	}
 }
 
@@ -149,7 +220,9 @@ func checkExample(t *testing.T, name string, schema *openapi3.Schema, value any)
 	}
 }
 
-func checkSchema(t *testing.T, spec *openapi3.T, name string, ref *openapi3.SchemaRef, seen map[*openapi3.Schema]bool) {
+func checkSchema(
+	t *testing.T, spec *openapi3.T, name string, ref *openapi3.SchemaRef, seen map[*openapi3.Schema]bool,
+) {
 	t.Helper()
 	if ref == nil || ref.Value == nil {
 		t.Errorf("unresolved schema %s", name)
@@ -163,6 +236,7 @@ func checkSchema(t *testing.T, spec *openapi3.T, name string, ref *openapi3.Sche
 		return
 	}
 	seen[schema] = true
+
 	if schema.Type.Is("object") && (schema.AdditionalProperties.Has == nil || *schema.AdditionalProperties.Has) {
 		t.Errorf("open object: %s", name)
 	}
@@ -170,20 +244,7 @@ func checkSchema(t *testing.T, spec *openapi3.T, name string, ref *openapi3.Sche
 		checkExample(t, name, schema, schema.Example)
 	}
 	if schema.Discriminator != nil {
-		for tag, target := range schema.Discriminator.Mapping {
-			resolved := spec.Components.Schemas[strings.TrimPrefix(target.Ref, "#/components/schemas/")]
-			if resolved == nil {
-				t.Errorf("%s discriminator %s is unresolved", name, tag)
-				continue
-			}
-			if len(resolved.Value.AllOf) > 0 {
-				t.Errorf("%s inherits a closed leaf with allOf", target.Ref)
-			}
-			property := resolved.Value.Properties[schema.Discriminator.PropertyName]
-			if property == nil || len(property.Value.Enum) != 1 || property.Value.Enum[0] != tag {
-				t.Errorf("%s discriminator tag disagrees with %s", name, target.Ref)
-			}
-		}
+		checkDiscriminator(t, spec, name, schema)
 	}
 	for property, child := range schema.Properties {
 		checkSchema(t, spec, name+"."+property, child, seen)
@@ -194,6 +255,26 @@ func checkSchema(t *testing.T, spec *openapi3.T, name string, ref *openapi3.Sche
 	for _, set := range []openapi3.SchemaRefs{schema.OneOf, schema.AnyOf, schema.AllOf} {
 		for _, child := range set {
 			checkSchema(t, spec, name, child, seen)
+		}
+	}
+}
+
+// checkDiscriminator holds every tag a discriminated schema declares to a branch that exists, that
+// does not inherit a closed leaf, and that carries the tag it is mapped to.
+func checkDiscriminator(t *testing.T, spec *openapi3.T, name string, schema *openapi3.Schema) {
+	t.Helper()
+	for tag, target := range schema.Discriminator.Mapping {
+		resolved := spec.Components.Schemas[strings.TrimPrefix(target.Ref, "#/components/schemas/")]
+		if resolved == nil {
+			t.Errorf("%s discriminator %s is unresolved", name, tag)
+			continue
+		}
+		if len(resolved.Value.AllOf) > 0 {
+			t.Errorf("%s inherits a closed leaf with allOf", target.Ref)
+		}
+		property := resolved.Value.Properties[schema.Discriminator.PropertyName]
+		if property == nil || len(property.Value.Enum) != 1 || property.Value.Enum[0] != tag {
+			t.Errorf("%s discriminator tag disagrees with %s", name, target.Ref)
 		}
 	}
 }
@@ -257,10 +338,34 @@ func TestWireFormatBoundaries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, tc := range []struct {
-		name      string
-		good, bad []any
-	}{
+	for _, boundary := range wireFormatBoundaries() {
+		t.Run(boundary.name, func(t *testing.T) {
+			schema := spec.Components.Schemas[boundary.name].Value
+			for _, value := range boundary.good {
+				if err := schema.VisitJSON(value); err != nil {
+					t.Errorf("valid %v rejected: %v", value, err)
+				}
+			}
+			for _, value := range boundary.bad {
+				if err := schema.VisitJSON(value); err == nil {
+					t.Errorf("invalid %v accepted", value)
+				}
+			}
+		})
+	}
+}
+
+// wireFormat is one named schema of the public contract together with values that must be accepted
+// under it and values that must not.
+type wireFormat struct {
+	name      string
+	good, bad []any
+}
+
+// wireFormatBoundaries is the boundary set of the public contract's wire formats. Each entry pairs
+// a schema with the values its version and precision rules admit and the near misses they refuse.
+func wireFormatBoundaries() []wireFormat {
+	return []wireFormat{
 		{
 			name: "ResourceId",
 			good: []any{resourceID},
@@ -303,20 +408,6 @@ func TestWireFormatBoundaries(t *testing.T) {
 			good: []any{"eyJ2IjoxfQ"},
 			bad:  []any{"", "a=b", "a+b", "a/b"},
 		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			schema := spec.Components.Schemas[tc.name].Value
-			for _, value := range tc.good {
-				if err := schema.VisitJSON(value); err != nil {
-					t.Errorf("valid %v rejected: %v", value, err)
-				}
-			}
-			for _, value := range tc.bad {
-				if err := schema.VisitJSON(value); err == nil {
-					t.Errorf("invalid %v accepted", value)
-				}
-			}
-		})
 	}
 }
 
@@ -330,30 +421,56 @@ func TestReplayHeaderOnlyWhereResultsAreSaved(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			for path, item := range spec.Paths.Map() {
-				for method, op := range item.Operations() {
-					keyed := false
-					for _, parameter := range op.Parameters {
-						name := parameter.Value.Name
-						if parameter.Value.In == "header" && (name == "Idempotency-Key" || name == "Delivery-Key") {
-							keyed = true
-						}
-					}
-					if op.RequestBody != nil {
-						for _, media := range op.RequestBody.Value.Content {
-							keyed = keyed || hasCommandID(media.Schema, map[*openapi3.Schema]bool{})
-						}
-					}
-					for status, res := range op.Responses.Map() {
-						saved := keyed && (strings.HasPrefix(status, "2") || status == "409" && savesDomainFailure(res.Value))
-						if declared := res.Value.Headers["Idempotency-Replayed"] != nil; declared != saved {
-							t.Errorf("%s %s %s declares replay header %t, saved result %t", method, path, status, declared, saved)
-						}
-					}
+			for path, pathItem := range spec.Paths.Map() {
+				for method, operation := range pathItem.Operations() {
+					checkReplayHeader(t, method, path, operation)
 				}
 			}
 		})
 	}
+}
+
+func checkReplayHeader(t *testing.T, method, path string, operation *openapi3.Operation) {
+	t.Helper()
+	keyed := hasIdempotencyKey(operation)
+	for status, response := range operation.Responses.Map() {
+		saved := savesResult(keyed, status, response.Value)
+		if declared := response.Value.Headers["Idempotency-Replayed"] != nil; declared != saved {
+			t.Errorf("%s %s %s declares replay header %t, saved result %t", method, path, status, declared, saved)
+		}
+	}
+}
+
+// hasIdempotencyKey reports whether an operation can be replayed at all: it carries one of the two
+// key headers, or its body carries a client-chosen command identifier.
+func hasIdempotencyKey(operation *openapi3.Operation) bool {
+	for _, parameter := range operation.Parameters {
+		name := parameter.Value.Name
+		if parameter.Value.In == "header" && (name == "Idempotency-Key" || name == "Delivery-Key") {
+			return true
+		}
+	}
+	if operation.RequestBody == nil {
+		return false
+	}
+	for _, media := range operation.RequestBody.Value.Content {
+		if hasCommandID(media.Schema, map[*openapi3.Schema]bool{}) {
+			return true
+		}
+	}
+	return false
+}
+
+// savesResult reports whether a response is the saved answer to a keyed request. Only a success or
+// a verified domain failure is saved; an in-flight or technical rollback result is not.
+func savesResult(keyed bool, status string, response *openapi3.Response) bool {
+	if !keyed {
+		return false
+	}
+	if strings.HasPrefix(status, "2") {
+		return true
+	}
+	return status == "409" && savesDomainFailure(response)
 }
 
 func hasCommandID(ref *openapi3.SchemaRef, seen map[*openapi3.Schema]bool) bool {

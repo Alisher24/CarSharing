@@ -111,12 +111,15 @@ func (c *Counter) read(
 	return attempts, windowStartedAt, true, nil
 }
 
-// remaining is the wait until a window ends, never below a second so that a caller told to wait is
-// not immediately invited back by a rounded-down zero.
+// MinimumRetryAfter is the shortest wait a caller is ever told to wait. A rounded-down zero would
+// invite the caller straight back, so every wait this package reports is floored here.
+const MinimumRetryAfter = time.Second
+
+// remaining is the wait until a window ends, never below MinimumRetryAfter.
 func remaining(windowStartedAt time.Time, window time.Duration) time.Duration {
 	wait := time.Until(windowStartedAt.Add(window))
-	if wait < time.Second {
-		return time.Second
+	if wait < MinimumRetryAfter {
+		return MinimumRetryAfter
 	}
 	return wait.Round(time.Second)
 }

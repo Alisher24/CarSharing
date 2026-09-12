@@ -8,18 +8,20 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
 )
 
 func TestHealthSeparatesProcessFromDependencies(t *testing.T) {
 	for _, path := range []string{"/api/v1/health/live", "/api/v1/health/ready"} {
 		t.Run(path, func(t *testing.T) {
 			probed := false
-			r := Router(Application{Probe: func(ctx context.Context) (Status, error) {
+			r := Router(Application{Probe: func(ctx context.Context) (servedapi.ReadyStatus, error) {
 				probed = true
 				if _, ok := ctx.Deadline(); !ok {
 					t.Error("readiness check has no deadline")
 				}
-				return Status{}, errors.New("private database error")
+				return servedapi.ReadyStatus{}, errors.New("private database error")
 			}})
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
@@ -41,12 +43,12 @@ func TestHealthSeparatesProcessFromDependencies(t *testing.T) {
 }
 
 func TestReadyReturnsServerMetadataWithoutCaching(t *testing.T) {
-	r := Router(Application{Probe: func(context.Context) (Status, error) {
-		return Status{City: "Бишкек", Currency: "KGS", Timezone: "Asia/Bishkek"}, nil
+	r := Router(Application{Probe: func(context.Context) (servedapi.ReadyStatus, error) {
+		return servedapi.ReadyStatus{City: "Бишкек", Currency: "KGS", Timezone: "Asia/Bishkek"}, nil
 	}})
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("GET", "/api/v1/health/ready", nil))
-	var body Status
+	var body servedapi.ReadyStatus
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +58,7 @@ func TestReadyReturnsServerMetadataWithoutCaching(t *testing.T) {
 	if _, err := time.Parse(time.RFC3339Nano, body.ServerTime); err != nil {
 		t.Fatal(err)
 	}
-	if w.Header().Get("Cache-Control") != "no-store" {
+	if w.Header().Get(cacheControlHeader) != noStoreCacheControl {
 		t.Error("health must not be cached")
 	}
 }

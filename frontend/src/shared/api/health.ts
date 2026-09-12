@@ -14,10 +14,12 @@ function assertKnownTimeZone(timeZone: string): void {
 }
 
 export async function getHealth(signal: AbortSignal): Promise<ReadyStatus> {
-  const { data } = await getHealthReady({ signal, cache: 'no-store', throwOnError: true });
-  if (data.status !== 'ok' || Number.isNaN(Date.parse(data.server_time))) {
+  const { data: readiness } = await getHealthReady({ signal, cache: 'no-store', throwOnError: true });
+  if (readiness.status !== 'ok' || Number.isNaN(Date.parse(readiness.server_time))) {
     throw new Error('Invalid service response');
   }
-  assertKnownTimeZone(data.timezone);
-  return data;
+
+  assertKnownTimeZone(readiness.timezone);
+
+  return readiness;
 }

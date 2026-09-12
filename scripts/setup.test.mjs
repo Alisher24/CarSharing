@@ -4,67 +4,112 @@ import { mkdtemp, mkdir, readFile, writeFile, unlink, rm } from 'node:fs/promise
 import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { setup, CAPABILITY_SECRETS } from './setup.mjs';
+import {
+  setup,
+  CAPABILITY_SECRETS,
+  ENVIRONMENT_FILE,
+  LEGACY_SECRET,
+  SECRETS_DIRECTORY,
+  SECRET_BYTES,
+  SECRET_VALUE_PATTERN,
+} from './setup.mjs';
 
-function randomSecret() {
-  return randomBytes(32).toString('hex') + '\n';
+const DATABASE_SECRET_NAMES = ['db_admin_password', 'db_app_password'];
+const EXISTING_ENVIRONMENT = 'APP_PORT=8181\n';
+const TEMPLATE_ENVIRONMENT = 'APP_PORT=8080\n';
+const MISSING_SECRET_PATTERN = /missing secret files/;
+
+function newSecretValue() {
+  return randomBytes(SECRET_BYTES).toString('hex') + '\n';
 }
 
-function readSecrets(root, names) {
-  return Promise.all(names.map(name => readFile(join(root, '.secrets', name), 'utf8')));
+function secretPath(root, name) {
+  return join(root, SECRETS_DIRECTORY, name);
+}
+
+function readGeneratedSecrets(root, names) {
+  return Promise.all(names.map((name) => readFile(secretPath(root, name), 'utf8')));
+}
+
+/** Creates a scratch installation so a test never reaches the repository's own secrets. */
+async function createInstallation() {
+  const root = await mkdtemp(join(tmpdir(), 'carsharing-setup-'));
+  await writeFile(join(root, '.env.example'), TEMPLATE_ENVIRONMENT);
+  return root;
+}
+
+async function writeSecrets(root, values) {
+  for (const [name, value] of Object.entries(values)) {
+    await writeFile(secretPath(root, name), value);
+  }
 }
 
 test('setup migrates a complete legacy installation and refuses a partial migration', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'carsharing-setup-'));
+  const root = await createInstallation();
   try {
-    await mkdir(join(root, '.secrets'));
-    await writeFile(join(root, '.env.example'), 'APP_PORT=8080\n');
-    await writeFile(join(root, '.env'), 'APP_PORT=8181\n');
-    const legacy = randomSecret();
-    for (const name of ['db_admin_password', 'db_app_password', 'internal_token']) {
-      const value = name === 'internal_token' ? legacy : randomSecret();
-      await writeFile(join(root, '.secrets', name), value);
-    }
+    await mkdir(join(root, SECRETS_DIRECTORY));
+    await writeFile(join(root, ENVIRONMENT_FILE), EXISTING_ENVIRONMENT);
+    // A legacy installation holds the two database passwords and the single token that covered
+    // every capability the service now splits into separate credentials.
+    const legacyValue = newSecretValue();
+    await writeSecrets(root, {
+      db_admin_password: newSecretValue(),
+      db_app_password: newSecretValue(),
+      [LEGACY_SECRET]: legacyValue,
+    });
+
     await setup(root);
-    const simulator = await readFile(join(root, '.secrets', 'simulator_token'), 'utf8');
-    assert.ok(simulator === legacy, 'legacy token changed');
-    assert.equal(await readFile(join(root, '.env'), 'utf8'), 'APP_PORT=8181\n');
-    const values = await readSecrets(root, CAPABILITY_SECRETS);
-    assert.equal(new Set(values).size, CAPABILITY_SECRETS.length);
-    await unlink(join(root, '.secrets', 'simulator_token'));
-    await assert.rejects(setup(root), /missing secret files/);
-  } finally { await rm(root, { recursive: true, force: true }); }
+    assert.equal(await readFile(secretPath(root, 'simulator_token'), 'utf8'), legacyValue, 'legacy token changed');
+    assert.equal(await readFile(join(root, ENVIRONMENT_FILE), 'utf8'), EXISTING_ENVIRONMENT);
+
+    const capabilityValues = await readGeneratedSecrets(root, CAPABILITY_SECRETS);
+    assert.equal(new Set(capabilityValues).size, CAPABILITY_SECRETS.length);
+
+    await unlink(secretPath(root, 'simulator_token'));
+    await assert.rejects(setup(root), MISSING_SECRET_PATTERN);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('setup creates independent capability credentials and preserves all of them on rerun', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'carsharing-setup-'));
+  const root = await createInstallation();
   try {
-    await writeFile(join(root, '.env.example'), 'APP_PORT=8080\n');
     await setup(root);
-    const values = await readSecrets(root, CAPABILITY_SECRETS);
-    assert.equal(new Set(values).size, CAPABILITY_SECRETS.length);
+    const firstValues = await readGeneratedSecrets(root, CAPABILITY_SECRETS);
+    assert.equal(new Set(firstValues).size, CAPABILITY_SECRETS.length);
+
     await setup(root);
-    const repeated = await readSecrets(root, CAPABILITY_SECRETS);
-    // Compare booleans so a failure cannot print credentials into a test artifact.
-    assert.ok(values.every((value, index) => value === repeated[index]), 'credentials changed');
-    await unlink(join(root, '.secrets', 'cursor_hmac_key'));
-    await assert.rejects(setup(root), /missing secret files/);
-  } finally { await rm(root, { recursive: true, force: true }); }
+    const repeatedValues = await readGeneratedSecrets(root, CAPABILITY_SECRETS);
+    // Only the comparison result is reported, so a failure cannot print credentials into a test artifact.
+    assert.ok(
+      firstValues.every((value, index) => value === repeatedValues[index]),
+      'credentials changed',
+    );
+
+    await unlink(secretPath(root, 'cursor_hmac_key'));
+    await assert.rejects(setup(root), MISSING_SECRET_PATTERN);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('setup preserves credentials and refuses to replace missing secrets on an existing installation', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'carsharing-setup-'));
+  const root = await createInstallation();
   try {
-    await writeFile(join(root, '.env.example'), 'APP_PORT=8080\n');
     await setup(root);
-    const password = join(root, '.secrets', 'db_app_password');
-    const original = await readFile(password, 'utf8');
-    assert.match(original, /^[a-f0-9]{64}\n$/);
-    await writeFile(join(root, '.env'), 'APP_PORT=8181\n');
+    const databasePasswordPath = secretPath(root, 'db_app_password');
+    const originalPassword = await readFile(databasePasswordPath, 'utf8');
+    assert.match(originalPassword, SECRET_VALUE_PATTERN);
+
+    await writeFile(join(root, ENVIRONMENT_FILE), EXISTING_ENVIRONMENT);
     await setup(root);
-    assert.ok(await readFile(password, 'utf8') === original, 'database password changed');
-    assert.equal(await readFile(join(root, '.env'), 'utf8'), 'APP_PORT=8181\n');
-    await unlink(password);
-    await assert.rejects(setup(root), /missing secret files/);
-  } finally { await rm(root, { recursive: true, force: true }); }
+    assert.equal(await readFile(databasePasswordPath, 'utf8'), originalPassword, 'database password changed');
+    assert.equal(await readFile(join(root, ENVIRONMENT_FILE), 'utf8'), EXISTING_ENVIRONMENT);
+
+    await unlink(databasePasswordPath);
+    await assert.rejects(setup(root), MISSING_SECRET_PATTERN);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

@@ -15,15 +15,15 @@ import {
  * browser storage and a new tab learns who it is by asking the server.
  */
 export type Account =
-  | { state: 'checking' }
-  | { state: 'signed-out' }
-  | { state: 'signed-in'; snapshot: SessionSnapshot };
+  { state: 'checking' } | { state: 'signed-out' } | { state: 'signed-in'; snapshot: SessionSnapshot };
 
 /** How a submitted form ended, so the entry screen can explain a refusal without guessing. */
 export type Submission =
   | { state: 'idle' }
   | { state: 'sending' }
   | { state: 'failed'; result: Exclude<SessionResult, { outcome: 'session' }> };
+
+type Intent = 'register' | 'sign-in';
 
 export function useAccount() {
   const [account, setAccount] = useState<Account>({ state: 'checking' });
@@ -33,42 +33,52 @@ export function useAccount() {
   // person signed in without the interface storing anything itself.
   useEffect(() => {
     const controller = new AbortController();
-    let active = true;
+    let mounted = true;
+
     currentSession(controller.signal).then((result) => {
-      if (!active) return;
-      setAccount(result.outcome === 'session' ? { state: 'signed-in', snapshot: result.snapshot } : { state: 'signed-out' });
+      if (mounted) setAccount(accountFrom(result));
     });
+
     return () => {
-      active = false;
+      mounted = false;
       controller.abort();
     };
   }, []);
 
-  const submit = useCallback(
-    async (intent: 'register' | 'sign-in', credentials: Credentials) => {
-      setSubmission({ state: 'sending' });
-      const result = await (intent === 'register' ? registerAccount(credentials) : signIn(credentials));
-      if (result.outcome === 'session') {
-        setSubmission({ state: 'idle' });
-        setAccount({ state: 'signed-in', snapshot: result.snapshot });
-        return;
-      }
-      // A failed replacement leaves the account that is already signed in untouched, so only the
+  const submit = useCallback(async (intent: Intent, credentials: Credentials) => {
+    setSubmission({ state: 'sending' });
+    const result = await (intent === 'register' ? registerAccount(credentials) : signIn(credentials));
+
+    if (result.outcome !== 'session') {
+      // A failed replacement leaves an account that is already signed in untouched, so only the
       // submission state changes here.
       setSubmission({ state: 'failed', result });
-    },
-    [],
-  );
+      return;
+    }
+
+    setSubmission({ state: 'idle' });
+    setAccount({ state: 'signed-in', snapshot: result.snapshot });
+  }, []);
 
   const leave = useCallback(async () => {
     if (account.state !== 'signed-in') return;
+
     setSubmission({ state: 'sending' });
     const revoked = await signOut(account.snapshot.csrf_token);
     setSubmission({ state: 'idle' });
+
     // The signed-out state is entered only once the server confirms the revocation, so clearing
     // the screen never claims a session was ended when it was not.
     if (revoked) setAccount({ state: 'signed-out' });
   }, [account]);
 
   return { account, submission, submit, leave };
+}
+
+// Every outcome other than a live session leaves the entry form on screen: a person who cannot be
+// read as signed in is asked to sign in, and the form reports its own failures when they submit.
+function accountFrom(result: SessionResult): Account {
+  if (result.outcome === 'session') return { state: 'signed-in', snapshot: result.snapshot };
+
+  return { state: 'signed-out' };
 }

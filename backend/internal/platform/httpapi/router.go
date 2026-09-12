@@ -42,8 +42,8 @@ func Router(app Application) http.Handler {
 	if err != nil {
 		panic(err)
 	}
-	for path, item := range spec.Paths.Map() {
-		if len(item.Operations()) == 0 {
+	for path, pathItem := range spec.Paths.Map() {
+		if len(pathItem.Operations()) == 0 {
 			spec.Paths.Delete(path)
 		}
 	}

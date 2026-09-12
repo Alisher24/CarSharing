@@ -13,15 +13,20 @@ import (
 )
 
 // minPasswordLength is the shortest database password setup generates, restated here so a
-// hand-edited secret cannot quietly weaken it.
+// hand-edited secret cannot quietly weaken it. Its length is the one the failure below states.
 const minPasswordLength = 32
+
+// minPasswordLengthMessage refuses a secret shorter than minPasswordLength. It names the length so
+// that the person reading the failure knows what setup would have produced.
+const minPasswordLengthMessage = "database password must contain at least " +
+	"32 characters; run setup"
 
 // defaultAllowedOrigins is the documented local profile: the application served over plain HTTP on
 // the loopback address under either spelling a browser may use.
 const defaultAllowedOrigins = "http://127.0.0.1:8080,http://localhost:8080"
 
-// Starting rate limits from Q11 of the T05 specification. Each is overridable, because the
-// values that suit a local demonstration are not the values that suit a deployment.
+// Starting rate limits. Each is overridable, because the values that suit a local demonstration
+// are not the values that suit a deployment.
 const (
 	defaultSignInEmailAddressAttempts  = 10
 	defaultSignInEmailAttempts         = 30
@@ -31,8 +36,8 @@ const (
 	defaultRegistrationWindow          = time.Hour
 )
 
-// Starting Argon2id cost from Q19 of the T05 specification: 19 MiB of memory, two passes and one
-// thread. Each is overridable, because the values that ship are the measured ones.
+// Starting Argon2id cost: 19 MiB of memory, two passes and one thread. Each is overridable, because
+// the values that ship are the measured ones.
 const (
 	defaultArgon2MemoryKiB   = 19 * 1024
 	defaultArgon2Passes      = 2
@@ -40,9 +45,9 @@ const (
 	defaultArgon2Concurrent  = 2
 )
 
-// Argon2Config is the cost of one password hash. Q19 of the T05 specification fixes the starting
-// values; the final ones come from measurements in the target Docker environment, which is why they
-// are configuration rather than constants.
+// Argon2Config is the cost of one password hash. The starting values above fix the defaults; the
+// final ones come from measurements in the target Docker environment, which is why they are
+// configuration rather than constants.
 type Argon2Config struct {
 	MemoryKiB   uint32
 	Passes      uint32
@@ -101,7 +106,7 @@ func Load() (Config, error) {
 	}
 	cfg.DBPassword = strings.TrimSpace(string(secret))
 	if len(cfg.DBPassword) < minPasswordLength {
-		return cfg, errors.New("database password must contain at least 32 characters; run setup")
+		return cfg, errors.New(minPasswordLengthMessage)
 	}
 	cfg.AllowedOrigins = splitOrigins(envOrDefault("ALLOWED_ORIGINS", defaultAllowedOrigins))
 	cfg.SessionCookieSecure = os.Getenv("SESSION_COOKIE_SECURE") == "true"
@@ -116,30 +121,34 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
+// rateLimitSetting names one counted limit: the settings it is read from, the values it starts at,
+// and where the result belongs in the configuration.
+type rateLimitSetting struct {
+	name     string
+	attempts uint64
+	window   time.Duration
+	assign   func(*RateLimitConfig, ratelimit.Limit)
+}
+
 func loadRateLimits() (RateLimitConfig, error) {
-	var limits RateLimitConfig
-	var err error
-	for _, setting := range []struct {
-		key      string
-		attempts uint64
-		window   time.Duration
-		assign   func(ratelimit.Limit)
-	}{
+	settings := []rateLimitSetting{
 		{"SIGNIN_EMAIL_ADDRESS", defaultSignInEmailAddressAttempts, defaultSignInWindow,
-			func(l ratelimit.Limit) { limits.SignInByEmailAndAddress = l }},
+			func(limits *RateLimitConfig, limit ratelimit.Limit) { limits.SignInByEmailAndAddress = limit }},
 		{"SIGNIN_EMAIL", defaultSignInEmailAttempts, defaultSignInWindow,
-			func(l ratelimit.Limit) { limits.SignInByEmail = l }},
+			func(limits *RateLimitConfig, limit ratelimit.Limit) { limits.SignInByEmail = limit }},
 		{"SIGNIN_ADDRESS", defaultSignInAddressAttempts, defaultSignInWindow,
-			func(l ratelimit.Limit) { limits.SignInByAddress = l }},
+			func(limits *RateLimitConfig, limit ratelimit.Limit) { limits.SignInByAddress = limit }},
 		{"REGISTRATION_ADDRESS", defaultRegistrationAddressAttempts, defaultRegistrationWindow,
-			func(l ratelimit.Limit) { limits.RegistrationByAddress = l }},
-	} {
-		var limit ratelimit.Limit
-		limit, err = loadLimit(setting.key, setting.attempts, setting.window)
+			func(limits *RateLimitConfig, limit ratelimit.Limit) { limits.RegistrationByAddress = limit }},
+	}
+
+	var limits RateLimitConfig
+	for _, setting := range settings {
+		limit, err := loadLimit(setting.name, setting.attempts, setting.window)
 		if err != nil {
 			return RateLimitConfig{}, err
 		}
-		setting.assign(limit)
+		setting.assign(&limits, limit)
 	}
 	return limits, nil
 }

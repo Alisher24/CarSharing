@@ -2,29 +2,39 @@
 // what matters is which sessions the running service still honours afterwards.
 import assert from 'node:assert/strict';
 import { before, beforeEach, describe, test } from 'node:test';
-import { call, password, registerAccount, resetRateLimits, sessionCookie, sessionSetCookie, waitForReady } from './client.mjs';
+import {
+  call,
+  CURRENT_USER_PATH,
+  foreignOrigin,
+  registerAccount,
+  resetRateLimits,
+  sessionSetCookie,
+  signInFromSecondDevice,
+  SIGN_OUT_PATH,
+  waitForReady,
+} from './client.mjs';
+
+const SIGNED_OUT_STATUS = 204;
+const REFUSED_STATUS = 403;
+const ORIGIN_NOT_ALLOWED_CODE = 'ORIGIN_NOT_ALLOWED';
+const CLEARED_COOKIE_PATTERN = /Max-Age=0|Expires=Thu, 01 Jan 1970/i;
+const UNKNOWN_SESSION_COOKIE = 'carsharing_session=a-token-that-names-no-session';
 
 before(waitForReady);
 
-// Every suite shares one address, so each test starts with the limits of Q11 untouched by the last.
+// Every suite shares one address, so each test starts with the rate limits untouched by the last.
 beforeEach(resetRateLimits);
-
-/** Signs the same account in again without presenting the first session, as a second device would. */
-async function secondDevice(email) {
-  const response = await call('/api/v1/auth/login', { method: 'POST', body: { email, password } });
-  assert.equal(response.status, 200, response.text);
-  return { cookie: sessionCookie(response), csrfToken: response.json.csrf_token };
-}
 
 describe('signing out ends exactly this session', () => {
   test('answers 204 with no body and a cookie that clears the browser', async () => {
     const { cookie, csrfToken } = await registerAccount('sign-out');
-    const out = await call('/api/v1/auth/logout', { method: 'POST', cookie, csrfToken });
-    assert.equal(out.status, 204, out.text);
-    assert.equal(out.text, '', 'the 204 carried a body');
-    const cleared = sessionSetCookie(out);
+    const signedOut = await call(SIGN_OUT_PATH, { method: 'POST', cookie, csrfToken });
+    assert.equal(signedOut.status, SIGNED_OUT_STATUS, signedOut.text);
+    assert.equal(signedOut.text, '', 'the 204 carried a body');
+
+    const cleared = sessionSetCookie(signedOut);
     assert.ok(cleared, 'sign-out set no clearing cookie');
-    assert.match(cleared, /Max-Age=0|Expires=Thu, 01 Jan 1970/i);
+    assert.match(cleared, CLEARED_COOKIE_PATTERN);
     // The clearing cookie must carry the attributes of the one it replaces, or the browser keeps
     // the original and the person stays signed in on screen.
     assert.match(cleared, /HttpOnly/i);
@@ -34,18 +44,18 @@ describe('signing out ends exactly this session', () => {
 
   test('leaves the revoked session authorizing nothing', async () => {
     const { cookie, csrfToken } = await registerAccount('revoked');
-    await call('/api/v1/auth/logout', { method: 'POST', cookie, csrfToken });
-    assert.equal((await call('/api/v1/me', { cookie })).status, 401);
+    await call(SIGN_OUT_PATH, { method: 'POST', cookie, csrfToken });
+    assert.equal((await call(CURRENT_USER_PATH, { cookie })).status, 401);
   });
 
   test('keeps an independent session of the same user working', async () => {
     const { email, cookie, csrfToken } = await registerAccount('other-device');
-    const other = await secondDevice(email);
-    assert.notEqual(other.cookie, cookie, 'the second sign-in reused the first session');
+    const otherDevice = await signInFromSecondDevice(email);
+    assert.notEqual(otherDevice.cookie, cookie, 'the second sign-in reused the first session');
 
-    await call('/api/v1/auth/logout', { method: 'POST', cookie, csrfToken });
+    await call(SIGN_OUT_PATH, { method: 'POST', cookie, csrfToken });
 
-    const survivor = await call('/api/v1/me', { cookie: other.cookie });
+    const survivor = await call(CURRENT_USER_PATH, { cookie: otherDevice.cookie });
     assert.equal(survivor.status, 200, survivor.text);
     assert.equal(survivor.json.user.email, email);
   });
@@ -54,44 +64,41 @@ describe('signing out ends exactly this session', () => {
 describe('signing out is always safe to repeat', () => {
   test('answers 204 when the session was already revoked', async () => {
     const { cookie, csrfToken } = await registerAccount('repeat');
-    await call('/api/v1/auth/logout', { method: 'POST', cookie, csrfToken });
-    const again = await call('/api/v1/auth/logout', { method: 'POST', cookie, csrfToken });
-    assert.equal(again.status, 204, again.text);
-    assert.ok(sessionSetCookie(again), 'the repeat cleared no cookie');
+    await call(SIGN_OUT_PATH, { method: 'POST', cookie, csrfToken });
+    const repeated = await call(SIGN_OUT_PATH, { method: 'POST', cookie, csrfToken });
+    assert.equal(repeated.status, SIGNED_OUT_STATUS, repeated.text);
+    assert.ok(sessionSetCookie(repeated), 'the repeat cleared no cookie');
   });
 
   test('answers 204 when the request carries no session at all', async () => {
-    const none = await call('/api/v1/auth/logout', { method: 'POST' });
-    assert.equal(none.status, 204, none.text);
-    assert.ok(sessionSetCookie(none), 'the request cleared no cookie');
+    const withoutSession = await call(SIGN_OUT_PATH, { method: 'POST' });
+    assert.equal(withoutSession.status, SIGNED_OUT_STATUS, withoutSession.text);
+    assert.ok(sessionSetCookie(withoutSession), 'the request cleared no cookie');
   });
 
   test('answers 204 when the token names no session', async () => {
-    const unknown = await call('/api/v1/auth/logout', {
-      method: 'POST',
-      cookie: 'carsharing_session=a-token-that-names-no-session',
-    });
-    assert.equal(unknown.status, 204, unknown.text);
+    const unknown = await call(SIGN_OUT_PATH, { method: 'POST', cookie: UNKNOWN_SESSION_COOKIE });
+    assert.equal(unknown.status, SIGNED_OUT_STATUS, unknown.text);
   });
 });
 
 describe('the origin is checked before the session is', () => {
   test('refuses a foreign origin even when there is no session to end', async () => {
-    const refused = await call('/api/v1/auth/logout', { method: 'POST', origin: 'http://attacker.example' });
-    assert.equal(refused.status, 403, refused.text);
-    assert.equal(refused.json.code, 'ORIGIN_NOT_ALLOWED');
+    const refused = await call(SIGN_OUT_PATH, { method: 'POST', origin: foreignOrigin });
+    assert.equal(refused.status, REFUSED_STATUS, refused.text);
+    assert.equal(refused.json.code, ORIGIN_NOT_ALLOWED_CODE);
     assert.deepEqual(refused.setCookie, [], 'the refusal touched the cookie');
   });
 
   test('does not let a foreign page sign a live session out', async () => {
     const { cookie, csrfToken } = await registerAccount('foreign-logout');
-    const refused = await call('/api/v1/auth/logout', {
+    const refused = await call(SIGN_OUT_PATH, {
       method: 'POST',
       cookie,
       csrfToken,
-      origin: 'http://attacker.example',
+      origin: foreignOrigin,
     });
-    assert.equal(refused.status, 403, refused.text);
-    assert.equal((await call('/api/v1/me', { cookie })).status, 200, 'a foreign page revoked the session');
+    assert.equal(refused.status, REFUSED_STATUS, refused.text);
+    assert.equal((await call(CURRENT_USER_PATH, { cookie })).status, 200, 'a foreign page revoked the session');
   });
 });

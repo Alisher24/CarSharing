@@ -65,23 +65,26 @@ func (s *Service) Register(ctx context.Context, email Email, password string) (U
 }
 
 // Authenticate proves a password against the account holding a canonical email, reporting
-// ErrInvalidCredentials for both an unknown address and a wrong password.
+// ErrInvalidCredentials for both an unknown address and a wrong password, so that the answer to one
+// cannot be told from the answer to the other.
 //
 // An unknown address is verified against a stand-in hash rather than refused straight away.
 // Argon2id is the slowest part of a sign-in, so skipping it would make an unregistered address
 // answer visibly faster than a registered one and turn the sign-in form into a way of asking which
 // addresses have accounts. This equalizes the memory-hard work, not the whole response time.
+//
+// The one failure that is not reported as invalid credentials is a hasher with no free slot: the
+// work was refused rather than done, and reporting it as a wrong password would both answer a
+// request that was never checked and hide a saturated instance from the caller.
 func (s *Service) Authenticate(ctx context.Context, email Email, password string) (User, error) {
 	user, passwordHash, err := s.users.ByEmail(ctx, email)
 	if errors.Is(err, ErrUserNotFound) {
-		if _, verifyErr := s.hasher.Verify(s.standInHash, password); verifyErr != nil {
-			return User{}, verifyErr
-		}
-		return User{}, ErrInvalidCredentials
+		return User{}, s.credentialsAgainstStandIn(password)
 	}
 	if err != nil {
 		return User{}, err
 	}
+
 	correct, err := s.hasher.Verify(passwordHash, password)
 	if err != nil {
 		return User{}, err
@@ -90,4 +93,14 @@ func (s *Service) Authenticate(ctx context.Context, email Email, password string
 		return User{}, ErrInvalidCredentials
 	}
 	return user, nil
+}
+
+// credentialsAgainstStandIn spends the same memory-hard work on an address no account holds. The
+// stand-in hash is derived by this process from a value no account can hold, so it is always
+// readable: a failure to read it would be a build defect, and it still refuses the sign-in.
+func (s *Service) credentialsAgainstStandIn(password string) error {
+	if _, err := s.hasher.Verify(s.standInHash, password); err != nil {
+		return err
+	}
+	return ErrInvalidCredentials
 }

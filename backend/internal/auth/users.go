@@ -76,11 +76,11 @@ func (s *UserStore) ByEmail(ctx context.Context, email Email) (User, string, err
 }
 
 // ByID returns the account a live session belongs to.
-func (s *UserStore) ByID(ctx context.Context, id uuid.UUID) (User, error) {
-	user := User{ID: id}
+func (s *UserStore) ByID(ctx context.Context, userID uuid.UUID) (User, error) {
+	user := User{ID: userID}
 	var email string
 	err := database.QuerierFrom(ctx, s.pool).QueryRow(ctx,
-		`SELECT email, created_at FROM users WHERE id = $1`, id).Scan(&email, &user.CreatedAt)
+		`SELECT email, created_at FROM users WHERE id = $1`, userID).Scan(&email, &user.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return User{}, ErrUserNotFound
 	}

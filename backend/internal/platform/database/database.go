@@ -12,26 +12,42 @@ import (
 )
 
 const (
+	// DatabaseStartupTimeout bounds the wait for the database to accept connections. Compose orders
+	// startup, so this only has to cover the first readiness of a cold container.
+	DatabaseStartupTimeout = 45 * time.Second
+
 	// pingTimeout bounds one availability probe, so an unreachable host fails that attempt rather
 	// than the whole startup deadline.
 	pingTimeout = 3 * time.Second
 
+	// connectTimeout is how long the pool gives one connection attempt before reporting the host
+	// unreachable. It is the same second-scale bound as a probe, so neither path waits noticeably
+	// longer than the other to give up.
+	connectTimeout = pingTimeout
+
+	// maxPoolConnections is how many connections this process keeps open at once. The deployment
+	// runs one instance beside one PostgreSQL server, so the pool is sized for that.
+	maxPoolConnections = 10
+
 	// pingRetryDelay separates two availability probes.
 	pingRetryDelay = time.Second
+
+	// sslModeDisableDSN is parsed for its defaults only: host, port, database, user and password are
+	// assigned as fields below, never interpolated into a logged URL.
+	sslModeDisableDSN = "sslmode=disable"
 )
 
 func PoolConfig(cfg config.Config) (*pgxpool.Config, error) {
-	// Credentials are assigned as fields, never interpolated into a logged URL.
-	poolConfig, err := pgxpool.ParseConfig("sslmode=disable")
+	poolConfig, err := pgxpool.ParseConfig(sslModeDisableDSN)
 	if err != nil {
 		return nil, err
 	}
 	poolConfig.ConnConfig.Host, poolConfig.ConnConfig.Port = cfg.DBHost, cfg.DBPort
 	poolConfig.ConnConfig.Database, poolConfig.ConnConfig.User = cfg.DBName, cfg.DBUser
 	poolConfig.ConnConfig.Password = cfg.DBPassword
-	poolConfig.ConnConfig.ConnectTimeout = 3 * time.Second
+	poolConfig.ConnConfig.ConnectTimeout = connectTimeout
 	poolConfig.ConnConfig.RuntimeParams["timezone"] = "UTC"
-	poolConfig.MaxConns = 10
+	poolConfig.MaxConns = maxPoolConnections
 	return poolConfig, nil
 }
 

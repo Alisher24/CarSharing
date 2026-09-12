@@ -17,9 +17,6 @@ const (
 	timestampLayout = "2006-01-02T15:04:05.000000Z"
 )
 
-// Status is the readiness payload: the city, currency and timezone this deployment serves.
-type Status = servedapi.ReadyStatus
-
 // health answers the two health operations. Liveness reports only that the process is running, so
 // an orchestrator never restarts a healthy process over a failing dependency.
 type health struct{ probe ReadinessProbe }
@@ -40,7 +37,7 @@ func (h health) GetHealthReady(
 	if err != nil {
 		return servedapi.GetHealthReady503JSONResponse{Body: servedapi.ApiError{
 			Code:      codeServiceUnavailable,
-			Message:   "Service unavailable",
+			Message:   messageServiceUnavailable,
 			RequestId: middleware.GetReqID(ctx),
 		}}, nil
 	}

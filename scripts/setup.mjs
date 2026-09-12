@@ -21,75 +21,153 @@ const SECRET_NAMES = [...DATABASE_SECRETS, ...CAPABILITY_SECRETS];
 
 // A single internal_token used to cover every capability; it becomes the simulator token so an
 // existing installation keeps working after the split.
-const LEGACY_SECRET = 'internal_token';
+export const LEGACY_SECRET = 'internal_token';
 const LEGACY_SUCCESSOR = 'simulator_token';
 
-const SECRET_BYTES = 32;
+export const SECRET_BYTES = 32;
+const SECRET_HEX_DIGITS = SECRET_BYTES * 2;
+
+export const SECRETS_DIRECTORY = '.secrets';
+export const ENVIRONMENT_FILE = '.env';
+const ENVIRONMENT_TEMPLATE = '.env.example';
 
 // Every secret is SECRET_BYTES of randomness rendered as hex, with an optional trailing newline.
-const HEX_SECRET = /^[a-f0-9]{64}\n?$/;
+export const SECRET_VALUE_PATTERN = new RegExp(`^[a-f0-9]{${SECRET_HEX_DIGITS}}\\n?$`);
+const SECRET_TRAILING_NEWLINE = '\n';
 
-const MISSING_SECRETS_ERROR = 'Existing setup is missing secret files. '
-  + 'Restore them from your local backup; passwords were not regenerated.';
+// A secret file must be readable by the non-root container user that mounts it, while its private
+// parent directory keeps other host users out.
+const SECRETS_DIRECTORY_MODE = 0o700;
+const SECRET_FILE_MODE = 0o444;
+const ENVIRONMENT_FILE_MODE = 0o600;
+
+const MISSING_SECRETS_ERROR =
+  'Existing setup is missing secret files. ' + 'Restore them from your local backup; passwords were not regenerated.';
 const INVALID_SECRET_ERROR = 'A secret file is invalid; existing values were not overwritten.';
 
-async function exists(path) {
-  try { await access(path); return true; }
-  catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+function secretPath(secretsDirectory, name) {
+  return resolve(secretsDirectory, name);
 }
 
-function newSecret() {
-  return randomBytes(SECRET_BYTES).toString('hex') + '\n';
+function fileIsMissing(error) {
+  return error.code === 'ENOENT';
+}
+
+async function exists(path) {
+  try {
+    await access(path);
+    return true;
+  } catch (error) {
+    if (fileIsMissing(error)) return false;
+    throw error;
+  }
+}
+
+async function readSecretValue(secretsDirectory, name) {
+  const path = secretPath(secretsDirectory, name);
+  if (!(await exists(path))) return null;
+  const value = await readFile(path, 'utf8');
+  if (!SECRET_VALUE_PATTERN.test(value)) throw new Error(INVALID_SECRET_ERROR);
+  return value;
+}
+
+function newSecretValue() {
+  return randomBytes(SECRET_BYTES).toString('hex') + SECRET_TRAILING_NEWLINE;
+}
+
+function fileAlreadyExists(error) {
+  return error.code === 'EEXIST';
+}
+
+async function writeNewSecret(secretsDirectory, name, value) {
+  try {
+    await writeFile(secretPath(secretsDirectory, name), value, { flag: 'wx', mode: SECRET_FILE_MODE });
+  } catch (error) {
+    if (!fileAlreadyExists(error)) throw error;
+  }
+}
+
+/**
+ * Reports the credentials a legacy installation must already hold before it can migrate: every
+ * capability credential, or the pair of database passwords and the single internal token that
+ * predates them.
+ */
+async function requiredSecretNames(secretsDirectory) {
+  const capabilities = await Promise.all(CAPABILITY_SECRETS.map((name) => exists(secretPath(secretsDirectory, name))));
+  if (capabilities.some(Boolean)) return SECRET_NAMES;
+  const hasLegacySecret = await exists(secretPath(secretsDirectory, LEGACY_SECRET));
+  return hasLegacySecret ? [...DATABASE_SECRETS, LEGACY_SECRET] : SECRET_NAMES;
+}
+
+async function requireExistingSecrets(secretsDirectory, names) {
+  for (const name of names) {
+    if (!(await exists(secretPath(secretsDirectory, name)))) throw new Error(MISSING_SECRETS_ERROR);
+  }
+}
+
+/**
+ * Reads back the credentials a previous run left, so they survive this one. The legacy token becomes
+ * the simulator token, which is what keeps an existing installation working after the split.
+ */
+async function readPreservedSecrets(secretsDirectory) {
+  const preserved = new Map();
+  for (const name of SECRET_NAMES) {
+    const value = await readSecretValue(secretsDirectory, name);
+    if (value !== null) preserved.set(name, value);
+  }
+  const legacyValue = await readSecretValue(secretsDirectory, LEGACY_SECRET);
+  if (legacyValue !== null && !preserved.has(LEGACY_SUCCESSOR)) {
+    preserved.set(LEGACY_SUCCESSOR, legacyValue);
+  }
+  return preserved;
+}
+
+async function createSecretsDirectory(secretsDirectory) {
+  await mkdir(secretsDirectory, { recursive: true, mode: SECRETS_DIRECTORY_MODE });
+  // Windows has no POSIX mode bits, and mkdir above already applied the mode elsewhere.
+  if (process.platform === 'win32') return;
+  await chmod(secretsDirectory, SECRETS_DIRECTORY_MODE);
+}
+
+async function writeSecrets(secretsDirectory, preserved) {
+  for (const name of SECRET_NAMES) {
+    const value = preserved.get(name) ?? newSecretValue();
+    await writeNewSecret(secretsDirectory, name, value);
+    // A concurrent run may have won the write, so trust only what the file holds now.
+    if (preserved.has(name)) continue;
+    await readSecretValue(secretsDirectory, name);
+  }
+}
+
+async function createEnvironmentFile(root) {
+  const environmentPath = resolve(root, ENVIRONMENT_FILE);
+  if (await exists(environmentPath)) return;
+  const template = await readFile(resolve(root, ENVIRONMENT_TEMPLATE));
+  await writeFile(environmentPath, template, { flag: 'wx', mode: ENVIRONMENT_FILE_MODE });
 }
 
 export async function setup(root) {
-  const directory = resolve(root, '.secrets');
-  const envPath = resolve(root, '.env');
-  const existing = new Set();
-  for (const name of SECRET_NAMES) {
-    if (await exists(resolve(directory, name))) existing.add(name);
+  const secretsDirectory = resolve(root, SECRETS_DIRECTORY);
+  // A half-migrated installation must fail before this run writes anything of its own.
+  if (await exists(resolve(root, ENVIRONMENT_FILE))) {
+    await requireExistingSecrets(secretsDirectory, await requiredSecretNames(secretsDirectory));
   }
-  const legacyPath = resolve(directory, LEGACY_SECRET);
-  const migrateLegacy = await exists(legacyPath)
-    && CAPABILITY_SECRETS.every(name => !existing.has(name));
-  const required = migrateLegacy ? [...DATABASE_SECRETS, LEGACY_SECRET] : SECRET_NAMES;
-  if (await exists(envPath)) {
-    for (const name of required) {
-      if (!await exists(resolve(directory, name))) {
-        throw new Error(MISSING_SECRETS_ERROR);
-      }
-    }
-  }
-  // Validate existing credentials before writing any migration output.
-  for (const name of [...existing, ...(migrateLegacy ? [LEGACY_SECRET] : [])]) {
-    if (!HEX_SECRET.test(await readFile(resolve(directory, name), 'utf8'))) {
-      throw new Error(INVALID_SECRET_ERROR);
-    }
-  }
-  const legacyValue = migrateLegacy ? await readFile(legacyPath, 'utf8') : null;
-  await mkdir(directory, { recursive: true, mode: 0o700 });
-  if (process.platform !== 'win32') await chmod(directory, 0o700);
-  for (const name of SECRET_NAMES) {
-    try {
-      // Individual bind-mounted secrets must be readable by non-root container users.
-      // The private parent directory prevents other host users from accessing them.
-      const inheritsLegacy = name === LEGACY_SUCCESSOR && legacyValue !== null;
-      const value = inheritsLegacy ? legacyValue : newSecret();
-      await writeFile(resolve(directory, name), value, { flag: 'wx', mode: 0o444 });
-    } catch (error) { if (error.code !== 'EEXIST') throw error; }
-    if (!HEX_SECRET.test(await readFile(resolve(directory, name), 'utf8'))) {
-      throw new Error(INVALID_SECRET_ERROR);
-    }
-  }
-  try {
-    await writeFile(envPath, await readFile(resolve(root, '.env.example')), { flag: 'wx', mode: 0o600 });
-  } catch (error) { if (error.code !== 'EEXIST') throw error; }
+  const preserved = await readPreservedSecrets(secretsDirectory);
+  await createSecretsDirectory(secretsDirectory);
+  await writeSecrets(secretsDirectory, preserved);
+  await createEnvironmentFile(root);
+}
+
+async function main() {
+  await setup(resolve(dirname(fileURLToPath(import.meta.url)), '..'));
+  console.log('Local configuration is ready. Existing secrets were preserved.', 'Run: docker compose up --build -d');
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
-    await setup(resolve(dirname(fileURLToPath(import.meta.url)), '..'));
-    console.log('Local configuration is ready. Existing secrets were preserved.',
-      'Run: docker compose up --build -d');
-  } catch (error) { console.error(error.message); process.exitCode = 1; }
+    await main();
+  } catch (error) {
+    console.error(error.message);
+    process.exitCode = 1;
+  }
 }

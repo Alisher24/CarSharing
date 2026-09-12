@@ -1,0 +1,17 @@
+{
+  "name": "carsharing-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.21.0 <25"
+  },
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "format:staged": "node scripts/format-staged.mjs"
+  },
+  "devDependencies": {
+    "prettier": "3.9.6"
+  }
+}

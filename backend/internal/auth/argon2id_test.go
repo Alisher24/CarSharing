@@ -8,12 +8,12 @@ import (
 
 // testParameters keep the unit tests fast. The parameters the service runs with are configuration
 // and are measured separately in the target environment.
-// testConcurrency leaves the ceiling out of the way of the tests that are about hashing itself.
-const testConcurrency = 4
-
 var testParameters = HashingParameters{
 	MemoryKiB: 8 << 10, Passes: 1, Parallelism: 1, SaltLength: 16, KeyLength: 32,
 }
+
+// testConcurrency keeps the ceiling out of the way of the tests that are about hashing itself.
+const testConcurrency = 4
 
 func TestHashGivesEveryPasswordItsOwnSalt(t *testing.T) {
 	hasher := NewPasswordHasher(testParameters, testConcurrency)

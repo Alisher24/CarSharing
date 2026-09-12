@@ -3,9 +3,18 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
+
+// The failure names a length no constant can be interpolated into, so the two are held together
+// here instead: a person who reads the message must be reading the rule that was applied.
+func TestPasswordLengthFailureStatesTheEnforcedLength(t *testing.T) {
+	if !strings.Contains(minPasswordLengthMessage, strconv.Itoa(minPasswordLength)) {
+		t.Fatalf("%q does not state the enforced length %d", minPasswordLengthMessage, minPasswordLength)
+	}
+}
 
 func TestSecretFileAndPortValidation(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "password")

@@ -14,11 +14,13 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-// Transport error codes the boundary can answer with. Every specification declares the same error
-// enum, so the health projection's generated constants are the single source for their spelling.
+// Transport error codes the boundary can answer with, which is what transportErrorStatus below maps
+// to a status. A code that only a generated response type carries needs no alias here, and the
+// account operations name the generated constant directly. Every specification declares the same
+// error enum, so the health projection's generated constants are the single source for their
+// spelling.
 const (
 	codeAuthenticationRequired         = servedapi.AUTHENTICATIONREQUIRED
-	codeEmailAlreadyRegistered         = servedapi.EMAILALREADYREGISTERED
 	codeInvalidCredentials             = servedapi.INVALIDCREDENTIALS
 	codeRateLimited                    = servedapi.RATELIMITED
 	codeBodyTooLarge                   = servedapi.BODYTOOLARGE
@@ -43,6 +45,7 @@ const (
 const (
 	messageAuthenticationRequired = "Authentication required"
 	messageCSRFInvalid            = "Invalid CSRF token"
+	messageInvalidCursor          = "Invalid cursor"
 	messageOriginNotAllowed       = "Origin not allowed"
 	messageInternalError          = "Internal server error"
 	messageInvalidHeader          = "Invalid header"
@@ -51,6 +54,10 @@ const (
 	messageResourceNotFound       = "Resource not found"
 	messageValidationFailed       = "Request validation failed"
 )
+
+// cursorParameter is the query parameter the contract answers with its own code rather than with
+// the generic validation failure.
+const cursorParameter = "cursor"
 
 // transportErrorStatus is the status each transport code carries. The specifications declare one
 // status per code, so deriving it here keeps every response consistent with the contract by
@@ -101,7 +108,7 @@ func writeError(w http.ResponseWriter, r *http.Request,
 	if len(violations) > 0 {
 		body.Details = violationDetails(violations)
 	}
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(contentTypeHeader, jsonMediaType)
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
 }
@@ -152,12 +159,12 @@ func allowedMethods(path *openapi3.PathItem) []string {
 // collected before the validator ran, so they are merged in here to report one complete set of
 // violations. A parameter the contract gives its own code is answered with that code instead.
 func writeValidationError(w http.ResponseWriter, r *http.Request, err error) {
-	violations := collectViolations(err, "body", "")
+	violations := collectViolations(err, locationBody, "")
 	if carried, ok := r.Context().Value(constraintsKey{}).([]violation); ok {
 		violations = append(violations, carried...)
 	}
-	for _, v := range violations {
-		if failure := parameterFailure(r, v); failure != nil {
+	for _, failed := range violations {
+		if failure := parameterFailure(r, failed); failure != nil {
 			writeError(w, r, failure.code, failure.message)
 			return
 		}
@@ -167,12 +174,12 @@ func writeValidationError(w http.ResponseWriter, r *http.Request, err error) {
 
 // parameterFailure maps a violation on a parameter the contract answers with a dedicated code, and
 // reports nil when the parameter is covered by the generic validation response.
-func parameterFailure(r *http.Request, v violation) *apiError {
+func parameterFailure(r *http.Request, failed violation) *apiError {
 	switch {
-	case v.Location == "header":
-		return headerFailure(r, v.Parameter)
-	case v.Location == "query" && v.Parameter == "cursor":
-		return &apiError{code: codeInvalidCursor, message: "Invalid cursor"}
+	case failed.Location == locationHeader:
+		return headerFailure(r, failed.Parameter)
+	case failed.Location == locationQuery && failed.Parameter == cursorParameter:
+		return &apiError{code: codeInvalidCursor, message: messageInvalidCursor}
 	}
 	return nil
 }
@@ -183,16 +190,16 @@ func parameterFailure(r *http.Request, v violation) *apiError {
 func headerFailure(r *http.Request, name string) *apiError {
 	absent := r.Header.Get(name) == ""
 	switch name {
-	case "Idempotency-Key":
+	case idempotencyKeyHeader:
 		if absent {
 			return &apiError{code: codeIdempotencyKeyRequired, message: messageInvalidHeader}
 		}
 		return &apiError{code: codeIdempotencyKeyInvalid, message: messageInvalidHeader}
-	case "Origin":
+	case originHeader:
 		if absent {
 			return &apiError{code: codeOriginNotAllowed, message: messageOriginNotAllowed}
 		}
-	case "X-CSRF-Token":
+	case csrfTokenHeader:
 		if absent {
 			return &apiError{code: codeCSRFInvalid, message: messageCSRFInvalid}
 		}

@@ -8,7 +8,7 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/platform/ratelimit"
 )
 
-// The counted scopes of Q11. An email-scoped counter records failures only, so a person signing in
+// The counted scopes: an email-scoped counter records failures only, so a person signing in
 // correctly never spends their own budget; an address-scoped counter records every attempt, which
 // is what bounds a spray across many addresses from one source.
 const (
@@ -28,6 +28,16 @@ var ErrThrottleUnavailable = errors.New("rate limits cannot be consulted")
 type Throttle struct{ counter *ratelimit.Counter }
 
 func NewThrottle(counter *ratelimit.Counter) *Throttle { return &Throttle{counter: counter} }
+
+// counterOf reports the counter to record against, or the error to answer when the throttle itself
+// is missing. A nil throttle is how a process assembled without rate limits reports that it cannot
+// decide anything, rather than reading it as an unlimited budget.
+func (t *Throttle) counterOf() (*ratelimit.Counter, error) {
+	if t == nil || t.counter == nil {
+		return nil, ErrThrottleUnavailable
+	}
+	return t.counter, nil
+}
 
 // SignInAllowed reports whether a sign-in may be attempted, and how long to wait when it may not.
 // All three sign-in limits are checked: the pair, the address alone and the email alone.
@@ -49,40 +59,44 @@ func (t *Throttle) RegistrationAllowed(
 // RecordSignInAttempt counts an attempt against the address it came from. Every sign-in costs the
 // source its budget, whether or not the credentials turn out to be right.
 func (t *Throttle) RecordSignInAttempt(ctx context.Context, clientAddress string) error {
-	if t == nil || t.counter == nil {
-		return ErrThrottleUnavailable
+	counter, err := t.counterOf()
+	if err != nil {
+		return err
 	}
-	return t.counter.Record(ctx, SignInByAddress, clientAddress)
+	return counter.Record(ctx, SignInByAddress, clientAddress)
 }
 
 // RecordSignInFailure counts a wrong guess against the address being guessed at. It is recorded
 // outside the transaction of the refused attempt, which would otherwise roll the counter back and
 // leave the guess free.
 func (t *Throttle) RecordSignInFailure(ctx context.Context, email Email, clientAddress string) error {
-	if t == nil || t.counter == nil {
-		return ErrThrottleUnavailable
-	}
-	if err := t.counter.Record(ctx, SignInByEmailAndAddress, emailAndAddress(email, clientAddress)); err != nil {
+	counter, err := t.counterOf()
+	if err != nil {
 		return err
 	}
-	return t.counter.Record(ctx, SignInByEmail, string(email))
+	if err = counter.Record(ctx, SignInByEmailAndAddress, emailAndAddress(email, clientAddress)); err != nil {
+		return err
+	}
+	return counter.Record(ctx, SignInByEmail, string(email))
 }
 
 // RecordRegistrationAttempt counts a registration against the address it came from.
 func (t *Throttle) RecordRegistrationAttempt(ctx context.Context, clientAddress string) error {
-	if t == nil || t.counter == nil {
-		return ErrThrottleUnavailable
+	counter, err := t.counterOf()
+	if err != nil {
+		return err
 	}
-	return t.counter.Record(ctx, RegistrationByAddress, clientAddress)
+	return counter.Record(ctx, RegistrationByAddress, clientAddress)
 }
 
 func (t *Throttle) allowed(
 	ctx context.Context, subjects []ratelimit.Counted,
 ) (time.Duration, bool, error) {
-	if t == nil || t.counter == nil {
-		return 0, false, ErrThrottleUnavailable
+	counter, err := t.counterOf()
+	if err != nil {
+		return 0, false, err
 	}
-	reached, exhausted, err := t.counter.Exhausted(ctx, subjects)
+	reached, exhausted, err := counter.Exhausted(ctx, subjects)
 	if err != nil {
 		return 0, false, err
 	}

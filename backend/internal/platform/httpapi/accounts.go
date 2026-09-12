@@ -23,6 +23,13 @@ const (
 	messageServiceUnavailable     = "Service unavailable"
 )
 
+// Messages the account operations answer a malformed field with. Unlike the pair above, these name
+// the field, because registration is where the field is chosen rather than guessed at.
+const (
+	messageEmailInvalid    = "Email is not a valid address"
+	messagePasswordInvalid = "Password does not meet the policy"
+)
+
 // accounts answers the operations an account is created and proven through. Registration and
 // sign-in each run as one transaction, so the user and the session that carries them reach storage
 // together or not at all, and the cookie is written only once that transaction has committed.
@@ -37,58 +44,101 @@ type accounts struct {
 func (a accounts) Register(
 	ctx context.Context, request servedapi.RegisterRequestObject,
 ) (servedapi.RegisterResponseObject, error) {
+	email, refused, err := a.registrationPreflight(ctx, request)
+	if refused != nil || err != nil {
+		return refused, err
+	}
+
+	failure := a.recordRegistrationAttempt(ctx)
+	if failure != nil {
+		return *failure, nil
+	}
+
+	user, issued, err := a.registerAccount(ctx, email, request.Body.Password)
+	if errors.Is(err, auth.ErrEmailTaken) {
+		// The generated response type carries the 409 itself, so this code never reaches
+		// writeError and has no transport alias.
+		return servedapi.Register409JSONResponse{
+			Body: apiErrorBody(ctx, servedapi.EMAILALREADYREGISTERED, messageEmailAlreadyRegistered),
+		}, nil
+	}
+
+	if err != nil {
+		return serviceUnavailableResponse(ctx), nil
+	}
+
+	cookie := a.sessions.Cookie(issued)
+	return servedapi.Register201JSONResponse{
+		Body:    snapshotOf(user, issued.Snapshot),
+		Headers: servedapi.Register201ResponseHeaders{SetCookie: &cookie},
+	}, nil
+}
+
+// registrationPreflight parses the submitted fields and applies the address's rate limit. A
+// non-nil response is the answer the request already has; a non-nil error is a failure of this
+// server, which the caller reports rather than answering the request itself.
+func (a accounts) registrationPreflight(
+	ctx context.Context, request servedapi.RegisterRequestObject,
+) (auth.Email, servedapi.RegisterResponseObject, error) {
 	email, err := auth.ParseEmail(request.Body.Email)
 	if err != nil {
-		return servedapi.Register422JSONResponse{Body: a.validationError(ctx, bodyViolation("/email", "invalid", "Email is not a valid address"))}, nil
+		emailViolation := bodyViolation("/email", codeInvalidField, messageEmailInvalid)
+		return "", servedapi.Register422JSONResponse{
+			Body: a.validationError(ctx, emailViolation),
+		}, nil
 	}
+
 	if err = auth.ValidatePassword(request.Body.Password); err != nil {
-		return servedapi.Register422JSONResponse{Body: a.validationError(ctx, bodyViolation("/password", "invalid", "Password does not meet the policy"))}, nil
+		passwordViolation := bodyViolation("/password", codeInvalidField, messagePasswordInvalid)
+		return "", servedapi.Register422JSONResponse{
+			Body: a.validationError(ctx, passwordViolation),
+		}, nil
 	}
+
 	wait, allowed, err := a.throttle.RegistrationAllowed(ctx, clientAddress(ctx))
 	if err != nil {
-		return servedapi.Register503JSONResponse{
-			Body: apiErrorBody(ctx, codeServiceUnavailable, messageServiceUnavailable),
-		}, nil
+		return "", serviceUnavailableResponse(ctx), nil
 	}
-	if !allowed {
-		seconds := retryAfterSeconds(wait)
-		return servedapi.Register429JSONResponse{
-			Body:    apiErrorBody(ctx, codeRateLimited, messageRateLimited),
-			Headers: servedapi.Register429ResponseHeaders{RetryAfter: &seconds},
-		}, nil
+
+	if allowed {
+		return email, nil, nil
 	}
-	// The attempt is counted before it is carried out, so an attempt that fails or is refused
-	// still spends the budget of the address it came from.
-	if err = a.throttle.RecordRegistrationAttempt(ctx, clientAddress(ctx)); err != nil {
-		return servedapi.Register503JSONResponse{
-			Body: apiErrorBody(ctx, codeServiceUnavailable, messageServiceUnavailable),
-		}, nil
+
+	seconds := retryAfterSeconds(wait)
+	return "", servedapi.Register429JSONResponse{
+		Body:    apiErrorBody(ctx, codeRateLimited, messageRateLimited),
+		Headers: servedapi.Register429ResponseHeaders{RetryAfter: &seconds},
+	}, nil
+}
+
+// recordRegistrationAttempt spends one attempt of the requesting address's budget. The attempt is
+// counted before it is carried out, so one that fails or is refused still spends the budget.
+func (a accounts) recordRegistrationAttempt(ctx context.Context) *servedapi.RegisterResponseObject {
+	if err := a.throttle.RecordRegistrationAttempt(ctx, clientAddress(ctx)); err != nil {
+		refused := servedapi.RegisterResponseObject(serviceUnavailableResponse(ctx))
+		return &refused
 	}
+
+	return nil
+}
+
+// registerAccount creates the account and the session that carries it in one transaction, so a
+// failure at either step leaves neither behind.
+func (a accounts) registerAccount(
+	ctx context.Context, email auth.Email, password string,
+) (auth.User, sessions.Issued, error) {
 	var user auth.User
 	var issued sessions.Issued
-	err = database.InTransaction(ctx, a.pool, func(txCtx context.Context) error {
-		user, err = a.service.Register(txCtx, email, request.Body.Password)
+	err := database.InTransaction(ctx, a.pool, func(txCtx context.Context) error {
+		var err error
+		user, err = a.service.Register(txCtx, email, password)
 		if err != nil {
 			return err
 		}
 		issued, err = a.sessions.Establish(txCtx, user.ID)
 		return err
 	})
-	if errors.Is(err, auth.ErrEmailTaken) {
-		return servedapi.Register409JSONResponse{
-			Body: apiErrorBody(ctx, codeEmailAlreadyRegistered, messageEmailAlreadyRegistered),
-		}, nil
-	}
-	if err != nil {
-		return servedapi.Register503JSONResponse{
-			Body: apiErrorBody(ctx, codeServiceUnavailable, messageServiceUnavailable),
-		}, nil
-	}
-	cookie := a.sessions.Cookie(issued)
-	return servedapi.Register201JSONResponse{
-		Body:    snapshotOf(user, issued.Snapshot),
-		Headers: servedapi.Register201ResponseHeaders{SetCookie: &cookie},
-	}, nil
+	return user, issued, err
 }
 
 func (a accounts) Login(
@@ -100,6 +150,7 @@ func (a accounts) Login(
 	if err != nil {
 		return a.invalidCredentials(ctx), nil
 	}
+
 	address := clientAddress(ctx)
 	wait, allowed, err := a.throttle.SignInAllowed(ctx, email, address)
 	if err != nil {
@@ -107,6 +158,7 @@ func (a accounts) Login(
 			Body: apiErrorBody(ctx, codeServiceUnavailable, messageServiceUnavailable),
 		}, nil
 	}
+
 	// The limit is consulted before the password is verified, so a throttled attempt never pays
 	// the memory-hard cost of a hash.
 	if !allowed {
@@ -116,15 +168,42 @@ func (a accounts) Login(
 			Headers: servedapi.Login429ResponseHeaders{RetryAfter: &seconds},
 		}, nil
 	}
+
 	if err = a.throttle.RecordSignInAttempt(ctx, address); err != nil {
 		return servedapi.Login503JSONResponse{
 			Body: apiErrorBody(ctx, codeServiceUnavailable, messageServiceUnavailable),
 		}, nil
 	}
+
+	user, issued, err := a.signIn(ctx, email, request.Body.Password)
+	if errors.Is(err, auth.ErrInvalidCredentials) {
+		return a.recordFailedSignIn(ctx, email, address)
+	}
+
+	if err != nil {
+		return servedapi.Login503JSONResponse{
+			Body: apiErrorBody(ctx, codeServiceUnavailable, messageServiceUnavailable),
+		}, nil
+	}
+
+	cookie := a.sessions.Cookie(issued)
+	return servedapi.Login200JSONResponse{
+		Body:    snapshotOf(user, issued.Snapshot),
+		Headers: servedapi.Login200ResponseHeaders{SetCookie: &cookie},
+	}, nil
+}
+
+// signIn proves the credentials and replaces the session that carried the request with the one the
+// proven account is given. Both run in one transaction, so a refused sign-in leaves the previous
+// session exactly as it was.
+func (a accounts) signIn(
+	ctx context.Context, email auth.Email, password string,
+) (auth.User, sessions.Issued, error) {
 	var user auth.User
 	var issued sessions.Issued
-	err = database.InTransaction(ctx, a.pool, func(txCtx context.Context) error {
-		user, err = a.service.Authenticate(txCtx, email, request.Body.Password)
+	err := database.InTransaction(ctx, a.pool, func(txCtx context.Context) error {
+		var err error
+		user, err = a.service.Authenticate(txCtx, email, password)
 		if err != nil {
 			return err
 		}
@@ -136,26 +215,22 @@ func (a accounts) Login(
 		issued, err = a.sessions.Establish(txCtx, user.ID)
 		return err
 	})
-	if errors.Is(err, auth.ErrInvalidCredentials) {
-		// Recorded outside the transaction the refused attempt just rolled back, which would
-		// otherwise undo the counter and leave the guess free.
-		if failed := a.throttle.RecordSignInFailure(ctx, email, address); failed != nil {
-			return servedapi.Login503JSONResponse{
-				Body: apiErrorBody(ctx, codeServiceUnavailable, messageServiceUnavailable),
-			}, nil
-		}
-		return a.invalidCredentials(ctx), nil
-	}
-	if err != nil {
+	return user, issued, err
+}
+
+// recordFailedSignIn answers a refused sign-in after counting it. The count is recorded outside the
+// transaction the refused attempt just rolled back, which would otherwise undo the counter and
+// leave the guess free; a counter that cannot be written is a service failure rather than a refusal,
+// because the attempt was not charged for.
+func (a accounts) recordFailedSignIn(
+	ctx context.Context, email auth.Email, address string,
+) (servedapi.LoginResponseObject, error) {
+	if err := a.throttle.RecordSignInFailure(ctx, email, address); err != nil {
 		return servedapi.Login503JSONResponse{
 			Body: apiErrorBody(ctx, codeServiceUnavailable, messageServiceUnavailable),
 		}, nil
 	}
-	cookie := a.sessions.Cookie(issued)
-	return servedapi.Login200JSONResponse{
-		Body:    snapshotOf(user, issued.Snapshot),
-		Headers: servedapi.Login200ResponseHeaders{SetCookie: &cookie},
-	}, nil
+	return a.invalidCredentials(ctx), nil
 }
 
 // Logout revokes exactly the session this browser presented. It answers the same way whether or
@@ -213,6 +288,14 @@ func (a accounts) invalidCredentials(ctx context.Context) servedapi.Login401JSON
 	}
 }
 
+// Each operation declares its own 503 shape, while the body they carry is the same, so the answer
+// is built at the point of use rather than through one shared constructor.
+func serviceUnavailableResponse(ctx context.Context) servedapi.Register503JSONResponse {
+	return servedapi.Register503JSONResponse{
+		Body: apiErrorBody(ctx, codeServiceUnavailable, messageServiceUnavailable),
+	}
+}
+
 func (a accounts) validationError(ctx context.Context, failed violation) servedapi.ApiError {
 	body := apiErrorBody(ctx, codeValidationFailed, messageValidationFailed)
 	body.Details = violationDetails([]violation{failed})
@@ -234,12 +317,9 @@ func snapshotOf(user auth.User, session sessions.Snapshot) servedapi.SessionSnap
 	}
 }
 
-// retryAfterSeconds renders a wait for the Retry-After header, never below one second so that a
-// caller told to wait is not invited straight back by a rounded-down zero.
+// retryAfterSeconds renders a wait for the Retry-After header. Rounding up cannot produce the zero
+// that would invite a caller straight back, because every wait arrives floored at
+// ratelimit.MinimumRetryAfter.
 func retryAfterSeconds(wait time.Duration) int {
-	seconds := int(math.Ceil(wait.Seconds()))
-	if seconds < 1 {
-		return 1
-	}
-	return seconds
+	return int(math.Ceil(wait.Seconds()))
 }

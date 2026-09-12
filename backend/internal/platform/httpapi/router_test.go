@@ -1,10 +1,11 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"net/http/httptest"
 	"testing"
+
+	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
 )
 
 func TestRoutingErrorsUseTheAPIErrorContract(t *testing.T) {
@@ -19,7 +20,7 @@ func TestRoutingErrorsUseTheAPIErrorContract(t *testing.T) {
 		{"POST", "/api/v1/health/live", "METHOD_NOT_ALLOWED", 405},
 	} {
 		t.Run(tc.method+tc.path, func(t *testing.T) {
-			r := Router(Application{Probe: func(context.Context) (Status, error) { return Status{}, nil }})
+			r := testRouter(servedapi.ReadyStatus{})
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, httptest.NewRequest(tc.method, tc.path, nil))
 			var body struct {
@@ -32,10 +33,10 @@ func TestRoutingErrorsUseTheAPIErrorContract(t *testing.T) {
 			if w.Code != tc.status || body.Code != tc.code {
 				t.Fatalf("%d %s", w.Code, w.Body.String())
 			}
-			if body.RequestID == "" || body.RequestID != w.Header().Get("X-Request-ID") {
+			if body.RequestID == "" || body.RequestID != w.Header().Get(requestIDHeader) {
 				t.Fatal("request IDs disagree")
 			}
-			if w.Header().Get("Cache-Control") != "no-store" {
+			if w.Header().Get(cacheControlHeader) != noStoreCacheControl {
 				t.Fatal("error can be cached")
 			}
 			if tc.status == 405 && w.Header().Get("Allow") != "GET" {

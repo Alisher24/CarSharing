@@ -2,12 +2,71 @@
 // PostgreSQL the running service uses.
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, describe, test } from 'node:test';
-import { call, compose, newEmail, password, registerAccount, resetRateLimits, sessionSetCookie, sql, waitForReady } from './client.mjs';
+import {
+  ARGON2ID_PHC_PATTERN,
+  LONGEST_ACCEPTED_PASSWORD,
+  PASSWORD_HASH_COLUMN,
+  PHC_SALT_FIELD,
+  SHORTEST_ACCEPTED_PASSWORD,
+  SESSION_TOKEN_COLUMN,
+} from './accounts.mjs';
+import {
+  call,
+  compose,
+  CURRENT_USER_PATH,
+  newEmail,
+  password,
+  REGISTRATION_PATH,
+  registerAccount,
+  registrationRequest,
+  resetRateLimits,
+  sessionSetCookie,
+  SIGN_IN_PATH,
+  sql,
+  waitForReady,
+  wrongPassword,
+} from './client.mjs';
+
+const SESSION_LIFETIME_HOURS = 12;
+const SESSION_LIFETIME_TOLERANCE_HOURS = 0.02;
+const MILLISECONDS_PER_HOUR = 3_600_000;
+
+const NON_ASCII_PASSWORD = 'парольнадежный';
+const SHARED_PASSWORD = 'sharedpasswordvalue';
+
+// Each entry names why the policy refuses a password, and the password it refuses for that reason.
+const REFUSED_PASSWORDS = new Map([
+  ['is one code point short', 'a'.repeat(SHORTEST_ACCEPTED_PASSWORD - 1)],
+  ['is one code point too long', 'a'.repeat(LONGEST_ACCEPTED_PASSWORD + 1)],
+  ['contains a space', 'correct horse battery'],
+  ['contains a tab', 'correcthorse\tbattery'],
+  ['contains an ideographic space', 'correcthorse　battery'],
+  ['contains a no-break space', 'correcthorse\u00a0battery'],
+]);
+
+const ACCEPTED_PASSWORDS = new Map([
+  ['is exactly 12 code points', 'a'.repeat(SHORTEST_ACCEPTED_PASSWORD)],
+  ['is exactly 128 code points', 'a'.repeat(LONGEST_ACCEPTED_PASSWORD)],
+  ['is not ASCII', NON_ASCII_PASSWORD],
+]);
 
 before(waitForReady);
 
-// Every suite shares one address, so each test starts with the limits of Q11 untouched by the last.
+// Every suite shares one address, so each test starts with the rate limits untouched by the last.
 beforeEach(resetRateLimits);
+
+function countRows(table) {
+  return Number(sql(`SELECT count(*) FROM ${table}`));
+}
+
+function countRowsWhere(table, condition) {
+  return Number(sql(`SELECT count(*) FROM ${table} WHERE ${condition}`));
+}
+
+function storedPasswordHashes(emails) {
+  const addresses = emails.map((email) => `'${email}'`).join(', ');
+  return sql(`SELECT ${PASSWORD_HASH_COLUMN} FROM users WHERE email IN (${addresses})`).split('\n');
+}
 
 describe('registration establishes a session', () => {
   test('answers 201 with a snapshot that carries no session token', async () => {
@@ -28,8 +87,12 @@ describe('registration establishes a session', () => {
     assert.match(issued, /HttpOnly/i);
     assert.match(issued, /Path=\//i);
     assert.match(issued, /SameSite=Lax/i);
-    const hours = (new Date(response.json.session_expires_at) - new Date(response.json.server_time)) / 3_600_000;
-    assert.ok(Math.abs(hours - 12) < 0.02, `lifetime was ${hours} hours`);
+    const elapsedHours =
+      (new Date(response.json.session_expires_at) - new Date(response.json.server_time)) / MILLISECONDS_PER_HOUR;
+    assert.ok(
+      Math.abs(elapsedHours - SESSION_LIFETIME_HOURS) < SESSION_LIFETIME_TOLERANCE_HOURS,
+      `lifetime was ${elapsedHours} hours`,
+    );
   });
 
   test('answers with no-store', async () => {
@@ -40,54 +103,31 @@ describe('registration establishes a session', () => {
 
 describe('the canonical email is the identity', () => {
   test('trims and lowercases the whole address', async () => {
-    const mixed = newEmail('Canonical').toUpperCase();
-    const response = await call('/api/v1/auth/register', {
-      method: 'POST',
-      body: { email: `  ${mixed}  `, password },
-    });
+    const mixedCaseAddress = newEmail('Canonical').toUpperCase();
+    const response = await call(REGISTRATION_PATH, registrationRequest(`  ${mixedCaseAddress}  `));
     assert.equal(response.status, 201, response.text);
-    assert.equal(response.json.user.email, mixed.toLowerCase());
+    assert.equal(response.json.user.email, mixedCaseAddress.toLowerCase());
   });
 
   test('refuses a second registration of the same canonical address', async () => {
     const { email } = await registerAccount('duplicate');
-    const repeat = await call('/api/v1/auth/register', {
-      method: 'POST',
-      body: { email: email.toUpperCase(), password },
-    });
+    const repeat = await call(REGISTRATION_PATH, registrationRequest(email.toUpperCase()));
     assert.equal(repeat.status, 409, repeat.text);
     assert.equal(repeat.json.code, 'EMAIL_ALREADY_REGISTERED');
   });
 });
 
 describe('the password policy', () => {
-  for (const [reason, refused] of Object.entries({
-    'is one code point short': 'a'.repeat(11),
-    'is one code point too long': 'a'.repeat(129),
-    'contains a space': 'correct horse battery',
-    'contains a tab': 'correcthorse\tbattery',
-    'contains an ideographic space': 'correcthorse　battery',
-    'contains a no-break space': 'correcthorse battery',
-  })) {
+  for (const [reason, refused] of REFUSED_PASSWORDS) {
     test(`refuses a password that ${reason}`, async () => {
-      const response = await call('/api/v1/auth/register', {
-        method: 'POST',
-        body: { email: newEmail('policy'), password: refused },
-      });
+      const response = await call(REGISTRATION_PATH, registrationRequest(newEmail('policy'), refused));
       assert.equal(response.status, 422, response.text);
     });
   }
 
-  for (const [reason, accepted] of Object.entries({
-    'is exactly 12 code points': 'a'.repeat(12),
-    'is exactly 128 code points': 'a'.repeat(128),
-    'is not ASCII': 'парольнадежный',
-  })) {
+  for (const [reason, accepted] of ACCEPTED_PASSWORDS) {
     test(`accepts a password that ${reason}`, async () => {
-      const response = await call('/api/v1/auth/register', {
-        method: 'POST',
-        body: { email: newEmail('policy'), password: accepted },
-      });
+      const response = await call(REGISTRATION_PATH, registrationRequest(newEmail('policy'), accepted));
       assert.equal(response.status, 201, response.text);
     });
   }
@@ -96,7 +136,7 @@ describe('the password policy', () => {
 describe('signing in', () => {
   test('answers 200 with a snapshot and a new CSRF token', async () => {
     const { email, response: registered } = await registerAccount('sign-in');
-    const signedIn = await call('/api/v1/auth/login', { method: 'POST', body: { email, password } });
+    const signedIn = await call(SIGN_IN_PATH, registrationRequest(email));
     assert.equal(signedIn.status, 200, signedIn.text);
     assert.equal(signedIn.json.user.email, email);
     assert.notEqual(signedIn.json.csrf_token, registered.json.csrf_token);
@@ -104,92 +144,91 @@ describe('signing in', () => {
 
   test('answers an unknown address and a wrong password identically', async () => {
     const { email } = await registerAccount('indistinguishable');
-    const wrongPassword = await call('/api/v1/auth/login', {
+    const refusedPassword = await call(SIGN_IN_PATH, {
       method: 'POST',
-      body: { email, password: 'wrongpasswordvalue' },
+      body: { email, password: wrongPassword },
     });
-    const unknownEmail = await call('/api/v1/auth/login', {
+    const refusedAddress = await call(SIGN_IN_PATH, {
       method: 'POST',
       body: { email: newEmail('absent'), password },
     });
-    assert.equal(wrongPassword.status, 401, wrongPassword.text);
-    assert.equal(unknownEmail.status, 401, unknownEmail.text);
-    assert.equal(wrongPassword.json.code, 'INVALID_CREDENTIALS');
-    assert.equal(unknownEmail.json.code, 'INVALID_CREDENTIALS');
-    assert.equal(wrongPassword.json.message, unknownEmail.json.message);
+    assert.equal(refusedPassword.status, 401, refusedPassword.text);
+    assert.equal(refusedAddress.status, 401, refusedAddress.text);
+    assert.equal(refusedPassword.json.code, 'INVALID_CREDENTIALS');
+    assert.equal(refusedAddress.json.code, 'INVALID_CREDENTIALS');
+    assert.equal(refusedPassword.json.message, refusedAddress.json.message);
   });
 });
 
 describe('the session is the only way to name a user', () => {
   test('restores the caller through /me and refuses a caller without one', async () => {
     const { email, cookie, response } = await registerAccount('restore');
-    const restored = await call('/api/v1/me', { cookie });
+    const restored = await call(CURRENT_USER_PATH, { cookie });
     assert.equal(restored.status, 200, restored.text);
     assert.equal(restored.json.user.email, email);
     assert.equal(restored.json.user.id, response.json.user.id);
 
-    const anonymous = await call('/api/v1/me');
+    const anonymous = await call(CURRENT_USER_PATH);
     assert.equal(anonymous.status, 401, anonymous.text);
   });
 
   test('does not renew the expiry when a live session is used', async () => {
     const { cookie, response } = await registerAccount('absolute');
-    const restored = await call('/api/v1/me', { cookie });
+    const restored = await call(CURRENT_USER_PATH, { cookie });
     assert.equal(restored.json.session_expires_at, response.json.session_expires_at);
   });
 
   test('gives two independent clients their own user and ignores a supplied id', async () => {
-    const one = await registerAccount('client-one');
-    const two = await registerAccount('client-two');
-    const first = await call('/api/v1/me', { cookie: one.cookie });
-    const second = await call('/api/v1/me', { cookie: two.cookie });
-    assert.equal(first.json.user.email, one.email);
-    assert.equal(second.json.user.email, two.email);
+    const firstClient = await registerAccount('client-one');
+    const secondClient = await registerAccount('client-two');
+    const firstUser = await call(CURRENT_USER_PATH, { cookie: firstClient.cookie });
+    const secondUser = await call(CURRENT_USER_PATH, { cookie: secondClient.cookie });
+    assert.equal(firstUser.json.user.email, firstClient.email);
+    assert.equal(secondUser.json.user.email, secondClient.email);
 
-    const spoofed = await call(`/api/v1/me?id=${first.json.user.id}`, { cookie: two.cookie });
-    assert.equal(spoofed.json.user.email, two.email, 'a query parameter selected another user');
+    const spoofed = await call(`${CURRENT_USER_PATH}?id=${firstUser.json.user.id}`, { cookie: secondClient.cookie });
+    assert.equal(spoofed.json.user.email, secondClient.email, 'a query parameter selected another user');
   });
 });
 
 describe('what the database holds', () => {
   test('stores the session token only as its hash', async () => {
     const { cookie } = await registerAccount('hashed');
-    const token = cookie.split('=')[1];
-    const stored = sql(`SELECT count(*) FROM sessions WHERE token = '${token}'`);
-    assert.equal(stored, '0', 'the raw session token is stored');
+    const issuedToken = cookie.split('=')[1];
+    const storedTokens = countRowsWhere('sessions', `${SESSION_TOKEN_COLUMN} = '${issuedToken}'`);
+    assert.equal(storedTokens, 0, 'the raw session token is stored');
   });
 
   test('gives two accounts sharing a password different salts', async () => {
-    const shared = 'sharedpasswordvalue';
-    const one = await registerAccount('salt', { password: shared });
-    const two = await registerAccount('salt', { password: shared });
-    const hashes = sql(
-      `SELECT password_hash FROM users WHERE email IN ('${one.email}', '${two.email}')`,
-    ).split('\n');
+    const firstAccount = await registerAccount('salt', { password: SHARED_PASSWORD });
+    const secondAccount = await registerAccount('salt', { password: SHARED_PASSWORD });
+    const hashes = storedPasswordHashes([firstAccount.email, secondAccount.email]);
     assert.equal(hashes.length, 2);
     assert.notEqual(hashes[0], hashes[1], 'two accounts share a stored hash');
-    assert.notEqual(hashes[0].split('$')[4], hashes[1].split('$')[4], 'two accounts share a salt');
+
+    const salts = hashes.map((hash) => hash.split('$')[PHC_SALT_FIELD]);
+    assert.notEqual(salts[0], salts[1], 'two accounts share a salt');
     for (const hash of hashes) {
-      assert.match(hash, /^\$argon2id\$v=19\$m=\d+,t=\d+,p=\d+\$/);
-      assert.ok(!hash.includes(shared), 'a stored hash contains the password');
+      assert.match(hash, ARGON2ID_PHC_PATTERN);
+      assert.ok(!hash.includes(SHARED_PASSWORD), 'a stored hash contains the password');
     }
   });
 
   test('rolls the whole registration back when the session cannot be stored', async () => {
     const email = newEmail('rollback');
-    const users = Number(sql('SELECT count(*) FROM users'));
-    const sessions = Number(sql('SELECT count(*) FROM sessions'));
+    const usersBefore = countRows('users');
+    const sessionsBefore = countRows('sessions');
     sql('REVOKE INSERT ON sessions FROM carsharing_app');
     try {
-      const refused = await call('/api/v1/auth/register', { method: 'POST', body: { email, password } });
+      const refused = await call(REGISTRATION_PATH, registrationRequest(email));
       assert.equal(refused.status, 503, refused.text);
-      assert.equal(sql(`SELECT count(*) FROM users WHERE email = '${email}'`), '0', 'the user row survived');
-      assert.equal(Number(sql('SELECT count(*) FROM users')), users);
-      assert.equal(Number(sql('SELECT count(*) FROM sessions')), sessions);
+      assert.equal(countRowsWhere('users', `email = '${email}'`), 0, 'the user row survived');
+      assert.equal(countRows('users'), usersBefore);
+      assert.equal(countRows('sessions'), sessionsBefore);
     } finally {
       sql('GRANT INSERT ON sessions TO carsharing_app');
     }
-    const retried = await call('/api/v1/auth/register', { method: 'POST', body: { email, password } });
+    const retried = await call(REGISTRATION_PATH, registrationRequest(email));
     assert.equal(retried.status, 201, retried.text);
   });
 });
@@ -199,7 +238,7 @@ describe('a session outlives the process that issued it', () => {
     const { email, cookie, response } = await registerAccount('restart');
     compose('restart', 'api');
     await waitForReady();
-    const restored = await call('/api/v1/me', { cookie });
+    const restored = await call(CURRENT_USER_PATH, { cookie });
     assert.equal(restored.status, 200, restored.text);
     assert.equal(restored.json.user.email, email);
     assert.equal(restored.json.session_expires_at, response.json.session_expires_at);

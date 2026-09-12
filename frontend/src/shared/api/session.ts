@@ -17,6 +17,8 @@ export type SessionResult =
 /** Credentials as a person typed them. The server canonicalizes the email and answers with it. */
 export type Credentials = { email: string; password: string };
 
+type SessionResponse = { data?: SessionSnapshot; error?: ApiError; response?: Response };
+
 // The session cookie is HttpOnly, so nothing here reads or writes it: the browser attaches it and
 // the server replaces it. The snapshot is held in memory by the caller and never in storage.
 const sameOriginRequest = { credentials: 'same-origin', cache: 'no-store' } as const;
@@ -24,14 +26,14 @@ const sameOriginRequest = { credentials: 'same-origin', cache: 'no-store' } as c
 // The contract declares Origin as a required header, so the generated types ask for it. A browser
 // sets Origin itself and refuses to let a script override it, so this value satisfies the type
 // while the value the server actually checks is the one the browser attached.
-const browserOrigin = () => ({ Origin: window.location.origin });
+const originHeader = () => ({ Origin: window.location.origin });
 
 export async function registerAccount(credentials: Credentials): Promise<SessionResult> {
-  return establish(() => register({ body: credentials, headers: browserOrigin(), ...sameOriginRequest }));
+  return toSessionResult(() => register({ body: credentials, headers: originHeader(), ...sameOriginRequest }));
 }
 
 export async function signIn(credentials: Credentials): Promise<SessionResult> {
-  return establish(() => login({ body: credentials, headers: browserOrigin(), ...sameOriginRequest }));
+  return toSessionResult(() => login({ body: credentials, headers: originHeader(), ...sameOriginRequest }));
 }
 
 /**
@@ -39,7 +41,7 @@ export async function signIn(credentials: Credentials): Promise<SessionResult> {
  * a lost response, a message from another tab and a returning tab are all settled by asking again.
  */
 export async function currentSession(signal?: AbortSignal): Promise<SessionResult> {
-  return establish(() => getMe({ signal, ...sameOriginRequest }));
+  return toSessionResult(() => getMe({ signal, ...sameOriginRequest }));
 }
 
 /**
@@ -49,37 +51,36 @@ export async function currentSession(signal?: AbortSignal): Promise<SessionResul
  */
 export async function signOut(csrfToken: string): Promise<boolean> {
   try {
-    const answer = await logout({
-      headers: { ...browserOrigin(), 'X-CSRF-Token': csrfToken },
+    const response = await logout({
+      headers: { ...originHeader(), 'X-CSRF-Token': csrfToken },
       ...sameOriginRequest,
     });
-    return answer.response?.status === 204;
+
+    return response.response?.status === 204;
   } catch {
     return false;
   }
 }
 
-type Answer = { data?: SessionSnapshot; error?: ApiError; response?: Response };
-
 /**
- * establish turns one contract call into a session result. A transport failure is reported as
+ * toSessionResult turns one contract call into a session result. A transport failure is reported as
  * unreachable rather than as a refusal, because the two lead a person to different next steps.
  */
-async function establish(call: () => Promise<Answer>): Promise<SessionResult> {
-  let answer: Answer;
+async function toSessionResult(call: () => Promise<SessionResponse>): Promise<SessionResult> {
+  let response: SessionResponse;
   try {
-    answer = await call();
+    response = await call();
   } catch {
     return { outcome: 'unreachable' };
   }
-  if (answer.data) {
-    return { outcome: 'session', snapshot: answer.data };
-  }
-  if (answer.response?.status === 401) {
-    return { outcome: 'signed-out' };
-  }
-  if (answer.error?.code) {
-    return { outcome: 'refused', code: answer.error.code };
-  }
+
+  if (response.data) return { outcome: 'session', snapshot: response.data };
+
+  // Only the session endpoints answer 401, and they do it for one reason: the request carried no
+  // live session. Reading it as anything else would show a refusal where there is simply no one
+  // signed in.
+  if (response.response?.status === 401) return { outcome: 'signed-out' };
+  if (response.error?.code) return { outcome: 'refused', code: response.error.code };
+
   return { outcome: 'unreachable' };
 }

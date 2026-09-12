@@ -10,11 +10,18 @@ import (
 	"github.com/getkin/kin-openapi/openapi3filter"
 )
 
-// errSessionStoreUnavailable reports that the session behind a request could not be read at all.
-// It is kept distinct from an absent session because a store that cannot answer must not be
-// reported as a caller who is simply signed out: the contract answers the first with 503 and the
-// second with 401.
-var errSessionStoreUnavailable = errors.New("session store did not answer")
+// Errors the session boundary distinguishes. An absent session is not among them: a caller who is
+// simply signed out is reported as not live rather than as a failure.
+var (
+	// errSessionStoreUnavailable reports that the session behind a request could not be read at
+	// all. It is kept distinct from an absent session because a store that cannot answer must not
+	// be reported as a caller who is simply signed out: the contract answers the first with 503
+	// and the second with 401.
+	errSessionStoreUnavailable = errors.New("session store did not answer")
+
+	// errNoLiveSession reports a request that presented no usable session credential.
+	errNoLiveSession = errors.New("request carries no live session")
+)
 
 // sessionContextKey addresses the session of the request being served.
 type sessionContextKey struct{}
@@ -50,12 +57,18 @@ func (s *requestSession) resolve(ctx context.Context) (sessions.Snapshot, bool, 
 // store.
 func withSession(manager *sessions.Manager, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		current := &requestSession{manager: manager}
-		if cookie, err := r.Cookie(sessions.CookieName); err == nil {
-			current.token = cookie.Value
-		}
+		current := requestSessionOf(r, manager)
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), sessionContextKey{}, current)))
 	})
+}
+
+// requestSessionOf names the session a request arrives with, without resolving it yet.
+func requestSessionOf(r *http.Request, manager *sessions.Manager) *requestSession {
+	current := &requestSession{manager: manager}
+	if cookie, err := r.Cookie(sessions.CookieName); err == nil {
+		current.token = cookie.Value
+	}
+	return current
 }
 
 func sessionOf(ctx context.Context) *requestSession {
@@ -82,7 +95,7 @@ func authenticateSession(ctx context.Context, input *openapi3filter.Authenticati
 		return errSessionStoreUnavailable
 	}
 	if !live {
-		return errors.New("request carries no live session")
+		return errNoLiveSession
 	}
 	return nil
 }
