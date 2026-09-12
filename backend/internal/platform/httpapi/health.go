@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	healthapi "github.com/Alisher24/CarSharing/backend/internal/contracts/healthapi"
+	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
@@ -17,37 +17,40 @@ const (
 	timestampLayout = "2006-01-02T15:04:05.000000Z"
 )
 
-// Status is the readiness payload: the city, currency and timezone this deployment serves.
-type Status = healthapi.ReadyStatus
-
 // health answers the two health operations. Liveness reports only that the process is running, so
 // an orchestrator never restarts a healthy process over a failing dependency.
 type health struct{ probe ReadinessProbe }
 
 func (h health) GetHealthLive(
-	ctx context.Context, _ healthapi.GetHealthLiveRequestObject,
-) (healthapi.GetHealthLiveResponseObject, error) {
-	live := healthapi.LiveStatus{Status: "ok", ServerTime: timestamp()}
-	return healthapi.GetHealthLive200JSONResponse{Body: live}, nil
+	ctx context.Context, _ servedapi.GetHealthLiveRequestObject,
+) (servedapi.GetHealthLiveResponseObject, error) {
+	live := servedapi.LiveStatus{Status: "ok", ServerTime: timestamp()}
+	return servedapi.GetHealthLive200JSONResponse{Body: live}, nil
 }
 
 func (h health) GetHealthReady(
-	ctx context.Context, _ healthapi.GetHealthReadyRequestObject,
-) (healthapi.GetHealthReadyResponseObject, error) {
+	ctx context.Context, _ servedapi.GetHealthReadyRequestObject,
+) (servedapi.GetHealthReadyResponseObject, error) {
 	ctx, cancel := context.WithTimeout(ctx, readinessProbeTimeout)
 	defer cancel()
 	readiness, err := h.probe(ctx)
 	if err != nil {
-		return healthapi.GetHealthReady503JSONResponse{Body: healthapi.ApiError{
+		return servedapi.GetHealthReady503JSONResponse{Body: servedapi.ApiError{
 			Code:      codeServiceUnavailable,
-			Message:   "Service unavailable",
+			Message:   messageServiceUnavailable,
 			RequestId: middleware.GetReqID(ctx),
 		}}, nil
 	}
 	readiness.Status, readiness.ServerTime = "ok", timestamp()
-	return healthapi.GetHealthReady200JSONResponse{Body: readiness}, nil
+	return servedapi.GetHealthReady200JSONResponse{Body: readiness}, nil
 }
 
 func timestamp() string {
-	return time.Now().UTC().Truncate(time.Microsecond).Format(timestampLayout)
+	return formatTimestamp(time.Now())
+}
+
+// formatTimestamp renders an instant the way every contract timestamp is declared, so a stored
+// time and a server time are never spelled differently in one response.
+func formatTimestamp(instant time.Time) string {
+	return instant.UTC().Truncate(time.Microsecond).Format(timestampLayout)
 }

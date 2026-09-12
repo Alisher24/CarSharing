@@ -2,3 +2,12 @@ title = "CarSharing secret scanning"
 
 [extend]
 useDefault = true
+
+[allowlist]
+description = """
+The generated contract files embed the OpenAPI document as a base64 gzip blob. Its entropy trips
+the generic high-entropy rules on whichever line the compression happens to produce, and the value
+is fully derived from openapi/*.yaml, which this scan still reads. Only the embedded projections
+are exempt, so a secret written anywhere a human edits is still found.
+"""
+paths = ['''backend/internal/contracts/[a-z]+api/generated\.go''']

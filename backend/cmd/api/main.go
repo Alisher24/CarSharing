@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -11,18 +12,33 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Alisher24/CarSharing/backend/internal/auth"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/config"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/httpapi"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/ratelimit"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/sessions"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const (
-	// databaseStartupTimeout bounds the wait for the database to accept connections. Compose
-	// orders startup, so this only has to cover the first readiness of a cold container.
-	databaseStartupTimeout = 45 * time.Second
-
 	// shutdownTimeout is how long in-flight requests are given to finish after a signal.
 	shutdownTimeout = 10 * time.Second
+
+	// readHeaderTimeout bounds how long a client may take to send the request headers, which is what
+	// keeps a connection that never finishes a request from holding a slot.
+	readHeaderTimeout = 5 * time.Second
+
+	// readTimeout and writeTimeout bound one whole request and its response. A tick carries a batch,
+	// so the response side is given the same ten seconds as the request side.
+	readTimeout  = 10 * time.Second
+	writeTimeout = 10 * time.Second
+
+	// idleTimeout is how long a keep-alive connection may sit unused before it is closed.
+	idleTimeout = 60 * time.Second
+
+	// maxHeaderBytes is the largest request header block the server reads.
+	maxHeaderBytes = 16 << 10
 )
 
 func main() {
@@ -33,38 +49,95 @@ func main() {
 	}
 }
 
+// application assembles what the HTTP layer serves: the readiness probe, the session store and the
+// account rules, all over the one pool so that a request can commit a user and its session together.
+func application(cfg config.Config, pool *pgxpool.Pool) (httpapi.Application, error) {
+	users := auth.NewUserStore(pool)
+	hasher := auth.NewPasswordHasher(auth.HashingParameters{
+		MemoryKiB:   cfg.Argon2.MemoryKiB,
+		Passes:      cfg.Argon2.Passes,
+		Parallelism: cfg.Argon2.Parallelism,
+		SaltLength:  auth.SaltLength,
+		KeyLength:   auth.KeyLength,
+	}, cfg.Argon2.Concurrent)
+	service, err := auth.NewService(users, hasher)
+	if err != nil {
+		return httpapi.Application{}, err
+	}
+	return httpapi.Application{
+		Probe:          httpapi.DatabaseProbe(pool),
+		AllowedOrigins: cfg.AllowedOrigins,
+		Pool:           pool,
+		Sessions:       sessions.NewManager(pool, cfg.SessionCookieSecure),
+		Auth:           service,
+		Users:          users,
+		Throttle:       auth.NewThrottle(ratelimit.NewCounter(pool, countedLimits(cfg))),
+	}, nil
+}
+
+// countedLimits maps the configured limits onto the scopes the account operations count under.
+func countedLimits(cfg config.Config) map[ratelimit.Scope]ratelimit.Limit {
+	return map[ratelimit.Scope]ratelimit.Limit{
+		auth.SignInByEmailAndAddress: cfg.RateLimits.SignInByEmailAndAddress,
+		auth.SignInByEmail:           cfg.RateLimits.SignInByEmail,
+		auth.SignInByAddress:         cfg.RateLimits.SignInByAddress,
+		auth.RegistrationByAddress:   cfg.RateLimits.RegistrationByAddress,
+	}
+}
+
+// newServer is the HTTP server this process runs, with the timeouts a publicly reachable listener
+// needs: a request that stalls at any stage is given up on rather than held.
+func newServer(cfg config.Config, app httpapi.Application) *http.Server {
+	return &http.Server{
+		Addr:              cfg.HTTPAddr,
+		Handler:           httpapi.Router(app),
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
+		WriteTimeout:      writeTimeout,
+		IdleTimeout:       idleTimeout,
+		MaxHeaderBytes:    maxHeaderBytes,
+	}
+}
+
 func run() error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	startup, cancel := context.WithTimeout(ctx, databaseStartupTimeout)
+
+	startup, cancel := context.WithTimeout(ctx, database.DatabaseStartupTimeout)
 	pool, err := database.Open(startup, cfg)
 	cancel()
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
-	server := &http.Server{
-		Addr: cfg.HTTPAddr, Handler: httpapi.Router(httpapi.DatabaseProbe(pool)),
-		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second,
-		WriteTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second,
-		MaxHeaderBytes: 16 << 10,
+
+	served, err := application(cfg, pool)
+	if err != nil {
+		return err
 	}
+	return serve(ctx, newServer(cfg, served))
+}
+
+// serve answers requests until the server fails or the context is cancelled, and then gives the
+// in-flight requests their shutdown budget.
+func serve(ctx context.Context, server *http.Server) error {
 	serverExit := make(chan error, 1)
 	go func() { serverExit <- server.ListenAndServe() }()
-	slog.Info("API started", "address", cfg.HTTPAddr)
+	slog.Info("API started", "address", server.Addr)
 	select {
-	case err = <-serverExit:
+	case err := <-serverExit:
 		if !errors.Is(err, http.ErrServerClosed) {
-			return errors.New("HTTP server failed")
+			return fmt.Errorf("HTTP server failed: %w", err)
 		}
 	case <-ctx.Done():
 		shutdown, done := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer done()
-		if err = server.Shutdown(shutdown); err != nil {
+		if err := server.Shutdown(shutdown); err != nil {
 			_ = server.Close()
 			return errors.New("HTTP shutdown deadline exceeded")
 		}

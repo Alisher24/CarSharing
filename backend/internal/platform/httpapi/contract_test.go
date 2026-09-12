@@ -12,6 +12,7 @@ import (
 	internalapi "github.com/Alisher24/CarSharing/backend/internal/contracts/internalapi"
 	mailstubapi "github.com/Alisher24/CarSharing/backend/internal/contracts/mailstubapi"
 	publicapi "github.com/Alisher24/CarSharing/backend/internal/contracts/publicapi"
+	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
 )
@@ -35,6 +36,7 @@ const (
 	registerNbspBody         = `{"email":"user@example.test","password":"Example Password42"}`
 
 	testCredential = "Bearer example-test-credential"
+	testOrigin     = "http://127.0.0.1:8080"
 )
 
 // The isolated router only returns a fixture. It shares HTTP validation/error adapters
@@ -42,9 +44,12 @@ const (
 func contractRouter(t *testing.T, spec *openapi3.T) http.Handler {
 	t.Helper()
 	return boundary(spec, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", jsonMediaType)
+		w.Header().Set(contentTypeHeader, jsonMediaType)
 		w.WriteHeader(http.StatusNoContent)
-	}), openapi3filter.NoopAuthenticationFunc)
+	}), transport{
+		allowedOrigins: originSet([]string{testOrigin}),
+		authenticate:   openapi3filter.NoopAuthenticationFunc,
+	})
 }
 
 func TestCommandAndPaginationRequestBoundaries(t *testing.T) {
@@ -73,11 +78,11 @@ func TestCommandAndPaginationRequestBoundaries(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
-			r.Header.Set("Content-Type", jsonMediaType)
-			r.Header.Set("Origin", "http://127.0.0.1:8080")
-			r.Header.Set("X-CSRF-Token", "example-csrf-value")
+			r.Header.Set(contentTypeHeader, jsonMediaType)
+			r.Header.Set(originHeader, testOrigin)
+			r.Header.Set(csrfTokenHeader, "example-csrf-value")
 			if tc.key != "" {
-				r.Header.Set("Idempotency-Key", tc.key)
+				r.Header.Set(idempotencyKeyHeader, tc.key)
 			}
 			w := httptest.NewRecorder()
 			handler.ServeHTTP(w, r)
@@ -101,7 +106,7 @@ func TestDemoPositionRejectsLatitudeOutsideWGS84(t *testing.T) {
 		"position": {"type": "Point", "coordinates": [74.6, 91]}
 	}`
 	r := httptest.NewRequest("POST", "/internal/v1/demo/actions", strings.NewReader(body))
-	r.Header.Set("Content-Type", jsonMediaType)
+	r.Header.Set(contentTypeHeader, jsonMediaType)
 	w := httptest.NewRecorder()
 	contractRouter(t, spec).ServeHTTP(w, r)
 	if w.Code != 422 || !strings.Contains(w.Body.String(), `/position/coordinates/1`) {
@@ -123,16 +128,13 @@ func TestInternalContractsAuthenticateBeforePayloadAndUseLargerBodyLimit(t *test
 			if err != nil {
 				t.Fatal(err)
 			}
-			authenticate := func(_ context.Context, input *openapi3filter.AuthenticationInput) error {
-				if input.RequestValidationInput.Request.Header.Get("Authorization") != testCredential {
-					return fmt.Errorf("invalid test credential")
-				}
-				return nil
-			}
 			accepted := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusNoContent)
 			})
-			handler := boundary(spec, accepted, authenticate)
+			handler := boundary(spec, accepted, transport{
+				allowedOrigins: originSet([]string{testOrigin}),
+				authenticate:   authenticateTestCredential,
+			})
 			overPublicLimit := `{"unexpected":"` + strings.Repeat("x", 64<<10) + `"}`
 			overInternalLimit := strings.Repeat("x", 256<<10+1)
 			for _, tc := range []struct {
@@ -148,9 +150,9 @@ func TestInternalContractsAuthenticateBeforePayloadAndUseLargerBodyLimit(t *test
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					r := httptest.NewRequest("POST", contract.path, strings.NewReader(tc.body))
-					r.Header.Set("Content-Type", jsonMediaType)
+					r.Header.Set(contentTypeHeader, jsonMediaType)
 					r.Header.Set("Authorization", tc.token)
-					r.Header.Set("Delivery-Key", "invoice:"+resourceID+":issued")
+					r.Header.Set(deliveryKeyHeader, "invoice:"+resourceID+":issued")
 					w := httptest.NewRecorder()
 					handler.ServeHTTP(w, r)
 					if w.Code != tc.status || !hasErrorCode(w, tc.code) {
@@ -182,10 +184,10 @@ func TestSessionContractReportsRequestErrors(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := httptest.NewRequest("POST", registerPath, strings.NewReader(tc.body))
-			r.Header.Set("Content-Type", tc.media)
-			r.Header.Set("Origin", "http://127.0.0.1:8080")
+			r.Header.Set(contentTypeHeader, tc.media)
+			r.Header.Set(originHeader, testOrigin)
 			if tc.requestID != "" {
-				r.Header.Set("X-Request-ID", tc.requestID)
+				r.Header.Set(requestIDHeader, tc.requestID)
 			}
 			w := httptest.NewRecorder()
 			handler.ServeHTTP(w, r)
@@ -202,10 +204,10 @@ func TestSessionContractReportsRequestErrors(t *testing.T) {
 			if w.Code != tc.status || body.Code != tc.code {
 				t.Fatalf("got %d %s", w.Code, w.Body.String())
 			}
-			if body.RequestID == "" || body.RequestID != w.Header().Get("X-Request-ID") {
+			if body.RequestID == "" || body.RequestID != w.Header().Get(requestIDHeader) {
 				t.Fatal("request ID mismatch")
 			}
-			if w.Header().Get("Cache-Control") != "no-store" {
+			if w.Header().Get(cacheControlHeader) != noStoreCacheControl {
 				t.Fatal("response can be cached")
 			}
 			if tc.name == "missing fields" {
@@ -223,10 +225,10 @@ func TestPlannedRoutesRemainAbsentFromProduction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := Router(func(context.Context) (Status, error) { return Status{}, nil })
-	for path, item := range spec.Paths.Map() {
-		for method, op := range item.Operations() {
-			if op.Extensions["x-implementation-status"] != "planned" {
+	handler := testRouter(servedapi.ReadyStatus{})
+	for path, pathItem := range spec.Paths.Map() {
+		for method, operation := range pathItem.Operations() {
+			if operation.Extensions["x-implementation-status"] != "planned" {
 				continue
 			}
 			w := httptest.NewRecorder()
@@ -239,6 +241,52 @@ func TestPlannedRoutesRemainAbsentFromProduction(t *testing.T) {
 	}
 }
 
+// TestImplementedRoutesAreServed is the other half of TestPlannedRoutesRemainAbsentFromProduction:
+// an operation the contract marks implemented must be reachable. Together the two tests keep the
+// declared status and the router from drifting apart, in either direction.
+func TestImplementedRoutesAreServed(t *testing.T) {
+	spec, err := publicapi.GetSwagger()
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := testRouter(servedapi.ReadyStatus{})
+	served := 0
+	for path, pathItem := range spec.Paths.Map() {
+		for method, operation := range pathItem.Operations() {
+			if operation.Extensions["x-implementation-status"] != "implemented" {
+				continue
+			}
+			served++
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, httptest.NewRequest(method, path, nil))
+			if w.Code == 404 && hasErrorCode(w, "RESOURCE_NOT_FOUND") {
+				t.Errorf("%s %s is marked implemented but is not routed", method, path)
+			}
+		}
+	}
+	if served == 0 {
+		t.Fatal("no operation is marked implemented, so this test proved nothing")
+	}
+}
+
+// testRouter is the production router over a probe that answers with the given readiness, so a test
+// that is about routing does not have to build an application of its own.
+func testRouter(readiness servedapi.ReadyStatus) http.Handler {
+	return Router(Application{Probe: func(context.Context) (servedapi.ReadyStatus, error) {
+		return readiness, nil
+	}})
+}
+
 func hasErrorCode(w *httptest.ResponseRecorder, code string) bool {
 	return strings.Contains(w.Body.String(), `"code":"`+code+`"`)
+}
+
+// authenticateTestCredential accepts the one fixed credential the isolated contract routers are
+// configured with, so a test telling an authentication failure from a payload failure has a
+// credential that is known to work.
+func authenticateTestCredential(_ context.Context, input *openapi3filter.AuthenticationInput) error {
+	if input.RequestValidationInput.Request.Header.Get("Authorization") != testCredential {
+		return fmt.Errorf("invalid test credential")
+	}
+	return nil
 }

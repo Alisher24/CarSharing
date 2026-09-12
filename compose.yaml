@@ -51,6 +51,17 @@ services:
       <<: *database
       DB_USER: carsharing_app
       DB_PASSWORD_FILE: /run/secrets/db_app_password
+      # Left empty so the service applies its own documented defaults. Setting one in the
+      # environment is how an operator changes a limit, and how the acceptance suite proves the
+      # running service reads the configuration rather than a constant.
+      RATE_LIMIT_SIGNIN_EMAIL_ADDRESS_ATTEMPTS: ${RATE_LIMIT_SIGNIN_EMAIL_ADDRESS_ATTEMPTS:-}
+      RATE_LIMIT_SIGNIN_EMAIL_ATTEMPTS: ${RATE_LIMIT_SIGNIN_EMAIL_ATTEMPTS:-}
+      RATE_LIMIT_SIGNIN_ADDRESS_ATTEMPTS: ${RATE_LIMIT_SIGNIN_ADDRESS_ATTEMPTS:-}
+      RATE_LIMIT_REGISTRATION_ADDRESS_ATTEMPTS: ${RATE_LIMIT_REGISTRATION_ADDRESS_ATTEMPTS:-}
+      RATE_LIMIT_SIGNIN_EMAIL_ADDRESS_WINDOW: ${RATE_LIMIT_SIGNIN_EMAIL_ADDRESS_WINDOW:-}
+      RATE_LIMIT_SIGNIN_EMAIL_WINDOW: ${RATE_LIMIT_SIGNIN_EMAIL_WINDOW:-}
+      RATE_LIMIT_SIGNIN_ADDRESS_WINDOW: ${RATE_LIMIT_SIGNIN_ADDRESS_WINDOW:-}
+      RATE_LIMIT_REGISTRATION_ADDRESS_WINDOW: ${RATE_LIMIT_REGISTRATION_ADDRESS_WINDOW:-}
     secrets: [db_app_password]
     depends_on:
       migrate: { condition: service_completed_successfully }

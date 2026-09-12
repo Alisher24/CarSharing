@@ -116,19 +116,75 @@ docker compose -f compose.yaml -f compose.dev.yaml up --build -d
 ```sh
 go -C backend test ./...
 go -C backend vet ./...
-cd frontend
 npm ci
-npm run build
-npm audit
+npm run format:check
+npm --prefix frontend ci
+npm --prefix frontend run build
 ```
+
+Форматирование и линт стилей обязательны для каждого изменения; правила чтения кода
+описаны в `AGENTS.md`. Prettier выравнивает TypeScript, JavaScript, CSS и JSON,
+Stylelint проверяет CSS, `gofmt` — Go. Хук `pre-commit` форматирует файлы из индекса
+той же конфигурацией, а `npm run format` выравнивает репозиторий целиком.
+Сгенерированный код исключён из форматирования: он обновляется только генерацией.
 
 Версии Go/Node и образы закреплены в Dockerfiles/Compose, зависимости — в
 `go.mod`/`go.sum` и `package-lock.json`. Использованы React 19.3, TypeScript 7.0,
 Vite 8.3, chi 5.3, pgx 5.11 и goose 3.28. [Vite поддерживает Node 24](https://vite.dev/guide/),
 [PostGIS использует путь volume PostgreSQL 18](https://github.com/postgis/docker-postgis).
-Обязательный Repository checks параллельно проверяет Go, TypeScript-сборку,
-воспроизводимость контрактов, npm/Go-зависимости, историю секретов и полный Compose smoke
-с тестовой PostGIS. Итоговый check проходит только при успехе всех этих задач.
+Обязательный Repository checks параллельно проверяет форматирование и стили,
+Go, TypeScript-сборку, воспроизводимость контрактов, npm/Go-зависимости, историю
+секретов и полный Compose smoke с тестовой PostGIS. Итоговый check проходит только
+при успехе всех этих задач.
+
+## Учётные записи и сессии
+
+Вход по email и паролю. Сессия хранится в PostgreSQL, браузер получает только непрозрачный
+токен в cookie `carsharing_session` (`HttpOnly`, `Path=/`, `SameSite=Lax`, абсолютные 12 часов
+без продления); в БД лежит его SHA-256. `Secure` включается через `SESSION_COOKIE_SECURE=true`
+и выключен только в документированном локальном HTTP-профиле. Создание пользователя и сохранение
+сессии выполняются одной транзакцией: откат не оставляет ни пользователя, ни сессии.
+
+Мутации учётной записи проверяют `Origin` по списку `ALLOWED_ORIGINS`; мутации с действующей
+сессией дополнительно проверяют `X-CSRF-Token` из снимка сессии. CSRF-токен выдаётся на каждую
+новую сессию и не действует дольше неё.
+
+### Параметры Argon2id и измерения
+
+Пароли хэшируются Argon2id с индивидуальной солью. Параметры — конфигурация, а не константы:
+
+| Настройка | Переменная | Значение |
+| --- | --- | --- |
+| Память | `AUTH_ARGON2_MEMORY_KIB` | 19456 KiB (19 MiB) |
+| Проходы | `AUTH_ARGON2_PASSES` | 2 |
+| Потоки | `AUTH_ARGON2_PARALLELISM` | 1 |
+| Одновременных вычислений на экземпляр | `AUTH_ARGON2_CONCURRENT` | 2 |
+
+Измерение в целевом Docker-окружении (образ сборки `golang:1.27.1-alpine`, `linux/amd64`,
+11th Gen Intel Core i7-11800H @ 2.30GHz), команда
+`go test ./internal/auth/ -run NONE -bench BenchmarkDeployedHashing -benchtime 20x -cpu 1`:
+
+| Величина | Результат |
+| --- | --- |
+| Время одного хэша | 28.4 мс |
+| Память на один хэш | 19.00 MiB |
+
+При занятости обоих мест вычисления запрос получает `503 SERVICE_UNAVAILABLE` без постановки
+в неограниченную очередь. Неизвестный email проверяется против фиктивного хэша, чтобы быстрый
+ответ не раскрывал отсутствие аккаунта.
+
+### Ограничения частоты
+
+Счётчики хранятся в PostgreSQL и переживают restart. Применимое ограничение проверяется до
+вычисления хэша, поэтому отклонённая попытка не оплачивает Argon2id. Превышение даёт
+`429 RATE_LIMITED` с `Retry-After`; доступ восстанавливается сам по истечении окна.
+
+| Операция | Область счётчика | Порог | Окно | Переменные |
+| --- | --- | --- | --- | --- |
+| Вход | email + IP | 10 неудач | 15 минут | `RATE_LIMIT_SIGNIN_EMAIL_ADDRESS_ATTEMPTS` / `_WINDOW` |
+| Вход | email | 30 неудач | 15 минут | `RATE_LIMIT_SIGNIN_EMAIL_ATTEMPTS` / `_WINDOW` |
+| Вход | IP | 100 попыток | 15 минут | `RATE_LIMIT_SIGNIN_ADDRESS_ATTEMPTS` / `_WINDOW` |
+| Регистрация | IP | 10 попыток | 1 час | `RATE_LIMIT_REGISTRATION_ADDRESS_ATTEMPTS` / `_WINDOW` |
 
 ## Контракт API и генерация
 

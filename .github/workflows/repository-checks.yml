@@ -81,10 +81,19 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+      - name: Install formatting toolchain
+        run: npm ci
       - name: Install dependencies
         working-directory: frontend
         run: npm ci
+      - name: Check formatting
+        run: npm run format:check
+      - name: Lint stylesheets
+        working-directory: frontend
+        run: npm run lint:css
       - name: Build application
         working-directory: frontend
         run: npm run build
@@ -148,6 +157,10 @@ jobs:
         run: docker compose up --build --detach
       - name: Run database and application smoke test
         run: node scripts/smoke.mjs
+      # One suite at a time: the suites share one database, and some of them restart the API or
+      # withdraw a privilege to observe a failure, which a concurrent suite would see as its own.
+      - name: Run acceptance suites against the assembled stack
+        run: node --test --test-concurrency=1 "scripts/acceptance/*.test.mjs"
       - name: Print service logs after failure
         if: ${{ failure() }}
         run: docker compose logs --no-color --tail=200
