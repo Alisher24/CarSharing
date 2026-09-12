@@ -16,12 +16,33 @@ import (
 	"github.com/getkin/kin-openapi/openapi3filter"
 )
 
+const (
+	// resourceID is a UUIDv7, which the contract requires for a stored resource; commandID is a
+	// UUIDv4, which it requires for a client-chosen idempotency key. Using one where the other
+	// belongs is rejected, so the tests below use them to prove each parameter checks its version.
+	resourceID = "01994342-6ba7-7000-8000-000000000001"
+	commandID  = "11111111-1111-4111-8111-111111111111"
+
+	reservationsPath = "/api/v1/reservations"
+	registerPath     = "/api/v1/auth/register"
+	myRidesPath      = "/api/v1/me/rides"
+	pausePath        = "/api/v1/rides/" + resourceID + "/pause"
+
+	reserveBody              = `{"vehicle_id":"` + resourceID + `"}`
+	registerBody             = `{"email":"user@example.test","password":"ExamplePassword42"}`
+	registerUnknownFieldBody = `{"email":"user@example.test","password":"ExamplePassword42","admin":true}`
+	registerCyrillicBody     = `{"email":"user@example.test","password":"абвгдежзийкл"}`
+	registerNbspBody         = `{"email":"user@example.test","password":"Example Password42"}`
+
+	testCredential = "Bearer example-test-credential"
+)
+
 // The isolated router only returns a fixture. It shares HTTP validation/error adapters
 // with production and does not implement or register any domain commands there.
 func contractRouter(t *testing.T, spec *openapi3.T) http.Handler {
 	t.Helper()
 	return boundary(spec, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Type", jsonMediaType)
 		w.WriteHeader(http.StatusNoContent)
 	}), openapi3filter.NoopAuthenticationFunc)
 }
@@ -32,29 +53,27 @@ func TestCommandAndPaginationRequestBoundaries(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := contractRouter(t, spec)
-	const id = "01994342-6ba7-7000-8000-000000000001"
-	const key = "11111111-1111-4111-8111-111111111111"
 	for _, tc := range []struct {
 		name, method, path, body, key, code string
 		status                              int
 	}{
-		{"reserve", "POST", "/api/v1/reservations", `{"vehicle_id":"` + id + `"}`, key, "", 204},
-		{"missing key", "POST", "/api/v1/reservations", `{"vehicle_id":"` + id + `"}`, "", "IDEMPOTENCY_KEY_REQUIRED", 400},
-		{"wrong key version", "POST", "/api/v1/reservations", `{"vehicle_id":"` + id + `"}`, id, "IDEMPOTENCY_KEY_INVALID", 400},
-		{"no command body", "POST", "/api/v1/rides/" + id + "/pause", "", key, "", 204},
-		{"empty object is a body", "POST", "/api/v1/rides/" + id + "/pause", "{}", key, "VALIDATION_FAILED", 422},
-		{"resource UUID version", "GET", "/api/v1/vehicles/" + key, "", "", "VALIDATION_FAILED", 422},
-		{"first page", "GET", "/api/v1/me/rides?limit=1", "", "", "", 204},
-		{"maximum page", "GET", "/api/v1/me/rides?limit=100", "", "", "", 204},
-		{"zero limit", "GET", "/api/v1/me/rides?limit=0", "", "", "VALIDATION_FAILED", 422},
-		{"excessive limit", "GET", "/api/v1/me/rides?limit=101", "", "", "VALIDATION_FAILED", 422},
-		{"bad cursor", "GET", "/api/v1/me/rides?cursor=a%3Db", "", "", "INVALID_CURSOR", 400},
-		{"unicode password", "POST", "/api/v1/auth/register", `{"email":"user@example.test","password":"абвгдежзийкл"}`, "", "", 204},
-		{"unicode whitespace", "POST", "/api/v1/auth/register", `{"email":"user@example.test","password":"Example\u00a0Password42"}`, "", "VALIDATION_FAILED", 422},
+		{"reserve", "POST", reservationsPath, reserveBody, commandID, "", 204},
+		{"missing key", "POST", reservationsPath, reserveBody, "", "IDEMPOTENCY_KEY_REQUIRED", 400},
+		{"wrong key version", "POST", reservationsPath, reserveBody, resourceID, "IDEMPOTENCY_KEY_INVALID", 400},
+		{"no command body", "POST", pausePath, "", commandID, "", 204},
+		{"empty object is a body", "POST", pausePath, "{}", commandID, "VALIDATION_FAILED", 422},
+		{"resource UUID version", "GET", "/api/v1/vehicles/" + commandID, "", "", "VALIDATION_FAILED", 422},
+		{"first page", "GET", myRidesPath + "?limit=1", "", "", "", 204},
+		{"maximum page", "GET", myRidesPath + "?limit=100", "", "", "", 204},
+		{"zero limit", "GET", myRidesPath + "?limit=0", "", "", "VALIDATION_FAILED", 422},
+		{"excessive limit", "GET", myRidesPath + "?limit=101", "", "", "VALIDATION_FAILED", 422},
+		{"bad cursor", "GET", myRidesPath + "?cursor=a%3Db", "", "", "INVALID_CURSOR", 400},
+		{"unicode password", "POST", registerPath, registerCyrillicBody, "", "", 204},
+		{"unicode whitespace", "POST", registerPath, registerNbspBody, "", "VALIDATION_FAILED", 422},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
-			r.Header.Set("Content-Type", "application/json")
+			r.Header.Set("Content-Type", jsonMediaType)
 			r.Header.Set("Origin", "http://127.0.0.1:8080")
 			r.Header.Set("X-CSRF-Token", "example-csrf-value")
 			if tc.key != "" {
@@ -62,7 +81,7 @@ func TestCommandAndPaginationRequestBoundaries(t *testing.T) {
 			}
 			w := httptest.NewRecorder()
 			handler.ServeHTTP(w, r)
-			if w.Code != tc.status || tc.code != "" && !strings.Contains(w.Body.String(), `"code":"`+tc.code+`"`) {
+			if w.Code != tc.status || tc.code != "" && !hasErrorCode(w, tc.code) {
 				t.Fatalf("%d %s", w.Code, w.Body.String())
 			}
 		})
@@ -74,8 +93,15 @@ func TestDemoPositionRejectsLatitudeOutsideWGS84(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := httptest.NewRequest("POST", "/internal/v1/demo/actions", strings.NewReader(`{"action_id":"11111111-1111-4111-8111-111111111111","action":"set_position","vehicle_id":"01994342-6ba7-7000-8000-000000000001","position":{"type":"Point","coordinates":[74.6,91]}}`))
-	r.Header.Set("Content-Type", "application/json")
+	// Coordinates are longitude then latitude, so 91 is the out-of-range latitude here.
+	body := `{
+		"action_id": "` + commandID + `",
+		"action": "set_position",
+		"vehicle_id": "` + resourceID + `",
+		"position": {"type": "Point", "coordinates": [74.6, 91]}
+	}`
+	r := httptest.NewRequest("POST", "/internal/v1/demo/actions", strings.NewReader(body))
+	r.Header.Set("Content-Type", jsonMediaType)
 	w := httptest.NewRecorder()
 	contractRouter(t, spec).ServeHTTP(w, r)
 	if w.Code != 422 || !strings.Contains(w.Body.String(), `/position/coordinates/1`) {
@@ -84,23 +110,31 @@ func TestDemoPositionRejectsLatitudeOutsideWGS84(t *testing.T) {
 }
 
 func TestInternalContractsAuthenticateBeforePayloadAndUseLargerBodyLimit(t *testing.T) {
-	for name, load := range map[string]func() (*openapi3.T, error){"simulation": internalapi.GetSwagger, "mailstub": mailstubapi.GetSwagger} {
+	internalContracts := map[string]struct {
+		load func() (*openapi3.T, error)
+		path string
+	}{
+		"simulation": {internalapi.GetSwagger, "/internal/v1/simulation/tick"},
+		"mailstub":   {mailstubapi.GetSwagger, "/internal/v1/messages"},
+	}
+	for name, contract := range internalContracts {
 		t.Run(name, func(t *testing.T) {
-			spec, err := load()
+			spec, err := contract.load()
 			if err != nil {
 				t.Fatal(err)
 			}
-			auth := func(_ context.Context, input *openapi3filter.AuthenticationInput) error {
-				if input.RequestValidationInput.Request.Header.Get("Authorization") != "Bearer example-test-credential" {
+			authenticate := func(_ context.Context, input *openapi3filter.AuthenticationInput) error {
+				if input.RequestValidationInput.Request.Header.Get("Authorization") != testCredential {
 					return fmt.Errorf("invalid test credential")
 				}
 				return nil
 			}
-			handler := boundary(spec, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) }), auth)
-			path := "/internal/v1/simulation/tick"
-			if name == "mailstub" {
-				path = "/internal/v1/messages"
-			}
+			accepted := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusNoContent)
+			})
+			handler := boundary(spec, accepted, authenticate)
+			overPublicLimit := `{"unexpected":"` + strings.Repeat("x", 64<<10) + `"}`
+			overInternalLimit := strings.Repeat("x", 256<<10+1)
 			for _, tc := range []struct {
 				name, body, token string
 				status            int
@@ -108,18 +142,18 @@ func TestInternalContractsAuthenticateBeforePayloadAndUseLargerBodyLimit(t *test
 			}{
 				{"missing credentials before malformed JSON", "{", "", 401, "INTERNAL_AUTHENTICATION_REQUIRED"},
 				{"invalid credentials before malformed JSON", "{", "Bearer wrong", 401, "INTERNAL_AUTHENTICATION_REQUIRED"},
-				{"malformed authenticated JSON", "{", "Bearer example-test-credential", 400, "MALFORMED_JSON"},
-				{"more than public body limit", `{"unexpected":"` + strings.Repeat("x", 65536) + `"}`, "Bearer example-test-credential", 422, "VALIDATION_FAILED"},
-				{"internal limit", strings.Repeat("x", 262145), "Bearer example-test-credential", 413, "BODY_TOO_LARGE"},
+				{"malformed authenticated JSON", "{", testCredential, 400, "MALFORMED_JSON"},
+				{"more than public body limit", overPublicLimit, testCredential, 422, "VALIDATION_FAILED"},
+				{"internal limit", overInternalLimit, testCredential, 413, "BODY_TOO_LARGE"},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
-					r := httptest.NewRequest("POST", path, strings.NewReader(tc.body))
-					r.Header.Set("Content-Type", "application/json")
+					r := httptest.NewRequest("POST", contract.path, strings.NewReader(tc.body))
+					r.Header.Set("Content-Type", jsonMediaType)
 					r.Header.Set("Authorization", tc.token)
-					r.Header.Set("Delivery-Key", "invoice:01994342-6ba7-7000-8000-000000000001:issued")
+					r.Header.Set("Delivery-Key", "invoice:"+resourceID+":issued")
 					w := httptest.NewRecorder()
 					handler.ServeHTTP(w, r)
-					if w.Code != tc.status || !strings.Contains(w.Body.String(), `"code":"`+tc.code+`"`) {
+					if w.Code != tc.status || !hasErrorCode(w, tc.code) {
 						t.Fatalf("%d %s", w.Code, w.Body.String())
 					}
 				})
@@ -138,16 +172,16 @@ func TestSessionContractReportsRequestErrors(t *testing.T) {
 		name, body, media, requestID, code string
 		status                             int
 	}{
-		{"malformed JSON", `{"email":`, "application/json", "", "MALFORMED_JSON", 400},
-		{"unknown field", `{"email":"user@example.test","password":"ExamplePassword42","admin":true}`, "application/json", "", "VALIDATION_FAILED", 422},
-		{"missing fields", `{}`, "application/json", "", "VALIDATION_FAILED", 422},
-		{"absent body", ``, "application/json", "", "VALIDATION_FAILED", 422},
-		{"invalid header", `{"email":"user@example.test","password":"ExamplePassword42"}`, "application/json", "has a space", "INVALID_HEADER", 400},
+		{"malformed JSON", `{"email":`, jsonMediaType, "", "MALFORMED_JSON", 400},
+		{"unknown field", registerUnknownFieldBody, jsonMediaType, "", "VALIDATION_FAILED", 422},
+		{"missing fields", `{}`, jsonMediaType, "", "VALIDATION_FAILED", 422},
+		{"absent body", ``, jsonMediaType, "", "VALIDATION_FAILED", 422},
+		{"invalid header", registerBody, jsonMediaType, "has a space", "INVALID_HEADER", 400},
 		{"media type", `{}`, "text/plain", "", "UNSUPPORTED_MEDIA_TYPE", 415},
-		{"body limit", strings.Repeat("x", 65537), "application/json", "", "BODY_TOO_LARGE", 413},
+		{"body limit", strings.Repeat("x", 64<<10+1), jsonMediaType, "", "BODY_TOO_LARGE", 413},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			r := httptest.NewRequest("POST", "/api/v1/auth/register", strings.NewReader(tc.body))
+			r := httptest.NewRequest("POST", registerPath, strings.NewReader(tc.body))
 			r.Header.Set("Content-Type", tc.media)
 			r.Header.Set("Origin", "http://127.0.0.1:8080")
 			if tc.requestID != "" {
@@ -196,10 +230,15 @@ func TestPlannedRoutesRemainAbsentFromProduction(t *testing.T) {
 				continue
 			}
 			w := httptest.NewRecorder()
-			handler.ServeHTTP(w, httptest.NewRequest(method, strings.ReplaceAll(path, "{id}", "01994342-6ba7-7000-8000-000000000001"), nil))
-			if w.Code != 404 || !strings.Contains(w.Body.String(), `"code":"RESOURCE_NOT_FOUND"`) {
+			concrete := strings.ReplaceAll(path, "{id}", resourceID)
+			handler.ServeHTTP(w, httptest.NewRequest(method, concrete, nil))
+			if w.Code != 404 || !hasErrorCode(w, "RESOURCE_NOT_FOUND") {
 				t.Errorf("%s %s: %d %s", method, path, w.Code, w.Body.String())
 			}
 		}
 	}
+}
+
+func hasErrorCode(w *httptest.ResponseRecorder, code string) bool {
+	return strings.Contains(w.Body.String(), `"code":"`+code+`"`)
 }

@@ -1,3 +1,4 @@
+// Command migrate applies the database migrations or reports their status.
 package main
 
 import (
@@ -15,6 +16,8 @@ import (
 	"github.com/pressly/goose/v3/lock"
 )
 
+const migrationTimeout = 2 * time.Minute
+
 func main() {
 	if !run() {
 		os.Exit(1)
@@ -30,23 +33,23 @@ func run() bool {
 		slog.Error("usage: migrate [up|status]")
 		return false
 	}
-	c, err := config.Load()
+	cfg, err := config.Load()
 	if err != nil {
 		slog.Error(err.Error())
 		return false
 	}
-	pc, err := database.PoolConfig(c)
+	poolConfig, err := database.PoolConfig(cfg)
 	if err != nil {
 		slog.Error("invalid database configuration")
 		return false
 	}
-	db := stdlib.OpenDB(*pc.ConnConfig)
+	db := stdlib.OpenDB(*poolConfig.ConnConfig)
 	defer db.Close()
 	return migrate(db, command)
 }
 
 func migrate(db *sql.DB, command string) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), migrationTimeout)
 	defer cancel()
 	locker, err := lock.NewPostgresSessionLocker()
 	if err != nil {

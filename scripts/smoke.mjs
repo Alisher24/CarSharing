@@ -15,7 +15,11 @@ function compose(...args) {
   }).trim();
 }
 function sql(query) {
-  return compose('exec', '-T', 'postgres', 'psql', '-U', 'carsharing_migrator', '-d', 'carsharing', '-At', '-v', 'ON_ERROR_STOP=1', '-c', query);
+  return compose(
+    'exec', '-T', 'postgres',
+    'psql', '-U', 'carsharing_migrator', '-d', 'carsharing',
+    '-At', '-v', 'ON_ERROR_STOP=1', '-c', query,
+  );
 }
 async function ready() {
   for (let i = 0; i < 60; i++) {
@@ -43,7 +47,16 @@ const page = await fetch(base);
 assert.equal(page.status, 200);
 assert.match(await page.text(), /<div id="root"><\/div>/);
 assert.match(page.headers.get('content-security-policy') ?? '', /default-src 'self'/);
-for (const path of ['/health/live', '/health/ready', '/api/health', '/api/v1/vehicles', '/api/v1/me', '/internal/v1/simulation/tick']) {
+// Retired health URLs, planned operations and the internal API must all be unreachable from outside.
+const unreachable = [
+  '/health/live',
+  '/health/ready',
+  '/api/health',
+  '/api/v1/vehicles',
+  '/api/v1/me',
+  '/internal/v1/simulation/tick',
+];
+for (const path of unreachable) {
   const response = await fetch(`${base}${path}`);
   assert.equal(response.status, 404, path);
   const error = await response.json();
@@ -51,7 +64,9 @@ for (const path of ['/health/live', '/health/ready', '/api/health', '/api/v1/veh
   assert.equal(error.request_id, response.headers.get('x-request-id'));
   assert.equal(response.headers.get('cache-control'), 'no-store');
 }
-assert.equal(sql("SELECT rolsuper OR rolcreatedb OR rolcreaterole FROM pg_roles WHERE rolname = 'carsharing_app'"), 'f');
+const appRolePrivileged = 'SELECT rolsuper OR rolcreatedb OR rolcreaterole'
+  + " FROM pg_roles WHERE rolname = 'carsharing_app'";
+assert.equal(sql(appRolePrivileged), 'f');
 assert.equal(sql("SELECT has_table_privilege('carsharing_app', 'bootstrap_metadata', 'INSERT')"), 'f');
 assert.match(sql('SELECT postgis_version()'), /^3\.6/);
 compose('run', '--rm', 'migrate', 'up');
@@ -75,4 +90,7 @@ try {
 await ready();
 assert.equal(sql('SELECT created_at FROM bootstrap_metadata'), metadata);
 assert.equal(sql("SELECT applied_at FROM seed_runs WHERE name = 'bootstrap-v1'"), seed);
-console.log('PASS: frontend/proxy, live API/PostGIS, runtime role, repeated migrations/seed, outage recovery and persistent data.');
+console.log(
+  'PASS: frontend/proxy, live API/PostGIS, runtime role,',
+  'repeated migrations/seed, outage recovery and persistent data.',
+);

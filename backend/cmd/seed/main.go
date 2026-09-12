@@ -1,3 +1,4 @@
+// Command seed inserts demo data and refuses to run outside the demo environment.
 package main
 
 import (
@@ -10,6 +11,8 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 )
 
+const databaseStartupTimeout = 45 * time.Second
+
 func main() {
 	if !run() {
 		os.Exit(1)
@@ -21,20 +24,19 @@ func run() bool {
 		slog.Error("seed requires APP_ENV=demo")
 		return false
 	}
-	c, err := config.Load()
+	cfg, err := config.Load()
 	if err != nil {
 		slog.Error(err.Error())
 		return false
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), databaseStartupTimeout)
 	defer cancel()
-	pool, err := database.Open(ctx, c)
+	pool, err := database.Open(ctx, cfg)
 	if err != nil {
 		slog.Error(err.Error())
 		return false
 	}
 	defer pool.Close()
-	// This marker establishes repeatable seed execution. Users/fleet arrive with their schemas.
 	_, err = pool.Exec(ctx, `INSERT INTO seed_runs (name) VALUES ('bootstrap-v1') ON CONFLICT (name) DO NOTHING`)
 	if err != nil {
 		slog.Error("seed failed; run migrations first")

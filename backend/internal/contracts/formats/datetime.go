@@ -1,4 +1,5 @@
-// Package formats strengthens OpenAPI's calendar validation for contract tooling and HTTP adapters.
+// Package formats adds the contract checks OpenAPI 3.0 cannot express on its own: stricter
+// calendar validation for date-time values, and positional rules declared as schema extensions.
 package formats
 
 import (

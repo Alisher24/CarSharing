@@ -7,6 +7,12 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
+// WGS84 latitude bounds, which a GeoJSON position must stay within.
+const (
+	minLatitude = -90.0
+	maxLatitude = 90.0
+)
+
 type Violation struct {
 	Pointer string
 	Message string
@@ -35,15 +41,21 @@ func Constraints(schema *openapi3.Schema, value any) []Violation {
 		}
 		if items, ok := value.([]any); ok {
 			if schema.Extensions["x-coordinate-order"] == "longitude-latitude" && len(items) == 2 {
-				if latitude, ok := items[1].(float64); ok && (latitude < -90 || latitude > 90) {
-					violations = append(violations, Violation{pointer + "/1", "Latitude must be between -90 and 90"})
+				if latitude, ok := items[1].(float64); ok && (latitude < minLatitude || latitude > maxLatitude) {
+					violations = append(violations, Violation{
+						Pointer: pointer + "/1",
+						Message: "Latitude must be between -90 and 90",
+					})
 				}
 			}
 			if order, ok := schema.Extensions["x-mode-order"].([]any); ok {
 				for index, mode := range order {
 					if index < len(items) {
 						if line, ok := items[index].(map[string]any); ok && line["mode"] != mode {
-							violations = append(violations, Violation{fmt.Sprintf("%s/%d/mode", pointer, index), "Invoice lines must be ordered driving then paused"})
+							violations = append(violations, Violation{
+								Pointer: fmt.Sprintf("%s/%d/mode", pointer, index),
+								Message: "Invoice lines must be ordered driving then paused",
+							})
 						}
 					}
 				}

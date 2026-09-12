@@ -4,9 +4,15 @@ import { mkdtemp, mkdir, readFile, writeFile, unlink, rm } from 'node:fs/promise
 import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { setup } from './setup.mjs';
+import { setup, CAPABILITY_SECRETS } from './setup.mjs';
 
-const credentials = ['simulator_token', 'demo_control_token', 'mailstub_delivery_token', 'mailstub_demo_token', 'cursor_hmac_key', 'mailstub_cursor_hmac_key'];
+function randomSecret() {
+  return randomBytes(32).toString('hex') + '\n';
+}
+
+function readSecrets(root, names) {
+  return Promise.all(names.map(name => readFile(join(root, '.secrets', name), 'utf8')));
+}
 
 test('setup migrates a complete legacy installation and refuses a partial migration', async () => {
   const root = await mkdtemp(join(tmpdir(), 'carsharing-setup-'));
@@ -14,15 +20,17 @@ test('setup migrates a complete legacy installation and refuses a partial migrat
     await mkdir(join(root, '.secrets'));
     await writeFile(join(root, '.env.example'), 'APP_PORT=8080\n');
     await writeFile(join(root, '.env'), 'APP_PORT=8181\n');
-    const legacy = randomBytes(32).toString('hex') + '\n';
+    const legacy = randomSecret();
     for (const name of ['db_admin_password', 'db_app_password', 'internal_token']) {
-      await writeFile(join(root, '.secrets', name), name === 'internal_token' ? legacy : randomBytes(32).toString('hex') + '\n');
+      const value = name === 'internal_token' ? legacy : randomSecret();
+      await writeFile(join(root, '.secrets', name), value);
     }
     await setup(root);
-    assert.ok(await readFile(join(root, '.secrets', 'simulator_token'), 'utf8') === legacy, 'legacy token changed');
+    const simulator = await readFile(join(root, '.secrets', 'simulator_token'), 'utf8');
+    assert.ok(simulator === legacy, 'legacy token changed');
     assert.equal(await readFile(join(root, '.env'), 'utf8'), 'APP_PORT=8181\n');
-    const values = await Promise.all(credentials.map(name => readFile(join(root, '.secrets', name), 'utf8')));
-    assert.equal(new Set(values).size, 6);
+    const values = await readSecrets(root, CAPABILITY_SECRETS);
+    assert.equal(new Set(values).size, CAPABILITY_SECRETS.length);
     await unlink(join(root, '.secrets', 'simulator_token'));
     await assert.rejects(setup(root), /missing secret files/);
   } finally { await rm(root, { recursive: true, force: true }); }
@@ -33,10 +41,10 @@ test('setup creates independent capability credentials and preserves all of them
   try {
     await writeFile(join(root, '.env.example'), 'APP_PORT=8080\n');
     await setup(root);
-    const values = await Promise.all(credentials.map(name => readFile(join(root, '.secrets', name), 'utf8')));
-    assert.equal(new Set(values).size, 6);
+    const values = await readSecrets(root, CAPABILITY_SECRETS);
+    assert.equal(new Set(values).size, CAPABILITY_SECRETS.length);
     await setup(root);
-    const repeated = await Promise.all(credentials.map(name => readFile(join(root, '.secrets', name), 'utf8')));
+    const repeated = await readSecrets(root, CAPABILITY_SECRETS);
     // Compare booleans so a failure cannot print credentials into a test artifact.
     assert.ok(values.every((value, index) => value === repeated[index]), 'credentials changed');
     await unlink(join(root, '.secrets', 'cursor_hmac_key'));

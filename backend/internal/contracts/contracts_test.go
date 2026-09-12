@@ -15,18 +15,56 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
+const (
+	// resourceID is a UUIDv7, which the contract requires for a stored resource so that
+	// identifiers sort by creation time.
+	resourceID = "01994342-6ba7-7000-8000-000000000001"
+
+	// commandID is a UUIDv4, which the contract requires for a client-chosen idempotency key.
+	commandID = "11111111-1111-4111-8111-111111111111"
+)
+
 var contracts = map[string]struct {
 	load       func() (*openapi3.T, error)
 	operations []string
 }{
 	"public": {publicapi.GetSwagger, []string{
-		"GET /api/v1/health/live", "GET /api/v1/health/ready", "POST /api/v1/auth/register", "POST /api/v1/auth/login", "POST /api/v1/auth/logout",
-		"GET /api/v1/me", "GET /api/v1/me/current", "GET /api/v1/vehicles", "GET /api/v1/vehicles/{id}", "GET /api/v1/zones", "GET /api/v1/tariffs",
-		"POST /api/v1/reservations", "POST /api/v1/reservations/{id}/cancel", "POST /api/v1/reservations/{id}/start", "POST /api/v1/rides/{id}/pause", "POST /api/v1/rides/{id}/resume", "POST /api/v1/rides/{id}/finish",
-		"GET /api/v1/me/rides", "GET /api/v1/me/invoices", "GET /api/v1/me/invoices/{id}", "POST /api/v1/me/invoices/{id}/pay", "GET /api/v1/me/notifications", "POST /api/v1/me/notifications/{id}/read", "GET /api/v1/events", "GET /api/v1/me/events",
+		"GET /api/v1/health/live",
+		"GET /api/v1/health/ready",
+		"POST /api/v1/auth/register",
+		"POST /api/v1/auth/login",
+		"POST /api/v1/auth/logout",
+		"GET /api/v1/me",
+		"GET /api/v1/me/current",
+		"GET /api/v1/vehicles",
+		"GET /api/v1/vehicles/{id}",
+		"GET /api/v1/zones",
+		"GET /api/v1/tariffs",
+		"POST /api/v1/reservations",
+		"POST /api/v1/reservations/{id}/cancel",
+		"POST /api/v1/reservations/{id}/start",
+		"POST /api/v1/rides/{id}/pause",
+		"POST /api/v1/rides/{id}/resume",
+		"POST /api/v1/rides/{id}/finish",
+		"GET /api/v1/me/rides",
+		"GET /api/v1/me/invoices",
+		"GET /api/v1/me/invoices/{id}",
+		"POST /api/v1/me/invoices/{id}/pay",
+		"GET /api/v1/me/notifications",
+		"POST /api/v1/me/notifications/{id}/read",
+		"GET /api/v1/events",
+		"GET /api/v1/me/events",
 	}},
-	"internal": {internalapi.GetSwagger, []string{"POST /internal/v1/simulation/tick", "POST /internal/v1/demo/actions"}},
-	"mailstub": {mailstubapi.GetSwagger, []string{"POST /internal/v1/messages", "POST /internal/v1/demo/actions", "GET /api/v1/messages", "GET /api/v1/messages/{id}"}},
+	"internal": {internalapi.GetSwagger, []string{
+		"POST /internal/v1/simulation/tick",
+		"POST /internal/v1/demo/actions",
+	}},
+	"mailstub": {mailstubapi.GetSwagger, []string{
+		"POST /internal/v1/messages",
+		"POST /internal/v1/demo/actions",
+		"GET /api/v1/messages",
+		"GET /api/v1/messages/{id}",
+	}},
 }
 
 func TestContractInventorySchemasAndExamples(t *testing.T) {
@@ -155,6 +193,29 @@ func checkSchema(t *testing.T, spec *openapi3.T, name string, ref *openapi3.Sche
 	}
 }
 
+// transportCodeStatus is the one status each transport error code may be declared under. A domain
+// code is absent because its status depends on the operation that reports it, so a code missing
+// here is simply not checked for placement.
+var transportCodeStatus = map[string]string{
+	"MALFORMED_JSON":                   "400",
+	"INVALID_HEADER":                   "400",
+	"INVALID_CURSOR":                   "400",
+	"IDEMPOTENCY_KEY_REQUIRED":         "400",
+	"IDEMPOTENCY_KEY_INVALID":          "400",
+	"AUTHENTICATION_REQUIRED":          "401",
+	"INVALID_CREDENTIALS":              "401",
+	"INTERNAL_AUTHENTICATION_REQUIRED": "401",
+	"ORIGIN_NOT_ALLOWED":               "403",
+	"CSRF_INVALID":                     "403",
+	"RESOURCE_NOT_FOUND":               "404",
+	"BODY_TOO_LARGE":                   "413",
+	"UNSUPPORTED_MEDIA_TYPE":           "415",
+	"VALIDATION_FAILED":                "422",
+	"RATE_LIMITED":                     "429",
+	"INTERNAL_ERROR":                   "500",
+	"SERVICE_UNAVAILABLE":              "503",
+}
+
 func checkErrorCodes(t *testing.T, operation, status string, response *openapi3.Response) {
 	t.Helper()
 	codes, ok := response.Extensions["x-error-codes"].([]any)
@@ -163,7 +224,8 @@ func checkErrorCodes(t *testing.T, operation, status string, response *openapi3.
 		return
 	}
 	for _, code := range codes {
-		if expected, ok := map[string]string{"MALFORMED_JSON": "400", "INVALID_HEADER": "400", "INVALID_CURSOR": "400", "IDEMPOTENCY_KEY_REQUIRED": "400", "IDEMPOTENCY_KEY_INVALID": "400", "AUTHENTICATION_REQUIRED": "401", "INVALID_CREDENTIALS": "401", "INTERNAL_AUTHENTICATION_REQUIRED": "401", "ORIGIN_NOT_ALLOWED": "403", "CSRF_INVALID": "403", "RESOURCE_NOT_FOUND": "404", "BODY_TOO_LARGE": "413", "UNSUPPORTED_MEDIA_TYPE": "415", "VALIDATION_FAILED": "422", "RATE_LIMITED": "429", "INTERNAL_ERROR": "500", "SERVICE_UNAVAILABLE": "503"}[fmt.Sprint(code)]; ok && expected != status {
+		expected, transport := transportCodeStatus[fmt.Sprint(code)]
+		if transport && expected != status {
 			t.Errorf("%s %s has misplaced %s", operation, status, code)
 		}
 	}
@@ -194,12 +256,48 @@ func TestWireFormatBoundaries(t *testing.T) {
 		name      string
 		good, bad []any
 	}{
-		{"ResourceId", []any{"01994342-6ba7-7000-8000-000000000001"}, []any{"11111111-1111-4111-8111-111111111111", "01994342-6BA7-7000-8000-000000000001", "01994342-6ba7-7000-7000-000000000001"}},
-		{"CommandId", []any{"11111111-1111-4111-8111-111111111111"}, []any{"01994342-6ba7-7000-8000-000000000001", "\"11111111-1111-4111-8111-111111111111\""}},
-		{"ExactInteger", []any{"0", "42", "9223372036854775807"}, []any{"-1", "01", "1.0", "9223372036854775808", "10000000000000000000", float64(42)}},
-		{"EnergyDecimal", []any{"0", "0.000001", "1200.125"}, []any{"-0", "01", "1.0", "1e3", "0.0000001"}},
-		{"Timestamp", []any{"2026-09-12T07:15:30.123456Z"}, []any{"2026-09-12T07:15:30Z", "2026-09-12T07:15:30.1234567Z", "2026-09-12T07:15:30.123456+00:00", "2026-02-30T07:15:30.123456Z"}},
-		{"Cursor", []any{"eyJ2IjoxfQ"}, []any{"", "a=b", "a+b", "a/b"}},
+		{
+			name: "ResourceId",
+			good: []any{resourceID},
+			bad: []any{
+				commandID,
+				"01994342-6BA7-7000-8000-000000000001",
+				"01994342-6ba7-7000-7000-000000000001",
+			},
+		},
+		{
+			name: "CommandId",
+			good: []any{commandID},
+			bad:  []any{resourceID, `"` + commandID + `"`},
+		},
+		{
+			name: "ExactInteger",
+			good: []any{"0", "42", "9223372036854775807"},
+			bad: []any{
+				"-1", "01", "1.0",
+				"9223372036854775808", "10000000000000000000", float64(42),
+			},
+		},
+		{
+			name: "EnergyDecimal",
+			good: []any{"0", "0.000001", "1200.125"},
+			bad:  []any{"-0", "01", "1.0", "1e3", "0.0000001"},
+		},
+		{
+			name: "Timestamp",
+			good: []any{"2026-09-12T07:15:30.123456Z"},
+			bad: []any{
+				"2026-09-12T07:15:30Z",
+				"2026-09-12T07:15:30.1234567Z",
+				"2026-09-12T07:15:30.123456+00:00",
+				"2026-02-30T07:15:30.123456Z",
+			},
+		},
+		{
+			name: "Cursor",
+			good: []any{"eyJ2IjoxfQ"},
+			bad:  []any{"", "a=b", "a+b", "a/b"},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			schema := spec.Components.Schemas[tc.name].Value
@@ -231,7 +329,8 @@ func TestReplayHeaderOnlyWhereResultsAreSaved(t *testing.T) {
 				for method, op := range item.Operations() {
 					keyed := false
 					for _, parameter := range op.Parameters {
-						if parameter.Value.In == "header" && (parameter.Value.Name == "Idempotency-Key" || parameter.Value.Name == "Delivery-Key") {
+						name := parameter.Value.Name
+						if parameter.Value.In == "header" && (name == "Idempotency-Key" || name == "Delivery-Key") {
 							keyed = true
 						}
 					}
