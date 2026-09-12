@@ -82,11 +82,14 @@ export function registrationRequest(email, registrationPassword = password) {
   return { method: 'POST', body: { email, password: registrationPassword } };
 }
 
-/** The sign-in request for one address, with a password that is either right or deliberately wrong. */
-export function signInRequest(email, expectedToSucceed = true) {
+/**
+ * The sign-in request for one address. A test that observes a limit sends the wrong password and
+ * spends the budget; one that proves a correct sign-in costs nothing asks for the right password.
+ */
+export function signInRequest(email, withCorrectPassword = false) {
   return {
     method: 'POST',
-    body: { email, password: expectedToSucceed ? password : wrongPassword },
+    body: { email, password: withCorrectPassword ? password : wrongPassword },
   };
 }
 
@@ -113,7 +116,7 @@ export async function registerAccount(prefix, overrides = {}) {
  * replacement retires tokens the first session was issued, so the caller compares the two.
  */
 export async function signInFromSecondDevice(email) {
-  const response = await call(SIGN_IN_PATH, signInRequest(email));
+  const response = await call(SIGN_IN_PATH, signInRequest(email, true));
   assert.equal(response.status, 200, response.text);
   return { response, cookie: sessionCookie(response), csrfToken: response.json.csrf_token };
 }
@@ -150,7 +153,11 @@ const DATABASE_QUERY_ARGUMENTS = [
   'carsharing_migrator',
   '-d',
   'carsharing',
-].concat(['-At', '-v', 'ON_ERROR_STOP=1', '-c']);
+  '-At',
+  '-v',
+  'ON_ERROR_STOP=1',
+  '-c',
+];
 
 export function sql(query) {
   return compose(...DATABASE_QUERY_ARGUMENTS, query);

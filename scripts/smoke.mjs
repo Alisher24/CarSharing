@@ -20,6 +20,7 @@ const POSTGRES_SERVICE = 'postgres';
 const POSTGRES_SUPERUSER = 'carsharing_migrator';
 const POSTGRES_DATABASE = 'carsharing';
 const MIGRATION_SERVICE = 'migrate';
+const MIGRATION_UP_ARGUMENT = 'up';
 const SEED_SERVICE = 'seed';
 const DEMO_COMPOSE_PROFILE = 'demo';
 
@@ -88,13 +89,13 @@ function queryDatabase(query) {
 }
 
 /** Runs a one-off compose service, as the migration and seed containers are meant to be run. */
-function runOneOffService(service, composeOptions = []) {
-  return runCompose(...composeOptions, 'run', '--rm', service);
+function runOneOffService(service, serviceArguments, composeOptions = []) {
+  return runCompose(...composeOptions, 'run', '--rm', service, ...serviceArguments);
 }
 
 /** The seed profile is demo data, so a run of it never reaches an installation without that profile. */
 function runDemoSeed(composeOptions = []) {
-  return runOneOffService(SEED_SERVICE, ['--profile', DEMO_COMPOSE_PROFILE, ...composeOptions]);
+  return runOneOffService(SEED_SERVICE, [], ['--profile', DEMO_COMPOSE_PROFILE, ...composeOptions]);
 }
 
 function assertReadinessPayload(payload) {
@@ -166,7 +167,7 @@ function checkDatabaseRoleIsUnprivileged() {
 /** Migrations and seeds must be repeatable, so a second run changes neither row nor timestamp. */
 function checkRepeatedMigrationAndSeedAreIdempotent() {
   const metadataCreatedAt = queryDatabase(BOOTSTRAP_METADATA_CREATED_AT_QUERY);
-  runOneOffService(MIGRATION_SERVICE, ['up']);
+  runOneOffService(MIGRATION_SERVICE, [MIGRATION_UP_ARGUMENT]);
   assert.equal(queryDatabase(BOOTSTRAP_METADATA_CREATED_AT_QUERY), metadataCreatedAt);
 
   runDemoSeed();

@@ -71,7 +71,7 @@ function assertRecordedParameters(storedHash) {
 
 /** Asks for more sign-ins at once than the instance can hash, and returns every answer. */
 function askForMoreSignInsThanTheCeilingAllows(email) {
-  return Promise.all(Array.from({ length: REQUEST_BURST_SIZE }, () => call(SIGN_IN_PATH, signInRequest(email))));
+  return Promise.all(Array.from({ length: REQUEST_BURST_SIZE }, () => call(SIGN_IN_PATH, signInRequest(email, true))));
 }
 
 /** The salt each account was hashed with, read back from the stored PHC strings. */
@@ -129,7 +129,7 @@ describe('an instance admits only its ceiling of concurrent hashes', () => {
     const { email } = await registerAccount('recovers');
     resetRateLimits();
     await askForMoreSignInsThanTheCeilingAllows(email);
-    const afterwards = await call(SIGN_IN_PATH, signInRequest(email));
+    const afterwards = await call(SIGN_IN_PATH, signInRequest(email, true));
     assert.equal(afterwards.status, ACCEPTED_SIGN_IN_STATUS, `the instance did not recover: ${afterwards.text}`);
   });
 });

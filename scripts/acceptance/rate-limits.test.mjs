@@ -106,7 +106,7 @@ describe('signing in is limited by the address and email being guessed at', () =
 
     const attempts = configuredLimits.signInEmailAndAddress + 2;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
-      const response = await call(SIGN_IN_PATH, signInRequest(email));
+      const response = await call(SIGN_IN_PATH, signInRequest(email, true));
       assert.equal(response.status, ACCEPTED_STATUS, `a correct sign-in was refused: ${response.text}`);
     }
   });
@@ -166,7 +166,7 @@ describe('a limit is never indefinite', () => {
        WHERE scope = '${RATE_LIMIT_SCOPE.signInEmail}' AND subject = '${email}'`,
     );
 
-    const allowed = await call(SIGN_IN_PATH, signInRequest(email));
+    const allowed = await call(SIGN_IN_PATH, signInRequest(email, true));
     assert.equal(allowed.status, ACCEPTED_STATUS, `access did not return after the window: ${allowed.text}`);
   });
 });
@@ -181,7 +181,7 @@ describe('a limit reaches only the identity it counts', () => {
     const refused = await call(SIGN_IN_PATH, signInRequest(throttled.email));
     assertRateLimited(refused, refused.text);
 
-    const unaffected = await call(SIGN_IN_PATH, signInRequest(bystander.email));
+    const unaffected = await call(SIGN_IN_PATH, signInRequest(bystander.email, true));
     assert.equal(unaffected.status, ACCEPTED_STATUS, `an unrelated account was throttled: ${unaffected.text}`);
   });
 
@@ -254,7 +254,7 @@ describe('a refused attempt costs no hashing', () => {
     resetRateLimits();
 
     const startedVerifying = performance.now();
-    assert.equal((await call(SIGN_IN_PATH, signInRequest(email))).status, ACCEPTED_STATUS);
+    assert.equal((await call(SIGN_IN_PATH, signInRequest(email, true))).status, ACCEPTED_STATUS);
     const verifiedDurationMs = performance.now() - startedVerifying;
 
     fillCounter(RATE_LIMIT_SCOPE.signInEmail, email, configuredLimits.signInEmail);
