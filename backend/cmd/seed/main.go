@@ -12,6 +12,10 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 )
 
+// seedMarker is the row this command writes. It names the seed set, not a run, so a second run
+// leaves the first one's date alone.
+const seedMarker = "bootstrap-v1"
+
 // errDemoEnvironmentRequired refuses a seed run outside the demo environment, where the demo data
 // would land in a deployment that never asked for it.
 var errDemoEnvironmentRequired = errors.New("seed requires APP_ENV=demo")
@@ -24,13 +28,12 @@ func main() {
 }
 
 func run() error {
-	if os.Getenv("APP_ENV") != "demo" {
-		return errDemoEnvironmentRequired
-	}
-
 	cfg, err := config.Load()
 	if err != nil {
 		return err
+	}
+	if cfg.Environment != config.DemoEnvironment {
+		return errDemoEnvironmentRequired
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), database.DatabaseStartupTimeout)
@@ -41,7 +44,8 @@ func run() error {
 	}
 	defer pool.Close()
 
-	_, err = pool.Exec(ctx, `INSERT INTO seed_runs (name) VALUES ('bootstrap-v1') ON CONFLICT (name) DO NOTHING`)
+	_, err = pool.Exec(ctx, `INSERT INTO seed_runs (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`,
+		seedMarker)
 	if err != nil {
 		return fmt.Errorf("seed failed; run migrations first: %w", err)
 	}

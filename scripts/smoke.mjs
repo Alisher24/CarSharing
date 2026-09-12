@@ -1,12 +1,7 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { POSTGRES_DATABASE, SERVICE_ORIGIN, composeWith, sql } from './service.mjs';
 
-const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-
-const DEFAULT_ORIGIN = 'http://127.0.0.1:8080';
 const LOCAL_ORIGIN_PATTERN = /^http:\/\/(127\.0\.0\.1|localhost):\d+$/;
 const ORIGIN_ARGUMENT_INDEX = 2;
 
@@ -15,10 +10,7 @@ const READINESS_RETRY_DELAY_MS = 1_000;
 const READINESS_REQUEST_TIMEOUT_MS = 3_000;
 const OUTAGE_REQUEST_TIMEOUT_MS = 5_000;
 
-const COMPOSE_TIMEOUT_MS = 120_000;
 const POSTGRES_SERVICE = 'postgres';
-const POSTGRES_SUPERUSER = 'carsharing_migrator';
-const POSTGRES_DATABASE = 'carsharing';
 const MIGRATION_SERVICE = 'migrate';
 const MIGRATION_UP_ARGUMENT = 'up';
 const SEED_SERVICE = 'seed';
@@ -28,7 +20,6 @@ const API_PREFIX = '/api/v1';
 const READINESS_PATH = `${API_PREFIX}/health/ready`;
 const LIVENESS_PATH = `${API_PREFIX}/health/live`;
 const BOOTSTRAP_SEED = 'bootstrap-v1';
-const APPLICATION_ROLE = 'carsharing_app';
 
 const EXPECTED_CURRENCY = 'KGS';
 const EXPECTED_CITY = 'Бишкек';
@@ -42,10 +33,6 @@ const RESOURCE_NOT_FOUND_CODE = 'RESOURCE_NOT_FOUND';
 const AUTHENTICATION_REQUIRED_CODE = 'AUTHENTICATION_REQUIRED';
 const SERVICE_UNAVAILABLE_CODE = 'SERVICE_UNAVAILABLE';
 
-const APPLICATION_ROLE_PRIVILEGES_QUERY =
-  'SELECT (rolsuper OR rolcreatedb OR rolcreaterole)' + ` FROM pg_roles WHERE rolname = '${APPLICATION_ROLE}'`;
-const BOOTSTRAP_METADATA_INSERT_QUERY =
-  `SELECT has_table_privilege('${APPLICATION_ROLE}', 'bootstrap_metadata',` + " 'INSERT')";
 const POSTGIS_VERSION_QUERY = 'SELECT postgis_version()';
 const BOOTSTRAP_METADATA_CREATED_AT_QUERY = 'SELECT created_at FROM bootstrap_metadata';
 const BOOTSTRAP_SEED_APPLIED_AT_QUERY = `SELECT applied_at FROM seed_runs WHERE name = '${BOOTSTRAP_SEED}'`;
@@ -60,37 +47,21 @@ const UNREACHABLE_PATHS = [
   '/internal/v1/simulation/tick',
 ];
 
-const DATABASE_QUERY_ARGUMENTS = [
-  'exec',
-  '-T',
-  POSTGRES_SERVICE,
-  'psql',
-  '-U',
-  POSTGRES_SUPERUSER,
-  '-d',
-  POSTGRES_DATABASE,
-  '-At',
-  '-v',
-  'ON_ERROR_STOP=1',
-  '-c',
-];
-
-function runCompose(...args) {
-  return execFileSync('docker', ['compose', ...args], {
-    cwd: repositoryRoot,
-    encoding: 'utf8',
-    timeout: COMPOSE_TIMEOUT_MS,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  }).trim();
-}
-
-function queryDatabase(query) {
-  return runCompose(...DATABASE_QUERY_ARGUMENTS, query);
+/**
+ * The role the API runs as, read from the database rather than restated here. The service records
+ * it when it connects, so this is the role actually in use and not the one the deployment intended.
+ * The migrator's own sessions are the ones psql names, which is how they are filtered out; pgx
+ * connects without an application name of its own.
+ */
+function applicationRole() {
+  const roles = sql(`SELECT DISTINCT usename FROM pg_stat_activity
+     WHERE datname = '${POSTGRES_DATABASE}' AND coalesce(application_name, '') <> 'psql'`);
+  return roles.split('\n').find((role) => role !== '') ?? '';
 }
 
 /** Runs a one-off compose service, as the migration and seed containers are meant to be run. */
 function runOneOffService(service, serviceArguments, composeOptions = []) {
-  return runCompose(...composeOptions, 'run', '--rm', service, ...serviceArguments);
+  return composeWith({}, ...composeOptions, 'run', '--rm', service, ...serviceArguments);
 }
 
 /** The seed profile is demo data, so a run of it never reaches an installation without that profile. */
@@ -159,35 +130,38 @@ async function checkSessionRequirementIsDistinguishable(origin) {
 }
 
 function checkDatabaseRoleIsUnprivileged() {
-  assert.equal(queryDatabase(APPLICATION_ROLE_PRIVILEGES_QUERY), 'f');
-  assert.equal(queryDatabase(BOOTSTRAP_METADATA_INSERT_QUERY), 'f');
-  assert.match(queryDatabase(POSTGIS_VERSION_QUERY), POSTGIS_VERSION_PATTERN);
+  const role = applicationRole();
+  assert.ok(role, 'the API recorded no application role, so its privileges cannot be checked');
+  assert.equal(sql(`SELECT (rolsuper OR rolcreatedb OR rolcreaterole) FROM pg_roles WHERE rolname = '${role}'`), 'f');
+  assert.equal(sql(`SELECT has_table_privilege('${role}', 'bootstrap_metadata', 'INSERT')`), 'f');
+  assert.match(sql(POSTGIS_VERSION_QUERY), POSTGIS_VERSION_PATTERN);
+  return role;
 }
 
 /** Migrations and seeds must be repeatable, so a second run changes neither row nor timestamp. */
 function checkRepeatedMigrationAndSeedAreIdempotent() {
-  const metadataCreatedAt = queryDatabase(BOOTSTRAP_METADATA_CREATED_AT_QUERY);
+  const metadataCreatedAt = sql(BOOTSTRAP_METADATA_CREATED_AT_QUERY);
   runOneOffService(MIGRATION_SERVICE, [MIGRATION_UP_ARGUMENT]);
-  assert.equal(queryDatabase(BOOTSTRAP_METADATA_CREATED_AT_QUERY), metadataCreatedAt);
+  assert.equal(sql(BOOTSTRAP_METADATA_CREATED_AT_QUERY), metadataCreatedAt);
 
   runDemoSeed();
-  const seedAppliedAt = queryDatabase(BOOTSTRAP_SEED_APPLIED_AT_QUERY);
+  const seedAppliedAt = sql(BOOTSTRAP_SEED_APPLIED_AT_QUERY);
   runDemoSeed();
-  assert.equal(queryDatabase(BOOTSTRAP_SEED_COUNT_QUERY), '1');
-  assert.equal(queryDatabase(BOOTSTRAP_SEED_APPLIED_AT_QUERY), seedAppliedAt);
+  assert.equal(sql(BOOTSTRAP_SEED_COUNT_QUERY), '1');
+  assert.equal(sql(BOOTSTRAP_SEED_APPLIED_AT_QUERY), seedAppliedAt);
 
   return { metadataCreatedAt, seedAppliedAt };
 }
 
 /** A restart of the API must not lose the migration and seed state the previous checks recorded. */
 function checkRecordedStatePersists(recordedState) {
-  assert.equal(queryDatabase(BOOTSTRAP_METADATA_CREATED_AT_QUERY), recordedState.metadataCreatedAt);
-  assert.equal(queryDatabase(BOOTSTRAP_SEED_APPLIED_AT_QUERY), recordedState.seedAppliedAt);
+  assert.equal(sql(BOOTSTRAP_METADATA_CREATED_AT_QUERY), recordedState.metadataCreatedAt);
+  assert.equal(sql(BOOTSTRAP_SEED_APPLIED_AT_QUERY), recordedState.seedAppliedAt);
 }
 
 // Exercises dependency failure while the API process stays alive, then restores it even on failure.
 async function checkOutageIsReportedAndRecovered(origin) {
-  runCompose('stop', POSTGRES_SERVICE);
+  composeWith({}, 'stop', POSTGRES_SERVICE);
   try {
     const response = await fetch(`${origin}${READINESS_PATH}`, {
       signal: AbortSignal.timeout(OUTAGE_REQUEST_TIMEOUT_MS),
@@ -198,13 +172,13 @@ async function checkOutageIsReportedAndRecovered(origin) {
     assert.equal(error.request_id, response.headers.get('x-request-id'));
     assert.equal((await fetch(`${origin}${LIVENESS_PATH}`)).status, 200);
   } finally {
-    runCompose('start', POSTGRES_SERVICE);
+    composeWith({}, 'start', POSTGRES_SERVICE);
   }
   await awaitReady(origin);
 }
 
 async function main() {
-  const origin = process.argv[ORIGIN_ARGUMENT_INDEX] ?? DEFAULT_ORIGIN;
+  const origin = process.argv[ORIGIN_ARGUMENT_INDEX] ?? SERVICE_ORIGIN;
   if (!LOCAL_ORIGIN_PATTERN.test(origin)) {
     throw new Error(`Smoke test accepts only a local HTTP origin, for example ${origin}`);
   }

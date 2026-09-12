@@ -15,12 +15,12 @@ const internalPathPrefix = "/internal/"
 // step follows the contract instead of a list of paths maintained beside it. An absent Origin is
 // refused by the same rule as a foreign one: neither is an origin this application allows.
 func requireAllowedOrigin(allowed map[string]bool) boundaryStep {
-	return func(b *boundaryRequest) *apiError {
+	return func(b *boundaryRequest) *contractError {
 		if !declaresHeader(b.route.Operation, originHeader, true) {
 			return nil
 		}
 		if !allowed[b.request.Header.Get(originHeader)] {
-			return &apiError{code: codeOriginNotAllowed, message: messageOriginNotAllowed}
+			return &contractError{code: codeOriginNotAllowed, message: messageOriginNotAllowed}
 		}
 		return nil
 	}

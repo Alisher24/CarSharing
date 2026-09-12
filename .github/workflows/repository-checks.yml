@@ -60,9 +60,9 @@ jobs:
       - name: Run static analysis
         working-directory: backend
         run: go vet ./...
-      - name: Build commands
+      - name: Build packages and commands
         working-directory: backend
-        run: go build ./cmd/...
+        run: go build ./...
       - name: Scan Go dependencies
         working-directory: backend
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
@@ -94,6 +94,9 @@ jobs:
       - name: Lint stylesheets
         working-directory: frontend
         run: npm run lint:css
+      - name: Check types
+        working-directory: frontend
+        run: npm run typecheck
       - name: Build application
         working-directory: frontend
         run: npm run build

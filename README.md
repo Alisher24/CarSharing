@@ -6,8 +6,9 @@
 Репозиторий: [Alisher24/CarSharing](https://github.com/Alisher24/CarSharing) (public).
 
 Работает начальный каркас: React получает данные от Go API, API проверяет PostgreSQL,
-схему и PostGIS через сгенерированный OpenAPI-интерфейс. Контракты остальных функций
-описаны как planned; вход, карта, аренды, расчёты, worker, симулятор и почта пока не реализованы.
+схему и PostGIS через сгенерированный OpenAPI-интерфейс, а вход по email и паролю выдаёт
+серверную сессию. Карта, аренды, расчёты, worker, симулятор и почта пока не реализованы;
+их контракты описаны как planned.
 
 ## Локальный запуск
 
@@ -190,18 +191,24 @@ Go, TypeScript-сборку, воспроизводимость контракт
 
 Источник HTTP-схем — `openapi/public.yaml`, `openapi/internal.yaml` и
 `openapi/mailstub.yaml` (OpenAPI 3.0.3), с общими схемами в `openapi/components/`.
-Подключены только health operations. Полные Go DTO/strict interfaces и public
-TypeScript SDK описывают будущие функции; их наличие не означает работающий endpoint.
-Для production health отдельно генерируется интерфейс из того же public-контракта.
+Обслуживаются health и операции учётной записи: register, login, logout, me. Полные Go
+DTO/strict interfaces и public TypeScript SDK описывают и будущие функции; их наличие
+не означает работающий endpoint, поэтому статус каждой операции указан в спецификации
+через `x-implementation-status`. Для production health отдельно генерируется интерфейс
+из того же public-контракта.
 
 Нужны Go 1.27.1 и Node 24.21.0 с npm. Из корня проекта:
 
 ```sh
+npm ci
 npm --prefix frontend ci
 npm --prefix tools/openapi ci
 npm --prefix tools/openapi run generate
 npm --prefix tools/openapi run check
 ```
+
+Корневой `npm ci` обязателен: `check` запускает frontend-сборку и проверки через npm
+корня, поэтому без него последняя команда завершится ошибкой.
 
 Закреплены `oapi-codegen 2.8.0`, Go runtime `1.6.0`, validation middleware `1.2.0`
 и `@hey-api/openapi-ts 0.99.0`. Генератор TypeScript работает из отдельного

@@ -2,27 +2,54 @@
 package main
 
 import (
+	"net"
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/Alisher24/CarSharing/backend/internal/platform/config"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/httpapi"
 )
 
 const (
-	// readyURL is reached from inside the container, so it targets the loopback address the API
-	// listens on rather than the published port.
-	readyURL = "http://127.0.0.1:8080/api/v1/health/ready"
+	// readyScheme is plain HTTP because the probe runs inside the container, on the loopback
+	// address, beside the API it checks rather than through the proxy that terminates TLS.
+	readyScheme = "http://"
+
+	// readyHost is the container's own loopback address. The API listens on every interface, so a
+	// container that published another one still reaches it here.
+	readyHost = "127.0.0.1"
+
+	// readyPort is the port the probe looks on when HTTP_ADDR names no port at all.
+	readyPort = "8080"
 
 	probeTimeout = 3 * time.Second
 )
 
 func main() {
+	os.Exit(probe(readyURL()))
+}
+
+// readyURL is the readiness URL of the API in this container. The port comes from the same setting
+// the API listens on, so a deployment that moves the listener does not leave the health check
+// probing the port it used to be on, and the path comes from the operation the API serves.
+func readyURL() string {
+	_, port, err := net.SplitHostPort(config.HTTPAddrFromEnvironment())
+	if err != nil || port == "" {
+		port = readyPort
+	}
+	return readyScheme + net.JoinHostPort(readyHost, port) + httpapi.ReadyPath
+}
+
+func probe(url string) int {
 	client := http.Client{Timeout: probeTimeout}
-	resp, err := client.Get(readyURL)
+	resp, err := client.Get(url)
 	if err != nil {
-		os.Exit(1)
+		return 1
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }

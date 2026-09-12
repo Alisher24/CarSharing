@@ -11,7 +11,7 @@ import (
 // requireCredentials rejects a request that does not satisfy the security requirements of its
 // operation, or of the specification when the operation declares none.
 func requireCredentials(spec *openapi3.T, authenticate openapi3filter.AuthenticationFunc) boundaryStep {
-	return func(b *boundaryRequest) *apiError {
+	return func(b *boundaryRequest) *contractError {
 		requirements := b.route.Operation.Security
 		if requirements == nil {
 			requirements = &spec.Security
@@ -30,9 +30,9 @@ func requireCredentials(spec *openapi3.T, authenticate openapi3filter.Authentica
 		}
 		if err := openapi3filter.ValidateSecurityRequirements(b.request.Context(), input, *requirements); err != nil {
 			if errors.Is(err, errSessionStoreUnavailable) {
-				return &apiError{code: codeServiceUnavailable, message: messageServiceUnavailable}
+				return &contractError{code: codeServiceUnavailable, message: messageServiceUnavailable}
 			}
-			return &apiError{code: authenticationCode(b.request.URL.Path), message: messageAuthenticationRequired}
+			return &contractError{code: authenticationCode(b.request.URL.Path), message: messageAuthenticationRequired}
 		}
 		return nil
 	}

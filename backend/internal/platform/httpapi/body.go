@@ -28,7 +28,7 @@ const (
 
 // bufferBodyWithinLimit reads the body once within the limit of its operation and replaces it with a
 // replayable reader, because the schema validator and the handler each read it again.
-func bufferBodyWithinLimit(b *boundaryRequest) *apiError {
+func bufferBodyWithinLimit(b *boundaryRequest) *contractError {
 	if b.request.Body == nil {
 		b.request.Body = http.NoBody
 	}
@@ -38,9 +38,9 @@ func bufferBodyWithinLimit(b *boundaryRequest) *apiError {
 	if err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
-			return &apiError{code: codeBodyTooLarge, message: messageBodyTooLarge}
+			return &contractError{code: codeBodyTooLarge, message: messageBodyTooLarge}
 		}
-		return &apiError{code: codeMalformedJSON, message: messageBodyUnreadable}
+		return &contractError{code: codeMalformedJSON, message: messageBodyUnreadable}
 	}
 
 	b.body = body
@@ -58,7 +58,7 @@ func bodyLimit(operation *openapi3.Operation) int64 {
 // requireJSONRequestBody enforces the presence, media type and syntax the operation declares, then
 // records the positional constraints OpenAPI 3.0 cannot express so that constraintGate can report
 // them once the schema validator has had its say.
-func requireJSONRequestBody(b *boundaryRequest) *apiError {
+func requireJSONRequestBody(b *boundaryRequest) *contractError {
 	if b.route.Operation.RequestBody == nil {
 		if len(b.body) > 0 {
 			return validationFailure(bodyViolation("", codeUnexpectedBody, messageBodyUnexpected))
@@ -72,11 +72,11 @@ func requireJSONRequestBody(b *boundaryRequest) *apiError {
 
 	media, _, err := mime.ParseMediaType(b.request.Header.Get(contentTypeHeader))
 	if err != nil || media != jsonMediaType {
-		return &apiError{code: codeUnsupportedMediaType, message: messageContentTypeInvalid}
+		return &contractError{code: codeUnsupportedMediaType, message: messageContentTypeInvalid}
 	}
 
 	if !json.Valid(b.body) {
-		return &apiError{code: codeMalformedJSON, message: messageMalformedJSON}
+		return &contractError{code: codeMalformedJSON, message: messageMalformedJSON}
 	}
 
 	var payload any
@@ -91,6 +91,6 @@ func requireJSONRequestBody(b *boundaryRequest) *apiError {
 	return nil
 }
 
-func validationFailure(violations ...violation) *apiError {
-	return &apiError{code: codeValidationFailed, message: messageValidationFailed, violations: violations}
+func validationFailure(violations ...violation) *contractError {
+	return &contractError{code: codeValidationFailed, message: messageValidationFailed, violations: violations}
 }

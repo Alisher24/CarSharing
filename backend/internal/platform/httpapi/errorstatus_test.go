@@ -10,7 +10,7 @@ import (
 )
 
 func TestEveryTransportCodeDeclaresAContractStatus(t *testing.T) {
-	for code, status := range transportErrorStatus {
+	for code, status := range errorStatus {
 		if !code.Valid() {
 			t.Errorf("%s is not declared by the contract", code)
 		}

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/platform/ratelimit"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // The counted scopes: an email-scoped counter records failures only, so a person signing in
@@ -18,6 +19,10 @@ const (
 	RegistrationByAddress   ratelimit.Scope = "registration_address"
 )
 
+// RateLimits is the budget of each counted scope. It is the platform's settings paired with the
+// scopes this package counts under, so a scope cannot be added without its budget beside it.
+type RateLimits map[ratelimit.Scope]ratelimit.Limit
+
 // ErrThrottleUnavailable reports that the limits could not be consulted. A caller answers it as a
 // service failure: a service that cannot tell whether an attempt is within its limits must not
 // grant an unlimited number of guesses instead.
@@ -27,7 +32,17 @@ var ErrThrottleUnavailable = errors.New("rate limits cannot be consulted")
 // before a password is verified, so an attempt that is already over a limit never pays for a hash.
 type Throttle struct{ counter *ratelimit.Counter }
 
-func NewThrottle(counter *ratelimit.Counter) *Throttle { return &Throttle{counter: counter} }
+// NewThrottle counts attempts in PostgreSQL under the scopes this package names. The scopes and the
+// budgets they are configured with are paired here rather than at the process root, so a new
+// counted scope cannot be added with its budget wired up nowhere.
+func NewThrottle(pool *pgxpool.Pool, limits ratelimit.Limits) *Throttle {
+	return &Throttle{counter: ratelimit.NewCounter(pool, RateLimits{
+		SignInByEmailAndAddress: limits.SignInByEmailAndAddress,
+		SignInByEmail:           limits.SignInByEmail,
+		SignInByAddress:         limits.SignInByAddress,
+		RegistrationByAddress:   limits.RegistrationByAddress,
+	})}
+}
 
 // counterOf reports the counter to record against, or the error to answer when the throttle itself
 // is missing. A nil throttle is how a process assembled without rate limits reports that it cannot

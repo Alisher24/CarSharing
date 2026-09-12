@@ -21,7 +21,7 @@ type boundaryRequest struct {
 
 // boundaryStep reports the first transport failure it finds in a request, or nil to continue. A
 // step may replace the request to buffer the body or to carry its results to a later step.
-type boundaryStep func(*boundaryRequest) *apiError
+type boundaryStep func(*boundaryRequest) *contractError
 
 // transport is the policy the boundary applies to every request: which browser origins may make a
 // mutation, and how a session credential is checked. The owning application supplies it; the

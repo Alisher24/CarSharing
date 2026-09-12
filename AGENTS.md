@@ -19,6 +19,65 @@ Write the entire commit message in English as one concise sentence using the for
 Use only that single subject line: do not add a body, bullet list, pull request reference, author credit,
 `Co-authored-by` trailer, or any other metadata.
 
+### Architecture and wiring
+
+A process has one composition root that names every concrete implementation it runs and hands them
+to the code that uses them. Everything below it receives what it needs as an argument or a field.
+
+- Configuration is read at the composition root or by the loader it calls. A package deeper down
+  never reads the environment, a global, or a package-level variable to learn how it is configured.
+- A feature declares what it must be told (`ratelimit.Limits`), and the loader fills that shape in.
+  The table pairing an identifier with the setting it is read from lives beside the identifier, not
+  in the loader, so a new case cannot be added with its configuration wired up nowhere.
+- Inject the concrete type and wire it at the composition root. Introduce an interface when a second
+  real implementation exists or a test needs a seam; an interface with one implementation and no
+  second caller is speculation. Narrowing a dependency to an interface it already satisfies is not
+  speculation, and neither is a function type for one behaviour.
+- Validate dependencies where they are assembled, and fail at startup with a message naming what is
+  missing. Never default a missing dependency and never dereference it inside a handler, where the
+  failure reaches a client as a crash.
+- A nil receiver or a nil field that means "not configured" is a second way of saying the same
+  thing. Say it once, where the value is built.
+- A flag, an environment name or a mode decision belongs to the layer that owns the decision: the
+  command that must refuse, or the feature that must behave differently — never to the handler that
+  happens to see it.
+
+### Separation and extension
+
+- One file holds one concern, at every level. If it needs "and" to be described, split it: a file
+  that declares the errors of a contract, the statuses they carry and the code that writes them is
+  three files.
+- A handler moves a request between the contract and the feature that owns the behaviour. It does
+  not write SQL, hold a domain rule, or build a second copy of a value the contract already states.
+- A file named after a thing holds only that thing. A module named after the HTTP client does not
+  also own process control and database access.
+- Everything the codebase maintains has exactly one declaration. A second list of the same facts —
+  an inventory, a status table, a set of implemented operations — is derived from the first or it is
+  a defect waiting to disagree.
+- Adding a feature is a new file and one line at the composition root. If it is an edit to a growing
+  conditional, a growing type switch, or a list that everything must be added to, the seam is in the
+  wrong place.
+- Take what the request carries as an argument and pass it down. A request-scoped value — the
+  session, the transaction — is established once at the boundary and read from there; reaching for
+  the request again further down is how two parts of one request come to disagree.
+
+### Configuration
+
+- A setting has one owner: one default, one environment name, one shape, declared together. Nothing
+  outside the loader names the environment variable, and nothing outside the feature names the
+  default.
+- Every value that is configuration in more than one layer — a port, a path, a timeout, a limit, a
+  cookie name, a pair of credentials — is declared once in code and named by everything else, or
+  passed as configuration to the thing that needs it.
+- The loader owns the shape it produces and hands it over whole. A consumer reads the fields it
+  needs from that value; it does not rebuild the same shape from the same environment.
+- Where a tool cannot import the program's value — a container health check, a proxy directive, a
+  workflow output, a document — the copy is that tool's own configuration. Keep it in one place in
+  our code and derive it from the same declaration wherever the tool allows, such as an exported
+  path constant or an environment variable the entrypoint sets.
+- Generated code is the projection of its source, so it is not a second declaration. So is a value
+  the contract restates in order to be self-contained.
+
 ### Code style
 
 Readable, extensible code is the deliverable; working code that nobody can read is not finished.
@@ -99,7 +158,11 @@ Before proposing a change:
 2. Reread the modified file as a whole, not only the diff. A function that grew past 40 lines, a
    file that grew a second concern and a comment that the change made redundant are visible only
    in the whole.
-3. Run the formatting gates below and fix what they report. A check that fails is not a reviewer's
+3. Ask what the change now knows. A new coupling — a feature reading the environment, a handler
+   naming a table, a value restated in a second file, a list that must be edited in step with
+   another — is a defect even when every test passes, and the fix belongs in this change rather
+   than in a follow-up.
+4. Run the formatting gates below and fix what they report. A check that fails is not a reviewer's
    problem to raise later.
 
 **Formatting gates**

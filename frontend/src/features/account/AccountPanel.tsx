@@ -1,33 +1,12 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
+import type { AccountIntent } from './accountIntent';
 import type { Submission } from './useAccount';
 import { useAccount } from './useAccount';
+import { refusalText } from './refusalText';
 import type { Credentials, SessionSnapshot } from '../../shared/api/session';
 
-type Intent = 'register' | 'sign-in';
-
-/**
- * Russian wording for each refusal the account operations can answer with, chosen by contract code
- * so that the text a person reads never depends on a message written for a developer.
- */
-const REFUSAL_TEXT: Record<string, string> = {
-  EMAIL_ALREADY_REGISTERED: 'Этот адрес уже зарегистрирован. Войдите в существующий аккаунт.',
-  INVALID_CREDENTIALS: 'Неверный адрес или пароль.',
-  VALIDATION_FAILED: 'Проверьте адрес электронной почты и пароль.',
-  ORIGIN_NOT_ALLOWED: 'Запрос отклонён. Откройте приложение по обычному адресу.',
-  SERVICE_UNAVAILABLE: 'Сервис временно недоступен. Повторите попытку позже.',
-};
-
-const UNREACHABLE_TEXT = 'Нет связи с сервисом. Проверьте подключение и повторите попытку.';
-
-function refusalText(submission: Submission): string | null {
-  if (submission.state !== 'failed') return null;
-  if (submission.result.outcome === 'refused') {
-    return REFUSAL_TEXT[submission.result.code] ?? UNREACHABLE_TEXT;
-  }
-  if (submission.result.outcome === 'signed-out') return REFUSAL_TEXT.INVALID_CREDENTIALS;
-
-  return UNREACHABLE_TEXT;
-}
+// One section holds every account panel, so the heading it is labelled by is declared once.
+const ACCOUNT_TITLE_ID = 'account-title';
 
 export function AccountPanel() {
   const { account, submission, submit, leave } = useAccount();
@@ -35,7 +14,7 @@ export function AccountPanel() {
   if (account.state === 'checking') {
     return (
       <AccountHeading>
-        <h2 className="account-title" id="account-title">
+        <h2 className="account-title" id={ACCOUNT_TITLE_ID}>
           Проверяем сессию…
         </h2>
       </AccountHeading>
@@ -52,7 +31,7 @@ export function AccountPanel() {
 /** Every panel renders the same section and label, so only the panel itself decides the rest. */
 function AccountHeading({ children }: { children: ReactNode }) {
   return (
-    <section className="account" aria-labelledby="account-title">
+    <section className="account" aria-labelledby={ACCOUNT_TITLE_ID}>
       <span className="section-label">УЧЁТНАЯ ЗАПИСЬ</span>
       {children}
     </section>
@@ -70,7 +49,7 @@ function SignedInPanel({
 }) {
   return (
     <AccountHeading>
-      <h2 className="account-title" id="account-title">
+      <h2 className="account-title" id={ACCOUNT_TITLE_ID}>
         Вы вошли
       </h2>
       <dl className="details">
@@ -98,25 +77,26 @@ function CredentialsForm({
   onSubmit,
 }: {
   submission: Submission;
-  onSubmit: (intent: Intent, credentials: Credentials) => Promise<void>;
+  onSubmit: (intent: AccountIntent, credentials: Credentials) => Promise<void>;
 }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [intent, setIntent] = useState<Intent>('register');
   const sending = submission.state === 'sending';
   const failure = refusalText(submission);
 
-  function send(event: FormEvent) {
-    event.preventDefault();
+  function send(intent: AccountIntent) {
     void onSubmit(intent, { email, password });
   }
 
+  // The form carries no default action: the person chooses between registering and signing in, so
+  // the browser must not choose one for them. Each button states the operation it performs, so
+  // which one was pressed is remembered nowhere between the press and the request.
   return (
     <AccountHeading>
-      <h2 className="account-title" id="account-title">
+      <h2 className="account-title" id={ACCOUNT_TITLE_ID}>
         Вход и регистрация
       </h2>
-      <form className="account-form" onSubmit={send}>
+      <form className="account-form" onSubmit={preventDefault}>
         <label htmlFor="account-email-field">Электронная почта</label>
         <input
           className="account-field"
@@ -140,10 +120,10 @@ function CredentialsForm({
           onChange={(event) => setPassword(event.target.value)}
         />
         <div className="account-actions">
-          <button className="action-button" type="submit" disabled={sending} onClick={() => setIntent('register')}>
+          <button className="action-button" type="button" disabled={sending} onClick={() => send('register')}>
             Зарегистрироваться
           </button>
-          <button className="action-button" type="submit" disabled={sending} onClick={() => setIntent('sign-in')}>
+          <button className="action-button" type="button" disabled={sending} onClick={() => send('sign-in')}>
             Войти
           </button>
         </div>
@@ -155,4 +135,8 @@ function CredentialsForm({
       )}
     </AccountHeading>
   );
+}
+
+function preventDefault(event: FormEvent) {
+  event.preventDefault();
 }
