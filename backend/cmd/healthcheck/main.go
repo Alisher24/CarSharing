@@ -8,7 +8,7 @@ import (
 
 func main() {
 	client := http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get("http://127.0.0.1:8080/health/ready")
+	resp, err := client.Get("http://127.0.0.1:8080/api/v1/health/ready")
 	if err != nil {
 		os.Exit(1)
 	}

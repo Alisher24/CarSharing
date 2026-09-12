@@ -1,0 +1,9 @@
+package: publicapi
+generate:
+  models: true
+  chi-server: true
+  strict-server: true
+  embedded-spec: true
+output: internal/contracts/publicapi/generated.go
+output-options:
+  skip-prune: true

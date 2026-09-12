@@ -1,0 +1,16 @@
+{
+  "name": "carsharing-contract-tools",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "node ../../scripts/generate-contracts.mjs",
+    "check": "node ../../scripts/check-contracts.mjs"
+  },
+  "dependencies": {
+    "@hey-api/openapi-ts": "0.99.0",
+    "typescript": "6.0.3"
+  },
+  "overrides": {
+    "js-yaml": "4.3.2"
+  }
+}

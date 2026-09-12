@@ -1,0 +1,915 @@
+openapi: 3.0.3
+info:
+  title: CarSharing mailstub delivery and read-only inbox
+  version: 1.0.0
+  description: >-
+    Planned MVP contract; no production handlers. JSON responses use Cache-Control no-store. Only local schema
+    references are allowed. Separate listeners: internal delivery/fault control inside the container network;
+    anonymous read-only inbox on http://127.0.0.1:8025 with no CORS, create, delete or reset. Internal bodies
+    are limited to 262144 bytes. Check the capability-specific bearer token before domain payload;
+    missing/invalid both return INTERNAL_AUTHENTICATION_REQUIRED. Exactly one receiver record per delivery
+    key; the worker sends after commit of invoice/outbox, independently of payment. Payment retries do not
+    create a second completion email. Unsupported methods are 405 METHOD_NOT_ALLOWED with Allow;
+    unknown/foreign resources and unimplemented production paths are 404 RESOURCE_NOT_FOUND. Errors use
+    ApiError, X-Request-ID and no-store. Syntax/header errors are 400; parsed field errors are 422. Validation
+    details enumerate all independently detectable violations in deterministic body/query/path/header and
+    pointer/parameter order.
+paths:
+  /internal/v1/messages:
+    post:
+      operationId: deliverMessage
+      summary: deliver Message
+      x-implementation-status: planned
+      x-body-limit: 262144
+      description: >-
+        Atomically store delivery key, exact content and stable receipt. Same key/body replays original 201
+        receipt with Idempotency-Replayed true; another body returns DELIVERY_CONFLICT. HTML fields are not
+        accepted. Request body is required.
+      parameters:
+        - name: X-Request-ID
+          in: header
+          required: false
+          schema:
+            $ref: ./components/identifiers.yaml#/components/schemas/RequestId
+        - name: Delivery-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: ^invoice:[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}:issued$
+      responses:
+        '201':
+          description: Created.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryReceipt'
+              example:
+                id: 01994342-6ba7-7000-8000-000000000001
+                accepted_at: '2026-09-12T07:15:30.123456Z'
+        '400':
+          description: INVALID_HEADER, MALFORMED_JSON
+          x-error-codes:
+            - INVALID_HEADER
+            - MALFORMED_JSON
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                INVALID_HEADER:
+                  value:
+                    code: INVALID_HEADER
+                    message: Request could not be completed
+                    request_id: example-request-1
+                MALFORMED_JSON:
+                  value:
+                    code: MALFORMED_JSON
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '401':
+          description: INTERNAL_AUTHENTICATION_REQUIRED
+          x-error-codes:
+            - INTERNAL_AUTHENTICATION_REQUIRED
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                INTERNAL_AUTHENTICATION_REQUIRED:
+                  value:
+                    code: INTERNAL_AUTHENTICATION_REQUIRED
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '409':
+          description: DELIVERY_CONFLICT
+          x-error-codes:
+            - DELIVERY_CONFLICT
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                DELIVERY_CONFLICT:
+                  value:
+                    code: DELIVERY_CONFLICT
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '413':
+          description: BODY_TOO_LARGE
+          x-error-codes:
+            - BODY_TOO_LARGE
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                BODY_TOO_LARGE:
+                  value:
+                    code: BODY_TOO_LARGE
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '415':
+          description: UNSUPPORTED_MEDIA_TYPE
+          x-error-codes:
+            - UNSUPPORTED_MEDIA_TYPE
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                UNSUPPORTED_MEDIA_TYPE:
+                  value:
+                    code: UNSUPPORTED_MEDIA_TYPE
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '422':
+          description: VALIDATION_FAILED
+          x-error-codes:
+            - VALIDATION_FAILED
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                VALIDATION_FAILED:
+                  value:
+                    code: VALIDATION_FAILED
+                    message: Request could not be completed
+                    request_id: example-request-1
+                    details:
+                      violations:
+                        - location: body
+                          pointer: /email
+                          code: required
+                          message: Required value is missing
+        '500':
+          description: INTERNAL_ERROR
+          x-error-codes:
+            - INTERNAL_ERROR
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                INTERNAL_ERROR:
+                  value:
+                    code: INTERNAL_ERROR
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '503':
+          description: SERVICE_UNAVAILABLE
+          x-error-codes:
+            - SERVICE_UNAVAILABLE
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                SERVICE_UNAVAILABLE:
+                  value:
+                    code: SERVICE_UNAVAILABLE
+                    message: Request could not be completed
+                    request_id: example-request-1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageRequest'
+            example:
+              to: user@example.test
+              subject: Invoice issued
+              text: 'Ride completed: user_finished. Total: 3000 tyiyn.'
+      security:
+        - DeliveryToken: []
+      x-listener: internal
+  /internal/v1/demo/actions:
+    post:
+      operationId: applyMailDemoAction
+      summary: apply Mail Demo Action
+      x-implementation-status: planned
+      x-body-limit: 262144
+      description: >-
+        Replay action_id without arming a second fault. The next delivery commits its record before dropping
+        the connection without a response. A worker retry receives the original receipt. Request body is
+        required.
+      parameters:
+        - name: X-Request-ID
+          in: header
+          required: false
+          schema:
+            $ref: ./components/identifiers.yaml#/components/schemas/RequestId
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MailDemoResult'
+              example:
+                action_id: 11111111-1111-4111-8111-111111111111
+                server_time: '2026-09-12T07:15:30.123456Z'
+        '400':
+          description: INVALID_HEADER, MALFORMED_JSON
+          x-error-codes:
+            - INVALID_HEADER
+            - MALFORMED_JSON
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                INVALID_HEADER:
+                  value:
+                    code: INVALID_HEADER
+                    message: Request could not be completed
+                    request_id: example-request-1
+                MALFORMED_JSON:
+                  value:
+                    code: MALFORMED_JSON
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '401':
+          description: INTERNAL_AUTHENTICATION_REQUIRED
+          x-error-codes:
+            - INTERNAL_AUTHENTICATION_REQUIRED
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                INTERNAL_AUTHENTICATION_REQUIRED:
+                  value:
+                    code: INTERNAL_AUTHENTICATION_REQUIRED
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '409':
+          description: IDEMPOTENCY_CONFLICT, IDEMPOTENCY_IN_PROGRESS
+          x-error-codes:
+            - IDEMPOTENCY_CONFLICT
+            - IDEMPOTENCY_IN_PROGRESS
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+            Retry-After:
+              $ref: '#/components/headers/RetryAfter'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                IDEMPOTENCY_CONFLICT:
+                  value:
+                    code: IDEMPOTENCY_CONFLICT
+                    message: Request could not be completed
+                    request_id: example-request-1
+                IDEMPOTENCY_IN_PROGRESS:
+                  value:
+                    code: IDEMPOTENCY_IN_PROGRESS
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '413':
+          description: BODY_TOO_LARGE
+          x-error-codes:
+            - BODY_TOO_LARGE
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                BODY_TOO_LARGE:
+                  value:
+                    code: BODY_TOO_LARGE
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '415':
+          description: UNSUPPORTED_MEDIA_TYPE
+          x-error-codes:
+            - UNSUPPORTED_MEDIA_TYPE
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                UNSUPPORTED_MEDIA_TYPE:
+                  value:
+                    code: UNSUPPORTED_MEDIA_TYPE
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '422':
+          description: VALIDATION_FAILED
+          x-error-codes:
+            - VALIDATION_FAILED
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                VALIDATION_FAILED:
+                  value:
+                    code: VALIDATION_FAILED
+                    message: Request could not be completed
+                    request_id: example-request-1
+                    details:
+                      violations:
+                        - location: body
+                          pointer: /email
+                          code: required
+                          message: Required value is missing
+        '500':
+          description: INTERNAL_ERROR
+          x-error-codes:
+            - INTERNAL_ERROR
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                INTERNAL_ERROR:
+                  value:
+                    code: INTERNAL_ERROR
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '503':
+          description: SERVICE_UNAVAILABLE
+          x-error-codes:
+            - SERVICE_UNAVAILABLE
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                SERVICE_UNAVAILABLE:
+                  value:
+                    code: SERVICE_UNAVAILABLE
+                    message: Request could not be completed
+                    request_id: example-request-1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MailDemoAction'
+            example:
+              action_id: 11111111-1111-4111-8111-111111111111
+              action: drop_next_response_after_accept
+      security:
+        - MailDemoToken: []
+      x-listener: internal
+  /api/v1/messages:
+    get:
+      operationId: getMessages
+      summary: get Messages
+      x-implementation-status: planned
+      x-body-limit: 65536
+      description: >-
+        Read-only anonymous localhost inbox. Order (accepted_at DESC, id DESC), forward only. Cursor uses a
+        dedicated mailstub HMAC key and binds resource/query scope. No request body is permitted, including an
+        empty JSON object.
+      parameters:
+        - name: X-Request-ID
+          in: header
+          required: false
+          schema:
+            $ref: ./components/identifiers.yaml#/components/schemas/RequestId
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            $ref: ./components/common.yaml#/components/schemas/Cursor
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageCollection'
+              example:
+                items:
+                  - id: 01994342-6ba7-7000-8000-000000000001
+                    accepted_at: '2026-09-12T07:15:30.123456Z'
+                    to: user@example.test
+                    subject: Invoice issued
+                next_cursor: null
+        '400':
+          description: INVALID_HEADER, INVALID_CURSOR
+          x-error-codes:
+            - INVALID_HEADER
+            - INVALID_CURSOR
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                INVALID_HEADER:
+                  value:
+                    code: INVALID_HEADER
+                    message: Request could not be completed
+                    request_id: example-request-1
+                INVALID_CURSOR:
+                  value:
+                    code: INVALID_CURSOR
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '413':
+          description: BODY_TOO_LARGE
+          x-error-codes:
+            - BODY_TOO_LARGE
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                BODY_TOO_LARGE:
+                  value:
+                    code: BODY_TOO_LARGE
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '422':
+          description: VALIDATION_FAILED
+          x-error-codes:
+            - VALIDATION_FAILED
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                VALIDATION_FAILED:
+                  value:
+                    code: VALIDATION_FAILED
+                    message: Request could not be completed
+                    request_id: example-request-1
+                    details:
+                      violations:
+                        - location: body
+                          pointer: /email
+                          code: required
+                          message: Required value is missing
+        '500':
+          description: INTERNAL_ERROR
+          x-error-codes:
+            - INTERNAL_ERROR
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                INTERNAL_ERROR:
+                  value:
+                    code: INTERNAL_ERROR
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '503':
+          description: SERVICE_UNAVAILABLE
+          x-error-codes:
+            - SERVICE_UNAVAILABLE
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                SERVICE_UNAVAILABLE:
+                  value:
+                    code: SERVICE_UNAVAILABLE
+                    message: Request could not be completed
+                    request_id: example-request-1
+      security: []
+      x-listener: inbox
+  /api/v1/messages/{id}:
+    get:
+      operationId: getMessage
+      summary: get Message
+      x-implementation-status: planned
+      x-body-limit: 65536
+      description: >-
+        Read-only localhost inbox. Display text without HTML interpretation. No request body is permitted,
+        including an empty JSON object.
+      parameters:
+        - name: X-Request-ID
+          in: header
+          required: false
+          schema:
+            $ref: ./components/identifiers.yaml#/components/schemas/RequestId
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: ./components/identifiers.yaml#/components/schemas/ResourceId
+      responses:
+        '200':
+          description: Successful response.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+              example:
+                id: 01994342-6ba7-7000-8000-000000000001
+                accepted_at: '2026-09-12T07:15:30.123456Z'
+                to: user@example.test
+                subject: Invoice issued
+                text: 'Ride completed: user_finished. Total: 3000 tyiyn.'
+        '400':
+          description: INVALID_HEADER
+          x-error-codes:
+            - INVALID_HEADER
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                INVALID_HEADER:
+                  value:
+                    code: INVALID_HEADER
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '404':
+          description: RESOURCE_NOT_FOUND
+          x-error-codes:
+            - RESOURCE_NOT_FOUND
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                RESOURCE_NOT_FOUND:
+                  value:
+                    code: RESOURCE_NOT_FOUND
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '413':
+          description: BODY_TOO_LARGE
+          x-error-codes:
+            - BODY_TOO_LARGE
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                BODY_TOO_LARGE:
+                  value:
+                    code: BODY_TOO_LARGE
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '422':
+          description: VALIDATION_FAILED
+          x-error-codes:
+            - VALIDATION_FAILED
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                VALIDATION_FAILED:
+                  value:
+                    code: VALIDATION_FAILED
+                    message: Request could not be completed
+                    request_id: example-request-1
+                    details:
+                      violations:
+                        - location: body
+                          pointer: /email
+                          code: required
+                          message: Required value is missing
+        '500':
+          description: INTERNAL_ERROR
+          x-error-codes:
+            - INTERNAL_ERROR
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                INTERNAL_ERROR:
+                  value:
+                    code: INTERNAL_ERROR
+                    message: Request could not be completed
+                    request_id: example-request-1
+        '503':
+          description: SERVICE_UNAVAILABLE
+          x-error-codes:
+            - SERVICE_UNAVAILABLE
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              $ref: '#/components/headers/CacheControl'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                SERVICE_UNAVAILABLE:
+                  value:
+                    code: SERVICE_UNAVAILABLE
+                    message: Request could not be completed
+                    request_id: example-request-1
+      security: []
+      x-listener: inbox
+components:
+  headers:
+    CacheControl:
+      description: Responses must not be cached.
+      schema:
+        type: string
+        enum:
+          - no-store
+    IdempotencyReplayed:
+      description: true only for a replay of the saved original status and body.
+      schema:
+        type: boolean
+    RequestId:
+      description: Identifier of this HTTP attempt. Replays retain the original body request_id.
+      schema:
+        $ref: ./components/identifiers.yaml#/components/schemas/RequestId
+    RetryAfter:
+      description: Retry after one second for an in-flight command.
+      schema:
+        type: integer
+        enum:
+          - 1
+  schemas:
+    ApiError:
+      $ref: ./components/errors.yaml#/components/schemas/ApiError
+    MessageRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - to
+        - subject
+        - text
+      properties:
+        to:
+          type: string
+          format: email
+          maxLength: 254
+        subject:
+          type: string
+          minLength: 1
+        text:
+          type: string
+          maxLength: 262144
+          description: >-
+            Plain text only; never interpreted as HTML. The total UTF-8 request body is also limited to 262144
+            bytes.
+    DeliveryReceipt:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - accepted_at
+      properties:
+        id:
+          $ref: ./components/identifiers.yaml#/components/schemas/ResourceId
+        accepted_at:
+          $ref: ./components/common.yaml#/components/schemas/Timestamp
+    MailDemoAction:
+      type: object
+      additionalProperties: false
+      required:
+        - action_id
+        - action
+      properties:
+        action_id:
+          $ref: ./components/identifiers.yaml#/components/schemas/CommandId
+        action:
+          type: string
+          enum:
+            - drop_next_response_after_accept
+    MailDemoResult:
+      type: object
+      additionalProperties: false
+      required:
+        - action_id
+        - server_time
+      properties:
+        action_id:
+          $ref: ./components/identifiers.yaml#/components/schemas/CommandId
+        server_time:
+          $ref: ./components/common.yaml#/components/schemas/Timestamp
+    MessageSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - to
+        - subject
+        - accepted_at
+      properties:
+        id:
+          $ref: ./components/identifiers.yaml#/components/schemas/ResourceId
+        to:
+          type: string
+          format: email
+          maxLength: 254
+        subject:
+          type: string
+        accepted_at:
+          $ref: ./components/common.yaml#/components/schemas/Timestamp
+    Message:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - to
+        - subject
+        - accepted_at
+        - text
+      properties:
+        id:
+          $ref: ./components/identifiers.yaml#/components/schemas/ResourceId
+        to:
+          type: string
+          format: email
+          maxLength: 254
+        subject:
+          type: string
+        accepted_at:
+          $ref: ./components/common.yaml#/components/schemas/Timestamp
+        text:
+          type: string
+    MessageCollection:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - next_cursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MessageSummary'
+        next_cursor:
+          type: string
+          pattern: ^[A-Za-z0-9_-]+$
+          minLength: 1
+          nullable: true
+          description: Required; null on the last or empty page. Signed cursor; see Cursor.
+  securitySchemes:
+    DeliveryToken:
+      type: http
+      scheme: bearer
+      description: mailstub_delivery_token
+    MailDemoToken:
+      type: http
+      scheme: bearer
+      description: mailstub_demo_token
