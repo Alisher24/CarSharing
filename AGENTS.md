@@ -19,6 +19,22 @@ Write the entire commit message in English as one concise sentence using the for
 Use only that single subject line: do not add a body, bullet list, pull request reference, author credit,
 `Co-authored-by` trailer, or any other metadata.
 
+### Merging
+
+`master` is protected and takes no merge commits, so a change reaches it in one way only: a branch off
+`master`, pushed, and merged through a pull request with squash merge. `master` stays linear, and one
+task is one commit on it.
+
+- Never merge into `master` locally and never push to it directly. A local merge commit is rejected by
+  the branch protection rule, which leaves the work stranded outside `master` with a history nobody
+  asked for.
+- A branch is named `T<task number>-<short-name>`. One task is one branch and one pull request; a
+  follow-up to a merged pull request is a new branch.
+- A squash merge discards the branch's own commits, so the pull request is where the reasoning, the
+  checks and the alternatives belong. The commit that lands carries only the one-sentence subject.
+- Run the formatting gates before the pull request rather than relying on the pipeline to report them;
+  the required `Repository checks` gate blocks the merge until every job passes.
+
 ### Architecture and wiring
 
 A process has one composition root that names every concrete implementation it runs and hands them
