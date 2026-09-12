@@ -37,6 +37,7 @@ const (
 	defaultArgon2MemoryKiB   = 19 * 1024
 	defaultArgon2Passes      = 2
 	defaultArgon2Parallelism = 1
+	defaultArgon2Concurrent  = 2
 )
 
 // Argon2Config is the cost of one password hash. Q19 of the T05 specification fixes the starting
@@ -46,6 +47,11 @@ type Argon2Config struct {
 	MemoryKiB   uint32
 	Passes      uint32
 	Parallelism uint8
+
+	// Concurrent is how many password hashes one instance computes at a time. Beyond it a request
+	// is refused rather than queued, because a queue in front of a memory-hard function is how the
+	// instance is made to run out of memory.
+	Concurrent int
 }
 
 type Config struct {
@@ -166,8 +172,13 @@ func loadArgon2() (Argon2Config, error) {
 	if err != nil {
 		return Argon2Config{}, err
 	}
+	concurrent, err := positiveNumber("AUTH_ARGON2_CONCURRENT", defaultArgon2Concurrent, 8)
+	if err != nil {
+		return Argon2Config{}, err
+	}
 	return Argon2Config{
 		MemoryKiB: uint32(memory), Passes: uint32(passes), Parallelism: uint8(parallelism),
+		Concurrent: int(concurrent),
 	}, nil
 }
 

@@ -39,7 +39,7 @@ func main() {
 
 // application assembles what the HTTP layer serves: the readiness probe, the session store and the
 // account rules, all over the one pool so that a request can commit a user and its session together.
-func application(cfg config.Config, pool *pgxpool.Pool) httpapi.Application {
+func application(cfg config.Config, pool *pgxpool.Pool) (httpapi.Application, error) {
 	users := auth.NewUserStore(pool)
 	hasher := auth.NewPasswordHasher(auth.HashingParameters{
 		MemoryKiB:   cfg.Argon2.MemoryKiB,
@@ -47,16 +47,20 @@ func application(cfg config.Config, pool *pgxpool.Pool) httpapi.Application {
 		Parallelism: cfg.Argon2.Parallelism,
 		SaltLength:  auth.SaltLength,
 		KeyLength:   auth.KeyLength,
-	})
+	}, cfg.Argon2.Concurrent)
+	service, err := auth.NewService(users, hasher)
+	if err != nil {
+		return httpapi.Application{}, err
+	}
 	return httpapi.Application{
 		Probe:          httpapi.DatabaseProbe(pool),
 		AllowedOrigins: cfg.AllowedOrigins,
 		Pool:           pool,
 		Sessions:       sessions.NewManager(pool, cfg.SessionCookieSecure),
-		Auth:           auth.NewService(users, hasher),
+		Auth:           service,
 		Users:          users,
 		Throttle:       auth.NewThrottle(ratelimit.NewCounter(pool, countedLimits(cfg))),
-	}
+	}, nil
 }
 
 // countedLimits maps the configured limits onto the scopes the account operations count under.
@@ -83,8 +87,12 @@ func run() error {
 		return err
 	}
 	defer pool.Close()
+	served, err := application(cfg, pool)
+	if err != nil {
+		return err
+	}
 	server := &http.Server{
-		Addr: cfg.HTTPAddr, Handler: httpapi.Router(application(cfg, pool)),
+		Addr: cfg.HTTPAddr, Handler: httpapi.Router(served),
 		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second,
 		WriteTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second,
 		MaxHeaderBytes: 16 << 10,

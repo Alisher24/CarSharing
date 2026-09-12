@@ -41,15 +41,49 @@ type HashingParameters struct {
 // PasswordHasher derives and checks Argon2id password hashes. Every hash carries its own salt and
 // the parameters it was produced with, so raising the cost later does not lock existing accounts
 // out.
-type PasswordHasher struct{ parameters HashingParameters }
-
-func NewPasswordHasher(parameters HashingParameters) *PasswordHasher {
-	return &PasswordHasher{parameters: parameters}
+//
+// Argon2id is memory-hard by design, which makes it the most expensive thing a request can ask
+// for. The hasher therefore admits only a fixed number of computations at a time and refuses the
+// rest outright: a queue in front of a memory-hard function is how one instance is made to exhaust
+// its memory and stop answering anything at all.
+type PasswordHasher struct {
+	parameters HashingParameters
+	slots      chan struct{}
 }
+
+// ErrHashingBusy reports that every hashing slot on this instance is taken. A caller answers it as
+// a service failure, because the work was not attempted rather than attempted and refused.
+var ErrHashingBusy = errors.New("no hashing slot is free")
+
+// NewPasswordHasher builds a hasher admitting concurrent computations up to a ceiling. A ceiling
+// below one would admit nothing, so it is raised to one.
+func NewPasswordHasher(parameters HashingParameters, concurrent int) *PasswordHasher {
+	if concurrent < 1 {
+		concurrent = 1
+	}
+	return &PasswordHasher{parameters: parameters, slots: make(chan struct{}, concurrent)}
+}
+
+// acquire takes a hashing slot without waiting, so a request that finds the instance saturated is
+// told so immediately instead of being parked until something times out.
+func (h *PasswordHasher) acquire() bool {
+	select {
+	case h.slots <- struct{}{}:
+		return true
+	default:
+		return false
+	}
+}
+
+func (h *PasswordHasher) release() { <-h.slots }
 
 // Hash derives a new hash under the configured parameters, with a salt drawn for this password
 // alone so that two accounts sharing a password do not share a stored value.
 func (h *PasswordHasher) Hash(password string) (string, error) {
+	if !h.acquire() {
+		return "", ErrHashingBusy
+	}
+	defer h.release()
 	salt := make([]byte, h.parameters.SaltLength)
 	if _, err := rand.Read(salt); err != nil {
 		return "", errors.New("cannot draw a password salt")
@@ -65,6 +99,10 @@ func (h *PasswordHasher) Verify(encoded, password string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	if !h.acquire() {
+		return false, ErrHashingBusy
+	}
+	defer h.release()
 	got := h.derive(parameters, password, salt)
 	// Constant time, so the answer does not depend on how much of the hash matched.
 	return subtle.ConstantTimeCompare(got, want) == 1, nil
