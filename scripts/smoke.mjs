@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
-import { SERVICE_ORIGIN, compose, composeWith, sql } from './service.mjs';
+import { SERVICE_ORIGIN, composeWith, sql } from './service.mjs';
 
 const LOCAL_ORIGIN_PATTERN = /^http:\/\/(127\.0\.0\.1|localhost):\d+$/;
 const ORIGIN_ARGUMENT_INDEX = 2;
@@ -37,6 +37,7 @@ const POSTGIS_VERSION_QUERY = 'SELECT postgis_version()';
 const BOOTSTRAP_METADATA_CREATED_AT_QUERY = 'SELECT created_at FROM bootstrap_metadata';
 const BOOTSTRAP_SEED_APPLIED_AT_QUERY = `SELECT applied_at FROM seed_runs WHERE name = '${BOOTSTRAP_SEED}'`;
 const BOOTSTRAP_SEED_COUNT_QUERY = `SELECT count(*) FROM seed_runs WHERE name = '${BOOTSTRAP_SEED}'`;
+
 // Retired health URLs, planned operations and the internal API must all be unreachable from outside.
 const UNREACHABLE_PATHS = [
   '/health/live',
@@ -54,17 +55,9 @@ function applicationRole() {
   return sql("SELECT usename FROM pg_stat_activity WHERE application_name = 'carsharing' AND usename <> '' LIMIT 1");
 }
 
-function runCompose(...args) {
-  return composeWith({}, ...args);
-}
-
-function queryDatabase(query) {
-  return sql(query);
-}
-
 /** Runs a one-off compose service, as the migration and seed containers are meant to be run. */
 function runOneOffService(service, serviceArguments, composeOptions = []) {
-  return runCompose(...composeOptions, 'run', '--rm', service, ...serviceArguments);
+  return composeWith({}, ...composeOptions, 'run', '--rm', service, ...serviceArguments);
 }
 
 /** The seed profile is demo data, so a run of it never reaches an installation without that profile. */
@@ -135,39 +128,36 @@ async function checkSessionRequirementIsDistinguishable(origin) {
 function checkDatabaseRoleIsUnprivileged() {
   const role = applicationRole();
   assert.ok(role, 'the API recorded no application role, so its privileges cannot be checked');
-  assert.equal(
-    queryDatabase(`SELECT (rolsuper OR rolcreatedb OR rolcreaterole) FROM pg_roles WHERE rolname = '${role}'`),
-    'f',
-  );
-  assert.equal(queryDatabase(`SELECT has_table_privilege('${role}', 'bootstrap_metadata', 'INSERT')`), 'f');
-  assert.match(queryDatabase(POSTGIS_VERSION_QUERY), POSTGIS_VERSION_PATTERN);
+  assert.equal(sql(`SELECT (rolsuper OR rolcreatedb OR rolcreaterole) FROM pg_roles WHERE rolname = '${role}'`), 'f');
+  assert.equal(sql(`SELECT has_table_privilege('${role}', 'bootstrap_metadata', 'INSERT')`), 'f');
+  assert.match(sql(POSTGIS_VERSION_QUERY), POSTGIS_VERSION_PATTERN);
   return role;
 }
 
 /** Migrations and seeds must be repeatable, so a second run changes neither row nor timestamp. */
 function checkRepeatedMigrationAndSeedAreIdempotent() {
-  const metadataCreatedAt = queryDatabase(BOOTSTRAP_METADATA_CREATED_AT_QUERY);
+  const metadataCreatedAt = sql(BOOTSTRAP_METADATA_CREATED_AT_QUERY);
   runOneOffService(MIGRATION_SERVICE, [MIGRATION_UP_ARGUMENT]);
-  assert.equal(queryDatabase(BOOTSTRAP_METADATA_CREATED_AT_QUERY), metadataCreatedAt);
+  assert.equal(sql(BOOTSTRAP_METADATA_CREATED_AT_QUERY), metadataCreatedAt);
 
   runDemoSeed();
-  const seedAppliedAt = queryDatabase(BOOTSTRAP_SEED_APPLIED_AT_QUERY);
+  const seedAppliedAt = sql(BOOTSTRAP_SEED_APPLIED_AT_QUERY);
   runDemoSeed();
-  assert.equal(queryDatabase(BOOTSTRAP_SEED_COUNT_QUERY), '1');
-  assert.equal(queryDatabase(BOOTSTRAP_SEED_APPLIED_AT_QUERY), seedAppliedAt);
+  assert.equal(sql(BOOTSTRAP_SEED_COUNT_QUERY), '1');
+  assert.equal(sql(BOOTSTRAP_SEED_APPLIED_AT_QUERY), seedAppliedAt);
 
   return { metadataCreatedAt, seedAppliedAt };
 }
 
 /** A restart of the API must not lose the migration and seed state the previous checks recorded. */
 function checkRecordedStatePersists(recordedState) {
-  assert.equal(queryDatabase(BOOTSTRAP_METADATA_CREATED_AT_QUERY), recordedState.metadataCreatedAt);
-  assert.equal(queryDatabase(BOOTSTRAP_SEED_APPLIED_AT_QUERY), recordedState.seedAppliedAt);
+  assert.equal(sql(BOOTSTRAP_METADATA_CREATED_AT_QUERY), recordedState.metadataCreatedAt);
+  assert.equal(sql(BOOTSTRAP_SEED_APPLIED_AT_QUERY), recordedState.seedAppliedAt);
 }
 
 // Exercises dependency failure while the API process stays alive, then restores it even on failure.
 async function checkOutageIsReportedAndRecovered(origin) {
-  runCompose('stop', POSTGRES_SERVICE);
+  composeWith({}, 'stop', POSTGRES_SERVICE);
   try {
     const response = await fetch(`${origin}${READINESS_PATH}`, {
       signal: AbortSignal.timeout(OUTAGE_REQUEST_TIMEOUT_MS),
@@ -178,7 +168,7 @@ async function checkOutageIsReportedAndRecovered(origin) {
     assert.equal(error.request_id, response.headers.get('x-request-id'));
     assert.equal((await fetch(`${origin}${LIVENESS_PATH}`)).status, 200);
   } finally {
-    runCompose('start', POSTGRES_SERVICE);
+    composeWith({}, 'start', POSTGRES_SERVICE);
   }
   await awaitReady(origin);
 }
