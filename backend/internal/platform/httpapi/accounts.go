@@ -3,6 +3,8 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"math"
+	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/auth"
 	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
@@ -17,6 +19,7 @@ import (
 const (
 	messageEmailAlreadyRegistered = "Email is already registered"
 	messageInvalidCredentials     = "Invalid email or password"
+	messageRateLimited            = "Too many attempts; try again later"
 	messageServiceUnavailable     = "Service unavailable"
 )
 
@@ -28,6 +31,7 @@ type accounts struct {
 	sessions *sessions.Manager
 	service  *auth.Service
 	users    *auth.UserStore
+	throttle *auth.Throttle
 }
 
 func (a accounts) Register(
@@ -39,6 +43,26 @@ func (a accounts) Register(
 	}
 	if err = auth.ValidatePassword(request.Body.Password); err != nil {
 		return servedapi.Register422JSONResponse{Body: a.validationError(ctx, bodyViolation("/password", "invalid", "Password does not meet the policy"))}, nil
+	}
+	wait, allowed, err := a.throttle.RegistrationAllowed(ctx, clientAddress(ctx))
+	if err != nil {
+		return servedapi.Register503JSONResponse{
+			Body: apiErrorBody(ctx, codeServiceUnavailable, messageServiceUnavailable),
+		}, nil
+	}
+	if !allowed {
+		seconds := retryAfterSeconds(wait)
+		return servedapi.Register429JSONResponse{
+			Body:    apiErrorBody(ctx, codeRateLimited, messageRateLimited),
+			Headers: servedapi.Register429ResponseHeaders{RetryAfter: &seconds},
+		}, nil
+	}
+	// The attempt is counted before it is carried out, so an attempt that fails or is refused
+	// still spends the budget of the address it came from.
+	if err = a.throttle.RecordRegistrationAttempt(ctx, clientAddress(ctx)); err != nil {
+		return servedapi.Register503JSONResponse{
+			Body: apiErrorBody(ctx, codeServiceUnavailable, messageServiceUnavailable),
+		}, nil
 	}
 	var user auth.User
 	var issued sessions.Issued
@@ -76,6 +100,27 @@ func (a accounts) Login(
 	if err != nil {
 		return a.invalidCredentials(ctx), nil
 	}
+	address := clientAddress(ctx)
+	wait, allowed, err := a.throttle.SignInAllowed(ctx, email, address)
+	if err != nil {
+		return servedapi.Login503JSONResponse{
+			Body: apiErrorBody(ctx, codeServiceUnavailable, messageServiceUnavailable),
+		}, nil
+	}
+	// The limit is consulted before the password is verified, so a throttled attempt never pays
+	// the memory-hard cost of a hash.
+	if !allowed {
+		seconds := retryAfterSeconds(wait)
+		return servedapi.Login429JSONResponse{
+			Body:    apiErrorBody(ctx, codeRateLimited, messageRateLimited),
+			Headers: servedapi.Login429ResponseHeaders{RetryAfter: &seconds},
+		}, nil
+	}
+	if err = a.throttle.RecordSignInAttempt(ctx, address); err != nil {
+		return servedapi.Login503JSONResponse{
+			Body: apiErrorBody(ctx, codeServiceUnavailable, messageServiceUnavailable),
+		}, nil
+	}
 	var user auth.User
 	var issued sessions.Issued
 	err = database.InTransaction(ctx, a.pool, func(txCtx context.Context) error {
@@ -92,6 +137,13 @@ func (a accounts) Login(
 		return err
 	})
 	if errors.Is(err, auth.ErrInvalidCredentials) {
+		// Recorded outside the transaction the refused attempt just rolled back, which would
+		// otherwise undo the counter and leave the guess free.
+		if failed := a.throttle.RecordSignInFailure(ctx, email, address); failed != nil {
+			return servedapi.Login503JSONResponse{
+				Body: apiErrorBody(ctx, codeServiceUnavailable, messageServiceUnavailable),
+			}, nil
+		}
 		return a.invalidCredentials(ctx), nil
 	}
 	if err != nil {
@@ -180,4 +232,14 @@ func snapshotOf(user auth.User, session sessions.Snapshot) servedapi.SessionSnap
 			CreatedAt: formatTimestamp(user.CreatedAt),
 		},
 	}
+}
+
+// retryAfterSeconds renders a wait for the Retry-After header, never below one second so that a
+// caller told to wait is not invited straight back by a rounded-down zero.
+func retryAfterSeconds(wait time.Duration) int {
+	seconds := int(math.Ceil(wait.Seconds()))
+	if seconds < 1 {
+		return 1
+	}
+	return seconds
 }

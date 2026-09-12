@@ -1,12 +1,15 @@
 // Which page may act, and with what token. Observed on the real HTTP boundary, because the point
 // of both rules is what the running service refuses before anything is created.
 import assert from 'node:assert/strict';
-import { before, describe, test } from 'node:test';
-import { call, newEmail, password, registerAccount, sessionCookie, waitForReady } from './client.mjs';
+import { before, beforeEach, describe, test } from 'node:test';
+import { call, newEmail, password, registerAccount, resetRateLimits, sessionCookie, waitForReady } from './client.mjs';
 
 const foreignOrigin = 'http://attacker.example';
 
 before(waitForReady);
+
+// Every suite shares one address, so each test starts with the limits of Q11 untouched by the last.
+beforeEach(resetRateLimits);
 
 describe('a mutation from an origin this application does not allow', () => {
   for (const [name, path, hasBody] of [

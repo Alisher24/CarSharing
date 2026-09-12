@@ -7,6 +7,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/Alisher24/CarSharing/backend/internal/platform/ratelimit"
 )
 
 // minPasswordLength is the shortest database password setup generates, restated here so a
@@ -16,6 +19,17 @@ const minPasswordLength = 32
 // defaultAllowedOrigins is the documented local profile: the application served over plain HTTP on
 // the loopback address under either spelling a browser may use.
 const defaultAllowedOrigins = "http://127.0.0.1:8080,http://localhost:8080"
+
+// Starting rate limits from Q11 of the T05 specification. Each is overridable, because the
+// values that suit a local demonstration are not the values that suit a deployment.
+const (
+	defaultSignInEmailAddressAttempts  = 10
+	defaultSignInEmailAttempts         = 30
+	defaultSignInAddressAttempts       = 100
+	defaultRegistrationAddressAttempts = 10
+	defaultSignInWindow                = 15 * time.Minute
+	defaultRegistrationWindow          = time.Hour
+)
 
 // Starting Argon2id cost from Q19 of the T05 specification: 19 MiB of memory, two passes and one
 // thread. Each is overridable, because the values that ship are the measured ones.
@@ -49,6 +63,15 @@ type Config struct {
 	// local HTTP profile; any deployment over HTTPS turns it on.
 	SessionCookieSecure bool
 	Argon2              Argon2Config
+	RateLimits          RateLimitConfig
+}
+
+// RateLimitConfig is how many attempts each counted subject may make, and over what window.
+type RateLimitConfig struct {
+	SignInByEmailAndAddress ratelimit.Limit
+	SignInByEmail           ratelimit.Limit
+	SignInByAddress         ratelimit.Limit
+	RegistrationByAddress   ratelimit.Limit
 }
 
 func Load() (Config, error) {
@@ -80,7 +103,54 @@ func Load() (Config, error) {
 	if err != nil {
 		return cfg, err
 	}
+	cfg.RateLimits, err = loadRateLimits()
+	if err != nil {
+		return cfg, err
+	}
 	return cfg, nil
+}
+
+func loadRateLimits() (RateLimitConfig, error) {
+	var limits RateLimitConfig
+	var err error
+	for _, setting := range []struct {
+		key      string
+		attempts uint64
+		window   time.Duration
+		assign   func(ratelimit.Limit)
+	}{
+		{"SIGNIN_EMAIL_ADDRESS", defaultSignInEmailAddressAttempts, defaultSignInWindow,
+			func(l ratelimit.Limit) { limits.SignInByEmailAndAddress = l }},
+		{"SIGNIN_EMAIL", defaultSignInEmailAttempts, defaultSignInWindow,
+			func(l ratelimit.Limit) { limits.SignInByEmail = l }},
+		{"SIGNIN_ADDRESS", defaultSignInAddressAttempts, defaultSignInWindow,
+			func(l ratelimit.Limit) { limits.SignInByAddress = l }},
+		{"REGISTRATION_ADDRESS", defaultRegistrationAddressAttempts, defaultRegistrationWindow,
+			func(l ratelimit.Limit) { limits.RegistrationByAddress = l }},
+	} {
+		var limit ratelimit.Limit
+		limit, err = loadLimit(setting.key, setting.attempts, setting.window)
+		if err != nil {
+			return RateLimitConfig{}, err
+		}
+		setting.assign(limit)
+	}
+	return limits, nil
+}
+
+// loadLimit reads one limit from RATE_LIMIT_<name>_ATTEMPTS and RATE_LIMIT_<name>_WINDOW.
+func loadLimit(name string, attempts uint64, window time.Duration) (ratelimit.Limit, error) {
+	counted, err := positiveNumber("RATE_LIMIT_"+name+"_ATTEMPTS", attempts, 31)
+	if err != nil {
+		return ratelimit.Limit{}, err
+	}
+	key := "RATE_LIMIT_" + name + "_WINDOW"
+	if raw := os.Getenv(key); raw != "" {
+		if window, err = time.ParseDuration(raw); err != nil || window <= 0 {
+			return ratelimit.Limit{}, errors.New(key + " must be a positive duration such as 15m")
+		}
+	}
+	return ratelimit.Limit{Attempts: int(counted), Window: window}, nil
 }
 
 func loadArgon2() (Argon2Config, error) {

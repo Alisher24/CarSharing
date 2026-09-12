@@ -1,10 +1,13 @@
 // Registration, sign-in and session restoration, observed on the real HTTP boundary against the
 // PostgreSQL the running service uses.
 import assert from 'node:assert/strict';
-import { after, before, describe, test } from 'node:test';
-import { call, compose, newEmail, password, registerAccount, sessionSetCookie, sql, waitForReady } from './client.mjs';
+import { after, before, beforeEach, describe, test } from 'node:test';
+import { call, compose, newEmail, password, registerAccount, resetRateLimits, sessionSetCookie, sql, waitForReady } from './client.mjs';
 
 before(waitForReady);
+
+// Every suite shares one address, so each test starts with the limits of Q11 untouched by the last.
+beforeEach(resetRateLimits);
 
 describe('registration establishes a session', () => {
   test('answers 201 with a snapshot that carries no session token', async () => {

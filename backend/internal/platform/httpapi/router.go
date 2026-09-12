@@ -22,6 +22,7 @@ type Application struct {
 	Sessions *sessions.Manager
 	Auth     *auth.Service
 	Users    *auth.UserStore
+	Throttle *auth.Throttle
 }
 
 // server implements every served operation by delegating to the handler that owns its concern, so
@@ -58,13 +59,14 @@ func Router(app Application) http.Handler {
 		health: health{probe: app.Probe},
 		accounts: accounts{
 			pool: app.Pool, sessions: app.Sessions, service: app.Auth, users: app.Users,
+			throttle: app.Throttle,
 		},
 	}
 	handler := servedapi.NewStrictHandlerWithOptions(implementation, nil, options)
 	// The session is attached before the boundary so that the boundary's credential check and the
 	// handler below it read one resolved session rather than querying the store twice.
 	policy := transport{allowedOrigins: originSet(app.AllowedOrigins), authenticate: authenticateSession}
-	return withSession(app.Sessions, boundary(spec, servedapi.Handler(handler), policy))
+	return withClientAddress(withSession(app.Sessions, boundary(spec, servedapi.Handler(handler), policy)))
 }
 
 // originSet indexes the allowed origins for lookup, so the check is a comparison rather than a scan.

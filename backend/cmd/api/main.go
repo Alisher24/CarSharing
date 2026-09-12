@@ -15,6 +15,7 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/platform/config"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/httpapi"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/ratelimit"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/sessions"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -54,6 +55,17 @@ func application(cfg config.Config, pool *pgxpool.Pool) httpapi.Application {
 		Sessions:       sessions.NewManager(pool, cfg.SessionCookieSecure),
 		Auth:           auth.NewService(users, hasher),
 		Users:          users,
+		Throttle:       auth.NewThrottle(ratelimit.NewCounter(pool, countedLimits(cfg))),
+	}
+}
+
+// countedLimits maps the configured limits onto the scopes the account operations count under.
+func countedLimits(cfg config.Config) map[ratelimit.Scope]ratelimit.Limit {
+	return map[ratelimit.Scope]ratelimit.Limit{
+		auth.SignInByEmailAndAddress: cfg.RateLimits.SignInByEmailAndAddress,
+		auth.SignInByEmail:           cfg.RateLimits.SignInByEmail,
+		auth.SignInByAddress:         cfg.RateLimits.SignInByAddress,
+		auth.RegistrationByAddress:   cfg.RateLimits.RegistrationByAddress,
 	}
 }
 

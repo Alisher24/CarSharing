@@ -20,6 +20,7 @@ const (
 	codeAuthenticationRequired         = servedapi.AUTHENTICATIONREQUIRED
 	codeEmailAlreadyRegistered         = servedapi.EMAILALREADYREGISTERED
 	codeInvalidCredentials             = servedapi.INVALIDCREDENTIALS
+	codeRateLimited                    = servedapi.RATELIMITED
 	codeBodyTooLarge                   = servedapi.BODYTOOLARGE
 	codeCSRFInvalid                    = servedapi.CSRFINVALID
 	codeIdempotencyKeyInvalid          = servedapi.IDEMPOTENCYKEYINVALID

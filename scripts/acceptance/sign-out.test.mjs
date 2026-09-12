@@ -1,10 +1,13 @@
 // Signing out ends one session and leaves the account. Observed on the real HTTP boundary, because
 // what matters is which sessions the running service still honours afterwards.
 import assert from 'node:assert/strict';
-import { before, describe, test } from 'node:test';
-import { call, password, registerAccount, sessionCookie, sessionSetCookie, waitForReady } from './client.mjs';
+import { before, beforeEach, describe, test } from 'node:test';
+import { call, password, registerAccount, resetRateLimits, sessionCookie, sessionSetCookie, waitForReady } from './client.mjs';
 
 before(waitForReady);
+
+// Every suite shares one address, so each test starts with the limits of Q11 untouched by the last.
+beforeEach(resetRateLimits);
 
 /** Signs the same account in again without presenting the first session, as a second device would. */
 async function secondDevice(email) {

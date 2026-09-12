@@ -75,11 +75,21 @@ export async function registerAccount(prefix, overrides = {}) {
 }
 
 export function compose(...args) {
+  return composeWith({}, ...args);
+}
+
+/**
+ * Runs a compose command with extra environment. Compose substitutes these into the service
+ * definition, so recreating a service this way is how a suite proves the running service reads its
+ * configuration rather than a constant compiled into it.
+ */
+export function composeWith(environment, ...args) {
   return execFileSync('docker', ['compose', ...args], {
     cwd: root,
     encoding: 'utf8',
-    timeout: 120_000,
+    timeout: 180_000,
     stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, ...environment },
   }).trim();
 }
 
@@ -103,4 +113,13 @@ export async function waitForReady() {
     await delay(1000);
   }
   throw new Error('API did not become ready');
+}
+
+/**
+ * Clears every rate-limit counter. The suites share one address, so without this the limits of Q11
+ * would refuse the accounts a later suite needs. Clearing a counter is the harness standing in for
+ * the passage of time, which is also how access returns in production.
+ */
+export function resetRateLimits() {
+  sql('DELETE FROM rate_limit_counters');
 }

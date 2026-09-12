@@ -429,6 +429,8 @@ paths:
               $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: '#/components/headers/CacheControl'
+            Retry-After:
+              $ref: '#/components/headers/RetryAfterWait'
           content:
             application/json:
               schema:
@@ -669,6 +671,8 @@ paths:
               $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: '#/components/headers/CacheControl'
+            Retry-After:
+              $ref: '#/components/headers/RetryAfterWait'
           content:
             application/json:
               schema:
@@ -5501,6 +5505,13 @@ components:
         type: integer
         enum:
           - 1
+    RetryAfterWait:
+      description: >-
+        Seconds to wait before a refused authentication attempt may be repeated. The value varies with the
+        limit that was reached, unlike the fixed one-second Retry-After of an in-flight domain command.
+      schema:
+        type: integer
+        minimum: 1
     SessionCookie:
       description: >-
         Session cookie carsharing_session is HttpOnly, Path=/, SameSite=Lax, with an absolute 12-hour lifetime
