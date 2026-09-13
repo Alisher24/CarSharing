@@ -95,12 +95,16 @@ describe('the four moments of the deadline', () => {
       deadlineSeconds: BEFORE_WINDOW_SECONDS,
     });
 
-    // The deadline is stated ninety seconds from the clock of the database, and the check reads the
-    // row about three seconds later. The window therefore opens half a minute after the absence below
-    // has been read, however many passes run in between, so what the check observes is the near side
-    // of the boundary rather than the schedule of a pass.
     await delay(QUIET_MS);
 
+    // The absence below is worth what the deadline says it is worth, so the deadline and the moment
+    // the check reads it at are both read from the database, and what is left of the deadline says
+    // whether the window had opened. More than the minute the warning belongs to means it had not.
+    const remainingMs = rentalDeadlineRemainingMs(rentalId);
+    assert.ok(
+      remainingMs > WARNING_LEAD_MS,
+      `the check read the row with ${remainingMs} ms left, which is inside the warning window`,
+    );
     assert.deepEqual(notificationsOf(rentalId), [], 'a warning was created before the last minute');
     assert.equal(signalsOf(rentalId).length, 0, 'a signal was queued before the last minute');
     assert.equal(storedRental(rentalId)[0], 'reserved');
@@ -627,6 +631,19 @@ function prepareReservation({
  */
 function rentalMoment(rentalId, column) {
   return Number(sql(`SELECT (extract(epoch FROM ${column}) * 1000)::bigint FROM rentals WHERE id = '${rentalId}'`));
+}
+
+/**
+ * What is left of one rental's deadline at the moment the database answers, which is the clock the
+ * deadline rules act on rather than the clock of this process.
+ */
+function rentalDeadlineRemainingMs(rentalId) {
+  return Number(
+    sql(
+      `SELECT (extract(epoch FROM expires_at - clock_timestamp()) * 1000)::bigint ` +
+        `FROM rentals WHERE id = '${rentalId}'`,
+    ),
+  );
 }
 
 /** Every notification the database holds for one rental, in the order the collection reads them. */
