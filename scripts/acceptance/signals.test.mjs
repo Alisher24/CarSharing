@@ -53,14 +53,11 @@ before(async () => {
 });
 
 // A check that left a reservation behind would hold a vehicle the next one needs, and the suites
-// after this one read the prepared demonstration.
-beforeEach(async () => {
-  await endSuiteSignals();
-});
+// after this one read the prepared demonstration. This suite's accounts carry the notification
+// prefix, so the cleanup that already knows those rows is the one it uses.
+beforeEach(endSuiteNotifications);
 
-after(async () => {
-  await endSuiteSignals();
-});
+after(endSuiteNotifications);
 
 describe('the personal change signal', () => {
   test('reaches its owner inside two seconds of the moment the warning was stored', async () => {
@@ -125,12 +122,12 @@ describe('the personal change signal', () => {
       await delay(SILENCE_MS);
 
       assert.equal(
-        strangerStream.frames.some(carriesNotification),
+        strangerStream.frames.some(isNotificationChanged),
         false,
         'another account received a private notification signal',
       );
       assert.equal(
-        publicStream.frames.some(carriesNotification),
+        publicStream.frames.some(isNotificationChanged),
         false,
         'the public stream carried a private notification signal',
       );
@@ -151,7 +148,7 @@ async function arrived(stream, notificationId) {
 }
 
 /** Whether one frame is a personal notification change, whoever it was about. */
-function carriesNotification(frame) {
+function isNotificationChanged(frame) {
   return frame.event === NOTIFICATION_CHANGED;
 }
 
@@ -183,22 +180,11 @@ function notificationOf(rentalId) {
 
 /** When the database stored one warning, which is the moment its delivery is measured from. */
 function storedWarningMoment(notificationId) {
-  return Number(
-    sql(
-      `SELECT (extract(epoch FROM created_at) * 1000)::bigint ` + `FROM notifications WHERE id = '${notificationId}'`,
-    ),
-  );
+  const query = `SELECT (extract(epoch FROM created_at) * 1000)::bigint FROM notifications WHERE id = '${notificationId}'`;
+  return Number(sql(query));
 }
 
 /** The version one stored notification reached. */
 function storedVersion(notificationId) {
   return Number(sql(`SELECT version FROM notifications WHERE id = '${notificationId}'`));
-}
-
-/**
- * Leaves the database as this suite found it. The reservations this suite wrote belong to accounts
- * the notification suites recognize, so their cleanup is the one that already removes them.
- */
-function endSuiteSignals() {
-  return endSuiteNotifications();
 }
