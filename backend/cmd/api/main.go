@@ -58,13 +58,7 @@ func main() {
 // account rules, all over the one pool so that a request can commit a user and its session together.
 func application(cfg config.Config, pool *pgxpool.Pool) (httpapi.Dependencies, error) {
 	users := auth.NewUserStore(pool)
-	hasher := auth.NewPasswordHasher(auth.HashingParameters{
-		MemoryKiB:   cfg.Argon2.MemoryKiB,
-		Passes:      cfg.Argon2.Passes,
-		Parallelism: cfg.Argon2.Parallelism,
-		SaltLength:  auth.SaltLength,
-		KeyLength:   auth.KeyLength,
-	}, cfg.Argon2.Concurrent)
+	hasher := auth.NewPasswordHasher(cfg.Argon2)
 	service, err := auth.NewService(users, hasher)
 	if err != nil {
 		return httpapi.Dependencies{}, err

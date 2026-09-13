@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Alisher24/CarSharing/backend/internal/platform/hashing"
 	"golang.org/x/crypto/argon2"
 )
 
@@ -28,9 +29,10 @@ const (
 // of as invalid credentials.
 var ErrStoredHashUnusable = errors.New("stored password hash cannot be read")
 
-// HashingParameters is the cost of one Argon2id computation. They are configuration rather than
-// constants because the final values come from measurements in the target Docker environment.
-type HashingParameters struct {
+// hashingParameters is the cost of one Argon2id computation, as a stored hash carries it. The salt
+// and key lengths belong to it because a hash written by an earlier build has to stay verifiable,
+// not because a deployment may choose them.
+type hashingParameters struct {
 	MemoryKiB   uint32
 	Passes      uint32
 	Parallelism uint8
@@ -47,7 +49,7 @@ type HashingParameters struct {
 // rest outright: a queue in front of a memory-hard function is how one instance is made to exhaust
 // its memory and stop answering anything at all.
 type PasswordHasher struct {
-	parameters HashingParameters
+	parameters hashingParameters
 	slots      chan struct{}
 }
 
@@ -55,9 +57,22 @@ type PasswordHasher struct {
 // a service failure, because the work was not attempted rather than attempted and refused.
 var ErrHashingBusy = errors.New("no hashing slot is free")
 
-// NewPasswordHasher builds a hasher admitting concurrent computations up to a ceiling. A ceiling
-// below one would admit nothing, so it is raised to one.
-func NewPasswordHasher(parameters HashingParameters, concurrent int) *PasswordHasher {
+// NewPasswordHasher builds the hasher a process hashes passwords with, from the cost its
+// configuration states. The salt and key lengths are this package's own, so the two processes that
+// must agree on a stored hash are not left to state them.
+func NewPasswordHasher(cost hashing.Cost) *PasswordHasher {
+	return newPasswordHasher(hashingParameters{
+		MemoryKiB:   cost.MemoryKiB,
+		Passes:      cost.Passes,
+		Parallelism: cost.Parallelism,
+		SaltLength:  SaltLength,
+		KeyLength:   KeyLength,
+	}, cost.Concurrent)
+}
+
+// newPasswordHasher builds a hasher from an explicit parameter set. The tests that read and write
+// encoded hashes use it, because what a stored hash carries is what they are about.
+func newPasswordHasher(parameters hashingParameters, concurrent int) *PasswordHasher {
 	if concurrent < 1 {
 		concurrent = 1
 	}
@@ -108,40 +123,40 @@ func (h *PasswordHasher) Verify(encoded, password string) (bool, error) {
 	return subtle.ConstantTimeCompare(derivedKey, storedKey) == 1, nil
 }
 
-func (h *PasswordHasher) derive(parameters HashingParameters, password string, salt []byte) []byte {
+func (h *PasswordHasher) derive(parameters hashingParameters, password string, salt []byte) []byte {
 	return argon2.IDKey([]byte(password), salt,
 		parameters.Passes, parameters.MemoryKiB, parameters.Parallelism, parameters.KeyLength)
 }
 
-func encodeHash(parameters HashingParameters, salt, key []byte) string {
+func encodeHash(parameters hashingParameters, salt, key []byte) string {
 	encoding := base64.RawStdEncoding
 	return fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
 		argon2.Version, parameters.MemoryKiB, parameters.Passes, parameters.Parallelism,
 		encoding.EncodeToString(salt), encoding.EncodeToString(key))
 }
 
-func decodeHash(encoded string) (HashingParameters, []byte, []byte, error) {
+func decodeHash(encoded string) (hashingParameters, []byte, []byte, error) {
 	fields := strings.Split(encoded, "$")
 	if len(fields) != encodedHashFields || fields[0] != "" || fields[1] != "argon2id" {
-		return HashingParameters{}, nil, nil, ErrStoredHashUnusable
+		return hashingParameters{}, nil, nil, ErrStoredHashUnusable
 	}
 	var version int
 	if _, err := fmt.Sscanf(fields[2], "v=%d", &version); err != nil || version != argon2.Version {
-		return HashingParameters{}, nil, nil, ErrStoredHashUnusable
+		return hashingParameters{}, nil, nil, ErrStoredHashUnusable
 	}
-	var parameters HashingParameters
+	var parameters hashingParameters
 	read, err := fmt.Sscanf(fields[3], "m=%d,t=%d,p=%d",
 		&parameters.MemoryKiB, &parameters.Passes, &parameters.Parallelism)
 	if err != nil || read != 3 {
-		return HashingParameters{}, nil, nil, ErrStoredHashUnusable
+		return hashingParameters{}, nil, nil, ErrStoredHashUnusable
 	}
 	salt, err := base64.RawStdEncoding.DecodeString(fields[4])
 	if err != nil {
-		return HashingParameters{}, nil, nil, ErrStoredHashUnusable
+		return hashingParameters{}, nil, nil, ErrStoredHashUnusable
 	}
 	key, err := base64.RawStdEncoding.DecodeString(fields[5])
 	if err != nil || len(key) == 0 {
-		return HashingParameters{}, nil, nil, ErrStoredHashUnusable
+		return hashingParameters{}, nil, nil, ErrStoredHashUnusable
 	}
 	parameters.SaltLength, parameters.KeyLength = uint32(len(salt)), uint32(len(key))
 	return parameters, salt, key, nil

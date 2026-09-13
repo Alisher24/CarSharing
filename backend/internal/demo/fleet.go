@@ -39,12 +39,17 @@ type member struct {
 	charge map[fleet.SourceKind]int
 }
 
-// group is the five demonstration vehicles of one powertrain.
+// group is the five demonstration vehicles of one powertrain, and where each of them stands.
 type group struct {
 	powertrain  fleet.PowertrainType
 	modelPrefix string
 	capacities  map[fleet.SourceKind]fleet.Amount
-	members     [membersPerPowertrain]member
+
+	// positions and members are read by the same index: the vehicle that stands at positions[n] is
+	// the one members[n] declares, and a group that gained a member states where it stands in the
+	// same declaration rather than in a list of positions kept beside it.
+	positions [membersPerPowertrain]fleet.Position
+	members   [membersPerPowertrain]member
 }
 
 // groups is the whole demonstration fleet. Every group carries the reserves the rules turn on: one
@@ -55,6 +60,13 @@ var groups = []group{
 		powertrain:  fleet.PowertrainElectric,
 		modelPrefix: "Демо Электро",
 		capacities:  map[fleet.SourceKind]fleet.Amount{fleet.SourceBattery: 60_000 * wattHour},
+		positions: [membersPerPowertrain]fleet.Position{
+			{Longitude: 74.5720, Latitude: 42.8590},
+			{Longitude: 74.5865, Latitude: 42.8742},
+			{Longitude: 74.5990, Latitude: 42.8663},
+			{Longitude: 74.6120, Latitude: 42.8815},
+			{Longitude: 74.6285, Latitude: 42.8574},
+		},
 		members: [membersPerPowertrain]member{
 			{charge: map[fleet.SourceKind]int{fleet.SourceBattery: 8200}},
 			// Exactly the start threshold, which is enough.
@@ -69,6 +81,13 @@ var groups = []group{
 		powertrain:  fleet.PowertrainGasoline,
 		modelPrefix: "Демо Бензин",
 		capacities:  map[fleet.SourceKind]fleet.Amount{fleet.SourceGasoline: 50 * litre},
+		positions: [membersPerPowertrain]fleet.Position{
+			{Longitude: 74.5638, Latitude: 42.8871},
+			{Longitude: 74.5793, Latitude: 42.8486},
+			{Longitude: 74.6046, Latitude: 42.8928},
+			{Longitude: 74.6209, Latitude: 42.8701},
+			{Longitude: 74.6371, Latitude: 42.8836},
+		},
 		members: [membersPerPowertrain]member{
 			{charge: map[fleet.SourceKind]int{fleet.SourceGasoline: 9100}},
 			{charge: map[fleet.SourceKind]int{fleet.SourceGasoline: 4300}},
@@ -81,6 +100,13 @@ var groups = []group{
 		powertrain:  fleet.PowertrainDiesel,
 		modelPrefix: "Демо Дизель",
 		capacities:  map[fleet.SourceKind]fleet.Amount{fleet.SourceDiesel: 55 * litre},
+		positions: [membersPerPowertrain]fleet.Position{
+			{Longitude: 74.5561, Latitude: 42.8628},
+			{Longitude: 74.5904, Latitude: 42.8955},
+			{Longitude: 74.6158, Latitude: 42.8443},
+			{Longitude: 74.6432, Latitude: 42.8759},
+			{Longitude: 74.5682, Latitude: 42.8794},
+		},
 		members: [membersPerPowertrain]member{
 			{charge: map[fleet.SourceKind]int{fleet.SourceDiesel: 8800}},
 			{charge: map[fleet.SourceKind]int{fleet.SourceDiesel: 3100}},
@@ -95,6 +121,13 @@ var groups = []group{
 		capacities: map[fleet.SourceKind]fleet.Amount{
 			fleet.SourceBattery:  12_000 * wattHour,
 			fleet.SourceGasoline: 45 * litre,
+		},
+		positions: [membersPerPowertrain]fleet.Position{
+			{Longitude: 74.5837, Latitude: 42.8617},
+			{Longitude: 74.6091, Latitude: 42.8880},
+			{Longitude: 74.6246, Latitude: 42.8521},
+			{Longitude: 74.6398, Latitude: 42.8646},
+			{Longitude: 74.5599, Latitude: 42.8912},
 		},
 		members: [membersPerPowertrain]member{
 			// An empty battery beside a sufficient tank: the tank alone makes the vehicle fit.
@@ -118,6 +151,13 @@ var groups = []group{
 		capacities: map[fleet.SourceKind]fleet.Amount{
 			fleet.SourceGasoline: 50 * litre,
 			fleet.SourceLPG:      60 * litre,
+		},
+		positions: [membersPerPowertrain]fleet.Position{
+			{Longitude: 74.5751, Latitude: 42.8703},
+			{Longitude: 74.6014, Latitude: 42.8558},
+			{Longitude: 74.6177, Latitude: 42.8967},
+			{Longitude: 74.6320, Latitude: 42.8688},
+			{Longitude: 74.5926, Latitude: 42.8461},
 		},
 		members: [membersPerPowertrain]member{
 			{charge: map[fleet.SourceKind]int{fleet.SourceGasoline: 7200, fleet.SourceLPG: 6400}},
@@ -198,7 +238,7 @@ func (g group) vehicle(declared member, positionInGroup, number int) Vehicle {
 		ID:             resourceID(vehicleFamily, number),
 		Model:          fmt.Sprintf("%s %d", g.modelPrefix, positionInGroup+1),
 		PowertrainType: g.powertrain,
-		Position:       standingPositions[number-1],
+		Position:       g.positions[positionInGroup],
 		Connected:      !declared.unlinked,
 		Reporting:      !declared.unlinked && !declared.silent,
 		Sources:        g.sources(declared),

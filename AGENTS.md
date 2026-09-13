@@ -63,6 +63,9 @@ to the code that uses them. Everything below it receives what it needs as an arg
 - One file holds one concern, at every level. If it needs "and" to be described, split it: a file
   that declares the errors of a contract, the statuses they carry and the code that writes them is
   three files.
+- A file that declares a container declares only the container. The shape and the assembly of a
+  feature's handlers live beside those handlers, so the file does not grow a second concern every
+  time a feature is added to it.
 - A handler moves a request between the contract and the feature that owns the behaviour. It does
   not write SQL, hold a domain rule, or build a second copy of a value the contract already states.
 - A file named after a thing holds only that thing. A module named after the HTTP client does not
@@ -70,6 +73,9 @@ to the code that uses them. Everything below it receives what it needs as an arg
 - Everything the codebase maintains has exactly one declaration. A second list of the same facts —
   an inventory, a status table, a set of implemented operations — is derived from the first or it is
   a defect waiting to disagree.
+- A document that maps the code — the package tree, the list of commands, the environment variables
+  a process reads — belongs to the change that moves the code. It is corrected in that change, not
+  left for a later one.
 - Adding a feature is a new file and one line at the composition root. If it is an edit to a growing
   conditional, a growing type switch, or a list that everything must be added to, the seam is in the
   wrong place.
@@ -87,6 +93,10 @@ to the code that uses them. Everything below it receives what it needs as an arg
   passed as configuration to the thing that needs it.
 - The loader owns the shape it produces and hands it over whole. A consumer reads the fields it
   needs from that value; it does not rebuild the same shape from the same environment.
+- A value two processes must agree on — a hash cost, a cookie name, a session lifetime — has one
+  shape, declared below both, filled in by the loader and consumed by the feature that needs it. A
+  process does not assemble that shape from the loader's fields: the second assembly is how the two
+  come to disagree.
 - Where a tool cannot import the program's value — a container health check, a proxy directive, a
   workflow output, a document — the copy is that tool's own configuration. Keep it in one place in
   our code and derive it from the same declaration wherever the tool allows, such as an exported
@@ -138,6 +148,8 @@ instruction: restructure it until you can.
   `HEALTH_REQUEST_TIMEOUT_MS`).
 - A value enumerated in more than one place becomes a single source and is derived elsewhere —
   including a value that a human-readable message spells out.
+- Two lists read by the same index are one declaration. State them together, or the shorter one
+  silently becomes the limit of the longer.
 
 **Comments**
 
@@ -165,6 +177,12 @@ instruction: restructure it until you can.
 - A rule is not a licence for a one-liner: `.connection { padding: 30px; background: #fffefa; }`
   is the defect this section exists to prevent.
 
+**Rendering**
+
+- A render computes what to draw and returns elements; it records nothing that outlives it. A value
+  a render has to remember is written by the handler of the event that produced it or by an effect,
+  because a render React discards must not leave a value behind that no screen ever showed.
+
 **Review gate**
 
 Before proposing a change:
@@ -180,6 +198,9 @@ Before proposing a change:
    than in a follow-up.
 4. Run the formatting gates below and fix what they report. A check that fails is not a reviewer's
    problem to raise later.
+5. Check what the change claims. A claim the code makes about its own data — a position inside the
+   zone, a declared count, a value two processes share — is a check rather than a comment, and a
+   check the specification lists either exists or is recorded as missing with the reason.
 
 **Formatting gates**
 

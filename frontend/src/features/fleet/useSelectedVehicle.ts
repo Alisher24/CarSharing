@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import type { Vehicle } from '../../shared/api/catalog';
 
 /**
@@ -7,15 +7,16 @@ import type { Vehicle } from '../../shared/api/catalog';
  * reload never empties a card a person is still reading. Only closing the card clears it.
  */
 export function useSelectedVehicle(vehicles: readonly Vehicle[], selectedId: string | undefined): Vehicle | undefined {
+  const current = vehicles.find((vehicle) => vehicle.id === selectedId);
   const lastSeen = useRef<Vehicle>(undefined);
 
-  if (selectedId === undefined) {
-    lastSeen.current = undefined;
-    return undefined;
-  }
+  // The reading is remembered after the render that saw it rather than during it: a render React
+  // discards must not leave a value behind that no screen ever showed.
+  useEffect(() => {
+    if (current !== undefined) lastSeen.current = current;
+  }, [current]);
 
-  const current = vehicles.find((vehicle) => vehicle.id === selectedId);
-  if (current !== undefined) lastSeen.current = current;
-
+  if (selectedId === undefined) return undefined;
+  if (current !== undefined) return current;
   return lastSeen.current?.id === selectedId ? lastSeen.current : undefined;
 }

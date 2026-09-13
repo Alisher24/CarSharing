@@ -1,6 +1,10 @@
 package demo
 
-import "github.com/Alisher24/CarSharing/backend/internal/zones"
+import (
+	"strconv"
+
+	"github.com/Alisher24/CarSharing/backend/internal/zones"
+)
 
 // ZoneName says in the interface's own language that this boundary is a demonstration rectangle
 // rather than the administrative border of the city.
@@ -25,6 +29,19 @@ func Zone() zones.Zone {
 		Version: zoneInitialVersion,
 		Area:    []byte(zoneGeoJSON()),
 	}
+}
+
+// positionDecimals is how precisely a demonstration coordinate is written out. Five places is about
+// a metre, which is as exact as a placed demonstration vehicle can meaningfully be.
+const positionDecimals = 5
+
+// formatPosition writes a coordinate pair the way GeoJSON does: longitude first.
+func formatPosition(longitude, latitude float64) string {
+	return "[" + formatDegrees(longitude) + "," + formatDegrees(latitude) + "]"
+}
+
+func formatDegrees(degrees float64) string {
+	return strconv.FormatFloat(degrees, 'f', positionDecimals, 64)
 }
 
 func zoneGeoJSON() string {

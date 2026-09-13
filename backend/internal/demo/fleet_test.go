@@ -1,6 +1,7 @@
 package demo_test
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -134,6 +135,43 @@ func TestEveryPreparedRentalHasItsOwnServiceAccount(t *testing.T) {
 			t.Errorf("a manual check account holds the rental of %s", held)
 		}
 	}
+}
+
+// A vehicle parked outside the boundary would be published as outside the service zone and would
+// stop being the example it was declared to be, so every declared position is checked against the
+// area the command actually installs rather than against a copy of its corners. That area is a
+// rectangle, so its bounding box is the area itself.
+func TestEveryDeclaredVehicleStandsInsideTheServiceZone(t *testing.T) {
+	west, south, east, north := installedAreaBounds(t)
+	for _, vehicle := range demo.Fleet() {
+		position := vehicle.Position
+		inside := position.Longitude >= west && position.Longitude <= east &&
+			position.Latitude >= south && position.Latitude <= north
+		if !inside {
+			t.Errorf("%s stands at %v, %v: outside the installed area",
+				vehicle.Model, position.Longitude, position.Latitude)
+		}
+	}
+}
+
+func installedAreaBounds(t *testing.T) (west, south, east, north float64) {
+	t.Helper()
+	var area struct {
+		Coordinates [][][2]float64 `json:"coordinates"`
+	}
+	if err := json.Unmarshal(demo.Zone().Area, &area); err != nil {
+		t.Fatalf("the installed area is not readable as GeoJSON: %v", err)
+	}
+	if len(area.Coordinates) != 1 || len(area.Coordinates[0]) < 3 {
+		t.Fatalf("the installed area is %d rings, want one ring of at least three points", len(area.Coordinates))
+	}
+	ring := area.Coordinates[0]
+	west, south, east, north = ring[0][0], ring[0][1], ring[0][0], ring[0][1]
+	for _, corner := range ring {
+		west, east = min(west, corner[0]), max(east, corner[0])
+		south, north = min(south, corner[1]), max(north, corner[1])
+	}
+	return west, south, east, north
 }
 
 func hasReason(state fleet.State, wanted fleet.UnavailableReason) bool {

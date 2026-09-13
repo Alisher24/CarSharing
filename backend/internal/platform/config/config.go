@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Alisher24/CarSharing/backend/internal/platform/hashing"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/ratelimit"
 )
 
@@ -78,20 +79,7 @@ const (
 	defaultArgon2Concurrent  = 2
 )
 
-// Argon2Config is the cost of one password hash. The starting values above fix the defaults; the
-// final ones come from measurements in the target Docker environment, which is why they are
-// configuration rather than constants.
-type Argon2Config struct {
-	MemoryKiB   uint32
-	Passes      uint32
-	Parallelism uint8
-
-	// Concurrent is how many password hashes one instance computes at a time. Beyond it a request
-	// is refused rather than queued, because a queue in front of a memory-hard function is how the
-	// instance is made to run out of memory.
-	Concurrent int
-}
-
+// Config is everything a process is told about the installation it runs in.
 type Config struct {
 	HTTPAddr   string
 	DBHost     string
@@ -111,7 +99,10 @@ type Config struct {
 	// SessionCookieSecure adds Secure to the session cookie. It is off only for the documented
 	// local HTTP profile; any deployment over HTTPS turns it on.
 	SessionCookieSecure bool
-	Argon2              Argon2Config
+
+	// Argon2 is the cost of one password hash. Both the service and the command that installs the
+	// demonstration hash with it, because an account one wrote has to be one the other can verify.
+	Argon2 hashing.Cost
 
 	// RateLimits is the budget of each counted account operation.
 	RateLimits ratelimit.Limits
@@ -208,24 +199,24 @@ func loadLimit(name string, attempts uint64, window time.Duration) (ratelimit.Li
 	return ratelimit.Limit{Attempts: int(counted), Window: window}, nil
 }
 
-func loadArgon2() (Argon2Config, error) {
+func loadArgon2() (hashing.Cost, error) {
 	memory, err := positiveNumber("AUTH_ARGON2_MEMORY_KIB", defaultArgon2MemoryKiB, 32)
 	if err != nil {
-		return Argon2Config{}, err
+		return hashing.Cost{}, err
 	}
 	passes, err := positiveNumber("AUTH_ARGON2_PASSES", defaultArgon2Passes, 32)
 	if err != nil {
-		return Argon2Config{}, err
+		return hashing.Cost{}, err
 	}
 	parallelism, err := positiveNumber("AUTH_ARGON2_PARALLELISM", defaultArgon2Parallelism, 8)
 	if err != nil {
-		return Argon2Config{}, err
+		return hashing.Cost{}, err
 	}
 	concurrent, err := positiveNumber("AUTH_ARGON2_CONCURRENT", defaultArgon2Concurrent, 8)
 	if err != nil {
-		return Argon2Config{}, err
+		return hashing.Cost{}, err
 	}
-	return Argon2Config{
+	return hashing.Cost{
 		MemoryKiB: uint32(memory), Passes: uint32(passes), Parallelism: uint8(parallelism),
 		Concurrent: int(concurrent),
 	}, nil

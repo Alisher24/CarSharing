@@ -66,7 +66,7 @@ func run() error {
 	if err = recordSeedSet(ctx, pool); err != nil {
 		return err
 	}
-	if err = demo.Seed(ctx, pool, passwordHasher(cfg), cfg.DemoUserPassword); err != nil {
+	if err = demo.Seed(ctx, pool, auth.NewPasswordHasher(cfg.Argon2), cfg.DemoUserPassword); err != nil {
 		return err
 	}
 
@@ -81,16 +81,4 @@ func recordSeedSet(ctx context.Context, pool *pgxpool.Pool) error {
 		return fmt.Errorf("seed failed; run migrations first: %w", err)
 	}
 	return nil
-}
-
-// passwordHasher is the same Argon2id cost the API verifies against, so an account this command
-// creates can be signed in to by the running service.
-func passwordHasher(cfg config.Config) *auth.PasswordHasher {
-	return auth.NewPasswordHasher(auth.HashingParameters{
-		MemoryKiB:   cfg.Argon2.MemoryKiB,
-		Passes:      cfg.Argon2.Passes,
-		Parallelism: cfg.Argon2.Parallelism,
-		SaltLength:  auth.SaltLength,
-		KeyLength:   auth.KeyLength,
-	}, cfg.Argon2.Concurrent)
 }

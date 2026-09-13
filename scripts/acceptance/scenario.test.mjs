@@ -19,6 +19,7 @@ import {
 /** The rentals these cases write on behalf of a person, and remove again afterwards. */
 const COMMITTED_PERSONAL_RENTAL = '01994342-6ba7-7000-8000-000900000001';
 const CONCURRENT_PERSONAL_RENTAL = '01994342-6ba7-7000-8000-000900000002';
+const FINISHED_PERSONAL_RENTAL = '01994342-6ba7-7000-8000-000900000003';
 
 /** How long the concurrent case holds its transaction open before committing it. */
 const HELD_SECONDS = 4;
@@ -283,6 +284,33 @@ describe('restoring beside a person who rented a scenario vehicle', () => {
       sql(`DELETE FROM rentals WHERE id = '${CONCURRENT_PERSONAL_RENTAL}'`);
     }
   });
+
+  // A rental a person has already finished is their own history. The restoration refuses for it
+  // exactly as it does for a live one, rather than deleting a row the scenario never wrote.
+  test('refuses over a rental a person has already finished', async () => {
+    restoreScenario();
+    resetRateLimits();
+    const { email } = await registerAccount('scenario-history');
+    const taken = exhaustedScenarioVehicle();
+    sql(finishedPersonalRental(FINISHED_PERSONAL_RENTAL, email, taken));
+
+    const reserves = () => sql(`SELECT remaining FROM vehicle_energy_sources ORDER BY vehicle_id, source_kind`);
+    const before = reserves();
+    try {
+      const refusal = tryRestoreScenario();
+      assert.equal(refusal.ok, false, 'the restoration overwrote a rental a person had finished');
+      assert.match(refusal.output, /restoration refused/);
+      assert.match(refusal.output, new RegExp(taken));
+      assert.equal(reserves(), before, 'a refused restoration still wrote something');
+      assert.equal(
+        scalar(`SELECT count(*) FROM rentals WHERE id = '${FINISHED_PERSONAL_RENTAL}' AND stage = 'completed'`),
+        '1',
+        'the rental a person finished is gone',
+      );
+    } finally {
+      sql(`DELETE FROM rentals WHERE id = '${FINISHED_PERSONAL_RENTAL}'`);
+    }
+  });
 });
 
 /** The prepared reservation the expiry cases work on, named by the rental and the vehicle it holds. */
@@ -315,5 +343,29 @@ function personalRental(rentalId, email, vehicleId) {
       (SELECT id FROM service_zones ORDER BY id LIMIT 1),
       now(),
       now() + interval '15 minutes'
+    );`;
+}
+
+/**
+ * The statement that gives a person a rental of a scenario vehicle that has already ended. It is
+ * written directly for the same reason a live one is: what matters here is that the restoration
+ * finds a rental it does not own, and leaves it as it stands.
+ */
+function finishedPersonalRental(rentalId, email, vehicleId) {
+  return `
+    INSERT INTO rentals (
+      id, user_id, vehicle_id, stage, tariff_id, zone_id, reserved_at, expires_at, started_at, ended_at
+    )
+    VALUES (
+      '${rentalId}',
+      (SELECT id FROM users WHERE email = '${email}'),
+      '${vehicleId}',
+      'completed',
+      (SELECT id FROM tariffs ORDER BY id LIMIT 1),
+      (SELECT id FROM service_zones ORDER BY id LIMIT 1),
+      now() - interval '30 minutes',
+      now() - interval '16 minutes',
+      now() - interval '29 minutes',
+      now() - interval '2 minutes'
     );`;
 }

@@ -8,7 +8,7 @@ import (
 
 // testParameters keep the unit tests fast. The parameters the service runs with are configuration
 // and are measured separately in the target environment.
-var testParameters = HashingParameters{
+var testParameters = hashingParameters{
 	MemoryKiB: 8 << 10, Passes: 1, Parallelism: 1, SaltLength: 16, KeyLength: 32,
 }
 
@@ -16,7 +16,7 @@ var testParameters = HashingParameters{
 const testConcurrency = 4
 
 func TestHashGivesEveryPasswordItsOwnSalt(t *testing.T) {
-	hasher := NewPasswordHasher(testParameters, testConcurrency)
+	hasher := newPasswordHasher(testParameters, testConcurrency)
 	const password = "correcthorsebattery"
 	first, err := hasher.Hash(password)
 	if err != nil {
@@ -35,7 +35,7 @@ func TestHashGivesEveryPasswordItsOwnSalt(t *testing.T) {
 }
 
 func TestVerifyAcceptsTheCorrectPasswordAndRefusesEveryOther(t *testing.T) {
-	hasher := NewPasswordHasher(testParameters, testConcurrency)
+	hasher := newPasswordHasher(testParameters, testConcurrency)
 	const password = "correcthorsebattery"
 	encoded, err := hasher.Hash(password)
 	if err != nil {
@@ -60,20 +60,20 @@ func TestVerifyAcceptsTheCorrectPasswordAndRefusesEveryOther(t *testing.T) {
 // still leaves every existing account able to sign in.
 func TestVerifyUsesTheParametersStoredWithTheHash(t *testing.T) {
 	const password = "correcthorsebattery"
-	encoded, err := NewPasswordHasher(testParameters, testConcurrency).Hash(password)
+	encoded, err := newPasswordHasher(testParameters, testConcurrency).Hash(password)
 	if err != nil {
 		t.Fatal(err)
 	}
 	raised := testParameters
 	raised.Passes, raised.MemoryKiB = testParameters.Passes+2, testParameters.MemoryKiB*2
-	ok, err := NewPasswordHasher(raised, testConcurrency).Verify(encoded, password)
+	ok, err := newPasswordHasher(raised, testConcurrency).Verify(encoded, password)
 	if err != nil || !ok {
 		t.Fatalf("Verify under raised parameters = %v, %v", ok, err)
 	}
 }
 
 func TestVerifyReportsAnUnusableStoredHashAsAnError(t *testing.T) {
-	hasher := NewPasswordHasher(testParameters, testConcurrency)
+	hasher := newPasswordHasher(testParameters, testConcurrency)
 	valid, err := hasher.Hash("correcthorsebattery")
 	if err != nil {
 		t.Fatal(err)
@@ -100,7 +100,7 @@ func TestVerifyReportsAnUnusableStoredHashAsAnError(t *testing.T) {
 // secret it was derived from.
 func TestEncodedHashDoesNotCarryThePassword(t *testing.T) {
 	const password = "correcthorsebattery"
-	encoded, err := NewPasswordHasher(testParameters, testConcurrency).Hash(password)
+	encoded, err := newPasswordHasher(testParameters, testConcurrency).Hash(password)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func saltOf(t *testing.T, encoded string) string {
 // instance, so it is tested as a refusal rather than as a delay.
 func TestHasherAdmitsOnlyItsCeilingOfConcurrentComputations(t *testing.T) {
 	const ceiling = 2
-	hasher := NewPasswordHasher(testParameters, ceiling)
+	hasher := newPasswordHasher(testParameters, ceiling)
 	occupied := make(chan struct{})
 	released := make(chan struct{})
 	for slot := 0; slot < ceiling; slot++ {
@@ -136,7 +136,7 @@ func TestHasherAdmitsOnlyItsCeilingOfConcurrentComputations(t *testing.T) {
 	if _, err := hasher.Hash("correcthorsebattery"); !errors.Is(err, ErrHashingBusy) {
 		t.Fatalf("Hash under a full ceiling = %v, want ErrHashingBusy", err)
 	}
-	encoded, err := NewPasswordHasher(testParameters, 1).Hash("correcthorsebattery")
+	encoded, err := newPasswordHasher(testParameters, 1).Hash("correcthorsebattery")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +156,7 @@ func TestHasherAdmitsOnlyItsCeilingOfConcurrentComputations(t *testing.T) {
 // An unknown address must cost the same memory-hard work as a known one, or the sign-in form
 // becomes a way of asking which addresses have accounts.
 func TestAuthenticateSpendsAHashOnAnUnknownAddress(t *testing.T) {
-	hasher := NewPasswordHasher(testParameters, 1)
+	hasher := newPasswordHasher(testParameters, 1)
 	service, err := NewService(nil, hasher)
 	if err != nil {
 		t.Fatal(err)
