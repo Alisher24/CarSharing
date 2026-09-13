@@ -6,8 +6,19 @@
 // the signal and not a poll that would have found the change anyway. The shipped interval is left
 // alone everywhere else.
 import { expect, test } from '@playwright/test';
-import { SERVICE_ORIGIN, sql } from '../../scripts/service.mjs';
-import { restoreScenario, vehicleIdOf } from './scenario.mjs';
+import { sql } from '../../scripts/service.mjs';
+import {
+  availableModel,
+  BOOK_ACTION,
+  book,
+  CANCEL_ACTION,
+  CONFIRM_ACTION,
+  email,
+  openVehicle,
+  signUp,
+  statusOf,
+} from './person.mjs';
+import { restoreScenario } from './scenario.mjs';
 
 /** The bound a committed change must reach a connected client within. */
 const DELIVERY_BOUND_MS = 2000;
@@ -18,13 +29,8 @@ const WITHOUT_RECONCILIATION = '/?reconcile=off';
 /** How long a change may take to appear through reconciliation alone. */
 const RECONCILIATION_PATIENCE_MS = 20_000;
 
-const BOOK_ACTION = 'Забронировать на 15 минут';
-const CONFIRM_ACTION = 'Использовать бесплатную бронь';
-const CANCEL_ACTION = 'Отменить бронь';
 const LIMIT_SPENT = 'Бесплатная бронь использована';
 const NOTHING_CURRENT = 'Текущей брони нет';
-
-const password = 'correcthorsebattery';
 
 test.beforeEach(() => {
   endPreviousReservations();
@@ -51,7 +57,6 @@ function endPreviousReservations() {
 
 test('one client books a vehicle and the other sees it taken and free again', async ({ browser }) => {
   const model = await availableModel();
-  const vehicleId = vehicleIdOf(model);
 
   const booking = await browser.newContext();
   const watching = await browser.newContext();
@@ -62,7 +67,7 @@ test('one client books a vehicle and the other sees it taken and free again', as
     await person.goto('/');
     await visitor.goto(WITHOUT_RECONCILIATION);
 
-    await signUp(person, email());
+    await signUp(person, email('reservation'));
     await expect(statusOf(visitor, model)).toHaveAttribute('data-status', 'available');
 
     await openVehicle(person, model);
@@ -111,7 +116,7 @@ test('the panel comes back after a reload and outlives every panel around it', a
 
   try {
     await page.goto('/');
-    await signUp(page, email());
+    await signUp(page, email('reservation'));
     await book(page, model);
     await expect(page.locator('.reservation-panel-time')).toContainText('Осталось');
 
@@ -141,7 +146,7 @@ test('the spent allowance is stated and stops the booking control', async ({ bro
 
   try {
     await page.goto('/');
-    await signUp(page, email());
+    await signUp(page, email('reservation'));
     await book(page, await availableModel());
     await expect(page.locator('.reservation-panel-time')).toContainText('Осталось');
 
@@ -159,54 +164,3 @@ test('the spent allowance is stated and stops the booking control', async ({ bro
     await context.close();
   }
 });
-
-/** One vehicle the service publishes as free to take. */
-async function availableModel() {
-  const [first] = await availableModels(1);
-  return first;
-}
-
-async function availableModels(count) {
-  const answer = await fetch(`${SERVICE_ORIGIN}/api/v1/vehicles`).then((response) => response.json());
-  const free = answer.items.filter((vehicle) => vehicle.status === 'available').slice(0, count);
-  if (free.length < count) throw new Error('the demonstration published too few free vehicles');
-
-  return free.map((vehicle) => vehicle.model);
-}
-
-function rowOf(page, model) {
-  return page.locator('.fleet-row', { has: page.locator('.fleet-row-model', { hasText: model }) });
-}
-
-/** The state one row publishes, which is where the list states what the vehicle is doing. */
-function statusOf(page, model) {
-  return rowOf(page, model).locator('.fleet-row-status');
-}
-
-/** Opens one vehicle's card from the list, which is how a person reaches the booking control. */
-async function openVehicle(page, model) {
-  await rowOf(page, model).click();
-  await expect(page.locator('.vehicle-card-model')).toHaveText(model);
-}
-
-/** Books one free vehicle through the confirmation the interface asks for. */
-async function book(page, model) {
-  await openVehicle(page, model);
-  await page.getByRole('button', { name: BOOK_ACTION }).click();
-  await page.getByRole('button', { name: CONFIRM_ACTION }).click();
-}
-
-/** Registers a fresh account through the account panel, as a person would. */
-async function signUp(page, address) {
-  await page.getByRole('button', { name: 'Вход' }).click();
-  await page.locator('#account-email-field').fill(address);
-  await page.locator('#account-password-field').fill(password);
-  await page.getByRole('button', { name: 'Зарегистрироваться' }).click();
-  await expect(page.locator('[data-testid="account-email"]')).toHaveText(address);
-  await page.getByRole('button', { name: 'Вход' }).click();
-}
-
-/** A fresh address, so no check depends on what another one left behind. */
-function email() {
-  return `reservation-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.test`;
-}

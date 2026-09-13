@@ -644,6 +644,57 @@
   color: var(--color-danger);
 }
 
+/* The one warning that a reservation is running out, beside the panel that states the reservation:
+   the panel keeps its own countdown and its cancellation, and this states what is about to happen. */
+.reservation-warning {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-lg);
+  align-items: baseline;
+  padding: var(--space-md) var(--space-lg);
+  margin: 0 var(--space-2xl) var(--space-md);
+  background: var(--color-surface-highlight);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+}
+
+.reservation-warning-heading {
+  margin: 0;
+  font-size: var(--font-size-detail);
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--color-danger);
+}
+
+.reservation-warning-vehicle {
+  margin: 0;
+  font-weight: 650;
+}
+
+.reservation-warning-deadline,
+.reservation-warning-left,
+.reservation-warning-notice {
+  margin: 0;
+  font-size: var(--font-size-detail);
+}
+
+.reservation-warning-left {
+  font-variant-numeric: tabular-nums;
+}
+
+.reservation-warning-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-md);
+  align-items: center;
+}
+
+.reservation-warning-notice {
+  flex-basis: 100%;
+  color: var(--color-danger);
+}
+
 /* The booking step of an open card: the conditions are read and agreed to before anything is sent. */
 .vehicle-card-booking {
   padding-top: var(--space-md);
@@ -708,7 +759,8 @@
     max-height: 56svh;
   }
 
-  .reservation-panel {
+  .reservation-panel,
+  .reservation-warning {
     margin: 0 var(--space-md) var(--space-md);
   }
 }

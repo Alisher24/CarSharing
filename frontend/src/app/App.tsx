@@ -15,7 +15,9 @@ import { useSelectedVehicle } from '../features/fleet/useSelectedVehicle';
 import { VehicleCard, type VehicleBooking } from '../features/fleet/VehicleCard';
 import { VehicleList } from '../features/fleet/VehicleList';
 import { FleetMap } from '../features/map/FleetMap';
+import { useNotifications } from '../features/notifications/useNotifications';
 import { ReservationPanel } from '../features/reservation/ReservationPanel';
+import { ReservationWarning } from '../features/reservation/ReservationWarning';
 import { commandNotice, limitAllowsBooking, limitText, SIGN_IN_TO_BOOK } from '../features/reservation/reservationCopy';
 import { useCurrentRental } from '../features/reservation/useCurrentRental';
 import { useReservations } from '../features/reservation/useReservations';
@@ -44,6 +46,7 @@ export function App() {
   // reservation, and the private stream keeps both of them current.
   const current = useCurrentRental(account, privateEvents);
   const reservations = useReservations(account, current);
+  const notifications = useNotifications(account, privateEvents);
   const currentSnapshot = loadedValue(current.resource);
 
   const [filters, setFilters] = useState<FleetFilters>(NO_FILTERS);
@@ -70,6 +73,7 @@ export function App() {
       {accountOpen && <AccountPanel account={account} submission={submission} onSubmit={submit} onLeave={leave} />}
 
       <ReservationPanel resource={current.resource} reservations={reservations} onShowVehicle={select} />
+      <ReservationWarning current={current.resource} notifications={notifications} />
 
       <div className="fleet-bar">
         <FleetStatus resource={catalog.fleet.resource} onRetry={catalog.fleet.retry} />
