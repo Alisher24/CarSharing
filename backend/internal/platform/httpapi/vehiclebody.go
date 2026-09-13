@@ -3,6 +3,7 @@ package httpapi
 import (
 	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/timestamp"
 )
 
 // vehicleBody renders one vehicle in the shape its state selects. The contract publishes a
@@ -28,7 +29,7 @@ func availableVehicle(vehicle fleet.Vehicle, freshness fleet.Freshness) servedap
 		Model:           vehicle.Model,
 		PowertrainType:  servedapi.PowertrainType(vehicle.PowertrainType),
 		Position:        point(vehicle.Telemetry.Position),
-		TelemetryAt:     formatTimestamp(vehicle.Telemetry.ConfirmedAt),
+		TelemetryAt:     timestamp.Format(vehicle.Telemetry.ConfirmedAt),
 		TelemetryStatus: servedapi.AvailableVehicleTelemetryStatus(freshness),
 		EnergySources:   energySources(vehicle),
 		Version:         exactInteger(vehicle.Version),
@@ -42,7 +43,7 @@ func reservedVehicle(vehicle fleet.Vehicle, freshness fleet.Freshness) servedapi
 		Model:           vehicle.Model,
 		PowertrainType:  servedapi.PowertrainType(vehicle.PowertrainType),
 		Position:        point(vehicle.Telemetry.Position),
-		TelemetryAt:     formatTimestamp(vehicle.Telemetry.ConfirmedAt),
+		TelemetryAt:     timestamp.Format(vehicle.Telemetry.ConfirmedAt),
 		TelemetryStatus: servedapi.ReservedVehicleTelemetryStatus(freshness),
 		EnergySources:   energySources(vehicle),
 		Version:         exactInteger(vehicle.Version),
@@ -58,7 +59,7 @@ func inTripVehicle(
 		Model:           vehicle.Model,
 		PowertrainType:  servedapi.PowertrainType(vehicle.PowertrainType),
 		Position:        point(vehicle.Telemetry.Position),
-		TelemetryAt:     formatTimestamp(vehicle.Telemetry.ConfirmedAt),
+		TelemetryAt:     timestamp.Format(vehicle.Telemetry.ConfirmedAt),
 		TelemetryStatus: servedapi.InTripVehicleTelemetryStatus(freshness),
 		EnergySources:   energySources(vehicle),
 		Version:         exactInteger(vehicle.Version),
@@ -79,7 +80,7 @@ func unavailableVehicle(
 		Model:              vehicle.Model,
 		PowertrainType:     servedapi.PowertrainType(vehicle.PowertrainType),
 		Position:           point(vehicle.Telemetry.Position),
-		TelemetryAt:        formatTimestamp(vehicle.Telemetry.ConfirmedAt),
+		TelemetryAt:        timestamp.Format(vehicle.Telemetry.ConfirmedAt),
 		TelemetryStatus:    servedapi.UnavailableVehicleTelemetryStatus(freshness),
 		EnergySources:      energySources(vehicle),
 		Version:            exactInteger(vehicle.Version),

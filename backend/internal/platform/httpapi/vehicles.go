@@ -8,6 +8,7 @@ import (
 
 	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/timestamp"
 )
 
 // geoJSONPointType is the type tag a published coordinate pair carries.
@@ -62,7 +63,7 @@ func (v vehicles) GetVehicle(
 
 func vehicleCollection(snapshot fleet.Snapshot) (servedapi.VehicleCollection, error) {
 	collection := servedapi.VehicleCollection{
-		ServerTime: formatTimestamp(snapshot.ObservedAt),
+		ServerTime: timestamp.Format(snapshot.ObservedAt),
 		Items:      make([]servedapi.Vehicle, 0, len(snapshot.Vehicles)),
 	}
 	for _, vehicle := range snapshot.Vehicles {

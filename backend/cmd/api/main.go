@@ -14,13 +14,13 @@ import (
 
 	"github.com/Alisher24/CarSharing/backend/internal/auth"
 	"github.com/Alisher24/CarSharing/backend/internal/demo"
+	"github.com/Alisher24/CarSharing/backend/internal/events"
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/config"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/httpapi"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/periodic"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/sessions"
-	"github.com/Alisher24/CarSharing/backend/internal/rentals"
 	"github.com/Alisher24/CarSharing/backend/internal/tariffs"
 	"github.com/Alisher24/CarSharing/backend/internal/zones"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -54,9 +54,10 @@ func main() {
 	}
 }
 
-// application assembles what the HTTP layer serves: the readiness probe, the session store and the
-// account rules, all over the one pool so that a request can commit a user and its session together.
-func application(cfg config.Config, pool *pgxpool.Pool) (httpapi.Dependencies, error) {
+// application assembles what the HTTP layer serves: the readiness probe, the session store, the
+// account rules and the fan-out of the change signals, all over the one pool so that a request can
+// commit a user and its session together.
+func application(cfg config.Config, pool *pgxpool.Pool, hub *events.Hub) (httpapi.Dependencies, error) {
 	users := auth.NewUserStore(pool)
 	hasher := auth.NewPasswordHasher(cfg.Argon2)
 	service, err := auth.NewService(users, hasher)
@@ -71,6 +72,7 @@ func application(cfg config.Config, pool *pgxpool.Pool) (httpapi.Dependencies, e
 		Auth:           service,
 		Users:          users,
 		Throttle:       auth.NewThrottle(pool, cfg.RateLimits),
+		Events:         hub,
 		Catalog: httpapi.Catalog{
 			Vehicles: fleet.NewStore(pool),
 			Zones:    zones.NewStore(pool),
@@ -79,11 +81,13 @@ func application(cfg config.Config, pool *pgxpool.Pool) (httpapi.Dependencies, e
 	}, nil
 }
 
-// startBackgroundWork starts the recurring work this process owns. The reservation deadline is a
-// rule of every deployment, so its sweep always runs; the telemetry source stands in for vehicles
-// that do not exist outside a demonstration, so it runs only where the demonstration does.
-func startBackgroundWork(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) {
-	go periodic.Run(ctx, "reservation expiry", rentals.ExpirySweepInterval, rentals.NewExpiry(pool).ExpireDue)
+// startBackgroundWork starts the recurring work this process owns. Listening for published signals
+// is how a stream learns that something changed, so it always runs. The demonstration telemetry
+// source stands in for vehicles that do not exist outside a demonstration, so it runs only where the
+// demonstration does. Releasing reservations that have run out belongs to the worker process, which
+// is the one place that decides a deadline has passed.
+func startBackgroundWork(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, hub *events.Hub) {
+	go hub.Run(ctx)
 	if cfg.Environment != config.DemoEnvironment {
 		return
 	}
@@ -121,7 +125,8 @@ func run() error {
 	}
 	defer pool.Close()
 
-	served, err := application(cfg, pool)
+	hub := events.NewHub(pool)
+	served, err := application(cfg, pool, hub)
 	if err != nil {
 		return err
 	}
@@ -129,7 +134,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	startBackgroundWork(ctx, cfg, pool)
+	startBackgroundWork(ctx, cfg, pool, hub)
 	return serve(ctx, newServer(cfg, handler))
 }
 

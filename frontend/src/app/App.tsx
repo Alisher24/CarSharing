@@ -1,7 +1,12 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AccountPanel } from '../features/account/AccountPanel';
+import { useAccount } from '../features/account/useAccount';
 import { ConnectionIndicator } from '../features/connection/ConnectionIndicator';
+import { StreamNotice } from '../features/connection/StreamNotice';
 import { useConnection, type Connection } from '../features/connection/useConnection';
+import type { EventsConnection } from '../features/events/useEventStream';
+import { useEvents } from '../features/events/useEvents';
+import { usePrivateEvents } from '../features/events/usePrivateEvents';
 import { FilterBar } from '../features/fleet/FilterBar';
 import { FleetStatus } from '../features/fleet/FleetStatus';
 import { NO_FILTERS, selectVehicles, type FleetFilters } from '../features/fleet/filters';
@@ -14,9 +19,22 @@ import { FleetMap } from '../features/map/FleetMap';
 /** What a narrow screen is showing, where the map and the list cannot both fit. */
 type NarrowView = 'map' | 'list';
 
+// Nothing private is read yet: the private resources this stream signals arrive with their own REST
+// endpoints, and until then a signal about them is remembered by no one.
+const ignorePrivateChange = () => undefined;
+
 export function App() {
   const connection = useConnection();
-  const catalog = useCatalog();
+  const { account, submission, submit, leave, recheck } = useAccount();
+  const events = useEvents();
+  const catalog = useCatalog(events);
+
+  // The private stream is opened by the session and lives above every panel that shows it, so
+  // closing that panel changes nothing about it. A subscription that has ended asks who the caller
+  // is now: an answer that nobody is signed in clears the session, and with it this stream.
+  usePrivateEvents(account.state === 'signed-in', ignorePrivateChange, recheck);
+  useSessionCheckOnRecovery(events.connection, recheck);
+
   const [filters, setFilters] = useState<FleetFilters>(NO_FILTERS);
   const [selectedId, setSelectedId] = useState<string>();
   const [narrowView, setNarrowView] = useState<NarrowView>('map');
@@ -32,10 +50,11 @@ export function App() {
     <div className="page">
       <AppHeader
         connection={connection}
+        stream={events.connection}
         accountOpen={accountOpen}
         onToggleAccount={() => setAccountOpen((open) => !open)}
       />
-      {accountOpen && <AccountPanel />}
+      {accountOpen && <AccountPanel account={account} submission={submission} onSubmit={submit} onLeave={leave} />}
 
       <div className="fleet-bar">
         <FleetStatus resource={catalog.fleet.resource} onRetry={catalog.fleet.retry} />
@@ -71,9 +90,30 @@ export function App() {
   );
 }
 
-type AppHeaderProps = { connection: Connection; accountOpen: boolean; onToggleAccount: () => void };
+/**
+ * A connection that has come back is the moment to ask the server who the caller is now: the
+ * session may have been revoked while the browser could not reach anything, and a session that is
+ * still live lets the private stream open again. Reading the snapshots again is the handshake's
+ * business, and a handshake follows this recovery.
+ */
+function useSessionCheckOnRecovery(stream: EventsConnection, recheck: () => void): void {
+  const previous = useRef(stream);
 
-function AppHeader({ connection, accountOpen, onToggleAccount }: AppHeaderProps) {
+  useEffect(() => {
+    const recovered = stream === 'connected' && previous.current !== 'connected';
+    previous.current = stream;
+    if (recovered) recheck();
+  }, [stream, recheck]);
+}
+
+type AppHeaderProps = {
+  connection: Connection;
+  stream: EventsConnection;
+  accountOpen: boolean;
+  onToggleAccount: () => void;
+};
+
+function AppHeader({ connection, stream, accountOpen, onToggleAccount }: AppHeaderProps) {
   return (
     <header className="page-header">
       <a className="brand" href="/" aria-label="CarSharing — главная">
@@ -88,6 +128,7 @@ function AppHeader({ connection, accountOpen, onToggleAccount }: AppHeaderProps)
         </span>
         Бишкек
       </span>
+      <StreamNotice stream={stream} connection={connection} />
       <ConnectionIndicator connection={connection} />
       <button className="header-action" type="button" aria-expanded={accountOpen} onClick={onToggleAccount}>
         Вход

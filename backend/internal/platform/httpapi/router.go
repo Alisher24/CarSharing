@@ -9,13 +9,18 @@ import (
 
 // NewAnonymousRouter serves the operations that need no account: the health probes and the public
 // catalog. Everything an account is required for is refused before a handler it was not given is
-// reached, which is what a probe outside the application and a routing test need.
+// reached, which is what a probe outside the application and a routing test need. It holds no
+// signals, so the streaming operations are answered as unavailable rather than as unknown resources.
 func NewAnonymousRouter(probe ReadinessProbe, catalog Catalog) (http.Handler, error) {
 	handlers, err := newCatalogHandlers(catalog)
 	if err != nil {
 		return nil, err
 	}
-	served := server{health: health{probe: probe}, catalogHandlers: handlers}
+	served := server{
+		health:          health{probe: probe},
+		catalogHandlers: handlers,
+		streams:         streams{hub: unservedStreams{}},
+	}
 	policy := transport{allowedOrigins: map[string]bool{}, authenticate: refuseCredentials}
 	strict := servedapi.NewStrictHandlerWithOptions(served, nil, strictErrorHandlers())
 	return servedRouter(servedapi.Handler(strict), policy), nil
@@ -32,10 +37,15 @@ func NewHandler(dependencies Dependencies) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	streaming, err := newStreams(dependencies.Events, dependencies.Sessions)
+	if err != nil {
+		return nil, err
+	}
 	served := server{
 		health:          health{probe: dependencies.Probe},
 		accounts:        accounts,
 		catalogHandlers: handlers,
+		streams:         streaming,
 	}
 	strict := servedapi.NewStrictHandlerWithOptions(served, nil, strictErrorHandlers())
 	policy := transport{

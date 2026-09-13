@@ -3,12 +3,14 @@ info:
   title: CarSharing browser API
   version: 1.0.0
   description: >-
-    MVP contract. Only health operations are implemented; planned operations return JSON 404 in production.
-    All JSON and SSE responses use Cache-Control no-store. Public JSON bodies are limited to 65536 bytes.
-    Unsupported methods are 405 METHOD_NOT_ALLOWED with Allow; unknown/foreign resources and unimplemented
-    production paths are 404 RESOURCE_NOT_FOUND. Errors use ApiError, X-Request-ID and no-store. Syntax/header
-    errors are 400; parsed field errors are 422. Validation details enumerate all independently detectable
-    violations in deterministic body/query/path/header and pointer/parameter order.
+    MVP contract. Every operation states through x-implementation-status whether this application serves
+    it; an operation that is still planned is not routed and answers as an unknown resource rather than as
+    a method that exists. All JSON and SSE responses use Cache-Control no-store. Public JSON bodies are
+    limited to 65536 bytes. Unsupported methods are 405 METHOD_NOT_ALLOWED with Allow; unknown/foreign
+    resources and unimplemented production paths are 404 RESOURCE_NOT_FOUND. Errors use ApiError,
+    X-Request-ID and no-store. Syntax/header errors are 400; parsed field errors are 422. Validation
+    details enumerate all independently detectable violations in deterministic body/query/path/header and
+    pointer/parameter order.
 paths:
   /api/v1/health/live:
     get:
@@ -1069,8 +1071,11 @@ paths:
       x-implementation-status: implemented
       x-body-limit: 65536
       description: >-
-        Complete unpaginated demo fleet snapshot. Status and powertrain filters belong to the frontend. No
-        request body is permitted, including an empty JSON object.
+        Complete unpaginated demo fleet snapshot. Status and powertrain filters belong to the frontend. server_time
+        is the instant the snapshot was taken, and freshness is judged against it rather than against the moment a
+        response arrives. A stored vehicle is replaced when the received version is greater, discarded when it is
+        lower whatever the arrival time, and for an equal version replaced only by values computed at a newer
+        server_time. No request body is permitted, including an empty JSON object.
       parameters:
         - name: X-Request-ID
           in: header
@@ -5119,17 +5124,22 @@ paths:
     get:
       operationId: getPublicEvents
       summary: get Public Events
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-body-limit: 65536
       description: >-
         Ephemeral invalidation signal, not a log. Subscribe then send retry 3000 and ready with server_time.
         Heartbeat is a keepalive comment every 15 seconds. No SSE id, Last-Event-ID or replay support. Payload
         is only resource id/version, never full objects or private data. Compare versions within
-        (resource,id), ignore equal/older. Reconnect waits for ready then fetches REST snapshots; also
-        reconcile vehicles/me/current every five seconds. A bounded-queue overflow closes the stream. Losing
-        the session closes the private stream; check me and clear private cache on 401 or reconnect. Events:
-        vehicle.changed, zone.changed, tariff.changed. Anonymous public resources only. No request body is
-        permitted, including an empty JSON object.
+        (resource,id), ignore equal/older. Start the primary REST snapshot immediately: waiting for ready must
+        not block the map while REST answers. After every ready, including a reconnect, re-read the available
+        REST resources, and reconcile vehicles together with the loaded zones and tariffs every five seconds. A
+        signal that arrives during a request is remembered as the highest version seen for its resource and
+        forces one more read when the answer does not contain it yet; the signalled version is never treated as
+        a loaded object. Signals are coalesced over a 100 ms window, so a batch of vehicle changes costs one
+        catalog read. A response started earlier never rolls a newer version back. A bounded-queue overflow
+        closes the stream and the client recovers through a snapshot. Events: vehicle.changed, zone.changed,
+        tariff.changed. Anonymous public resources only. No request body is permitted, including an empty JSON
+        object.
       parameters:
         - name: X-Request-ID
           in: header
@@ -5293,17 +5303,20 @@ paths:
     get:
       operationId: getPrivateEvents
       summary: get Private Events
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-body-limit: 65536
       description: >-
         Ephemeral invalidation signal, not a log. Subscribe then send retry 3000 and ready with server_time.
         Heartbeat is a keepalive comment every 15 seconds. No SSE id, Last-Event-ID or replay support. Payload
         is only resource id/version, never full objects or private data. Compare versions within
-        (resource,id), ignore equal/older. Reconnect waits for ready then fetches REST snapshots; also
-        reconcile vehicles/me/current every five seconds. A bounded-queue overflow closes the stream. Losing
-        the session closes the private stream; check me and clear private cache on 401 or reconnect. Events:
-        rental.changed, invoice.changed, notification.changed. Only resources owned by this session; public
-        events are not duplicated. No request body is permitted, including an empty JSON object.
+        (resource,id), ignore equal/older. Start the primary REST snapshot immediately: waiting for ready must
+        not block it. After every ready, including a reconnect, re-read the available REST resources and check
+        the session again before using private data. The session is re-checked before every private event and
+        every five seconds while no event arrives: revocation, expiry or a check that cannot answer closes the
+        stream. Losing the session closes the private stream; a 401 clears the private cache and a live session
+        reconnects. Events: rental.changed, invoice.changed, notification.changed. Only resources owned by this
+        session; public events are not duplicated. No request body is permitted, including an empty JSON
+        object.
       parameters:
         - name: X-Request-ID
           in: header

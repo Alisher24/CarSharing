@@ -23,25 +23,32 @@ const SUBMIT_OPERATIONS: Record<AccountIntent, (credentials: Credentials) => Pro
   'sign-in': signIn,
 };
 
+/**
+ * useAccount owns the session for the whole application rather than for the panel that shows it,
+ * because the private stream is opened and closed by the session and must outlive any one screen.
+ */
 export function useAccount() {
   const [account, setAccount] = useState<Account>({ state: 'checking' });
   const [submission, setSubmission] = useState<Submission>({ state: 'idle' });
+  const [check, setCheck] = useState(0);
 
-  // The session is restored from the server on every load, which is what makes a reload keep the
-  // person signed in without the interface storing anything itself.
+  // The session is restored from the server on every load and after every reconnection, which is
+  // what makes a reload keep the person signed in without the interface storing anything itself.
   useEffect(() => {
     const controller = new AbortController();
     let mounted = true;
 
     currentSession(controller.signal).then((result) => {
-      if (mounted) setAccount(accountFrom(result));
+      if (mounted) setAccount((held) => accountAfterCheck(held, result));
     });
 
     return () => {
       mounted = false;
       controller.abort();
     };
-  }, []);
+  }, [check]);
+
+  const recheck = useCallback(() => setCheck((count) => count + 1), []);
 
   const submit = useCallback(async (intent: AccountIntent, credentials: Credentials) => {
     setSubmission({ state: 'sending' });
@@ -70,13 +77,17 @@ export function useAccount() {
     if (revoked) setAccount({ state: 'signed-out' });
   }, [account]);
 
-  return { account, submission, submit, leave };
+  return { account, submission, submit, leave, recheck };
 }
 
-// Every outcome other than a live session leaves the entry form on screen: a person who cannot be
-// read as signed in is asked to sign in, and the form reports its own failures when they submit.
-function accountFrom(result: SessionResult): Account {
+/**
+ * accountAfterCheck folds one answer of the session check into what is already known. A refusal is
+ * the server saying there is no session; a check that could not be made says nothing about the
+ * session at all, so a signed-in person stays signed in until the server itself says otherwise.
+ */
+function accountAfterCheck(held: Account, result: SessionResult): Account {
   if (result.outcome === 'session') return { state: 'signed-in', snapshot: result.snapshot };
+  if (result.outcome === 'unreachable' && held.state === 'signed-in') return held;
 
   return { state: 'signed-out' };
 }

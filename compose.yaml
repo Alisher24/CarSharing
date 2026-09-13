@@ -77,6 +77,22 @@ services:
     restart: unless-stopped
     stop_grace_period: 15s
 
+  # The background work of the backend: outbox delivery, the reservation deadline sweep and the
+  # retention of delivered signals. It is a separate process so that restarting either it or the API
+  # leaves the other serving; both use the same modules.
+  worker:
+    <<: *backend
+    entrypoint: [/usr/local/bin/worker]
+    environment:
+      <<: *database
+      DB_USER: carsharing_app
+      DB_PASSWORD_FILE: /run/secrets/db_app_password
+    secrets: [db_app_password]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+    stop_grace_period: 15s
+
   frontend:
     image: carsharing-frontend:local
     build:
