@@ -13,6 +13,11 @@ export type CurrentSession = {
  * currentAnswers builds the answers of the coordinator that reads the account's own rental. The
  * public resources are answered by nobody here: a private read never publishes them, so a signal
  * about one is left to the catalog that reads it.
+ *
+ * The notifications addressed to the same account are read by their own coordinator rather than by
+ * this one: a page of notifications is not a snapshot of the reservation, it is ordered and versioned
+ * by entry rather than by the moment it was computed at, and a signal about a notification must not
+ * decide when the reservation is read — nor the other way round.
  */
 export function currentAnswers(state: CurrentSession): Record<DocumentKind, AnswerHandlers> {
   return {
@@ -20,6 +25,7 @@ export function currentAnswers(state: CurrentSession): Record<DocumentKind, Answ
     zones: notReadHere,
     tariffs: notReadHere,
     current: currentAnswer(state),
+    notifications: notReadHere,
   };
 }
 

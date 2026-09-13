@@ -17,14 +17,16 @@ const READY = 'ready';
 
 /**
  * How each event the contract declares is read. The name of the event is the whole of the type: the
- * payload states only which resource moved and how far. A change to the account's own rental arrives
- * on the private stream, which is the only connection it is published to.
+ * payload states only which resource moved and how far. A change to the account's own rental or to
+ * one of its notifications arrives on the private stream, which is the only connection it is
+ * published to: the public stream never carries either.
  */
 const RESOURCES_BY_EVENT: Record<string, DocumentKind> = {
   'vehicle.changed': 'vehicles',
   'zone.changed': 'zones',
   'tariff.changed': 'tariffs',
   'rental.changed': 'current',
+  'notification.changed': 'notifications',
 };
 
 /** What one frame says, or that it says nothing this client knows how to use. */

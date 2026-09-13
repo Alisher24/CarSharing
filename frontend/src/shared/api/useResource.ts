@@ -29,7 +29,8 @@ export type ResourceRead = {
  * the interval it is given.
  *
  * A request is a new read rather than a queued one: the read still in flight is abandoned, so its
- * answer can neither be stored nor compete with the answer to the request that replaced it.
+ * answer can neither be stored nor compete with the answer to the request that replaced it, and the
+ * document is free again the moment it is abandoned, so the read that replaces it does start.
  * Retrying does not clear what is already on screen: the marked-stale snapshot stays until an
  * attempt actually succeeds, and an answer the coordinator no longer accepts leaves the screen as
  * it is rather than replacing it with an older reading.
@@ -64,7 +65,9 @@ export function useResource<T>(
       } catch {
         if (!abandoned) setResource(afterFailure);
       } finally {
-        if (coordinator !== undefined && document !== undefined) coordinator.settle(document);
+        // A read this effect abandoned has already been settled by the cleanup that abandoned it, and
+        // the read that replaced it owns the document now.
+        if (!abandoned && coordinator !== undefined && document !== undefined) coordinator.settle(document);
       }
     }
 
@@ -74,6 +77,10 @@ export function useResource<T>(
     return () => {
       abandoned = true;
       controller.abort();
+      // The read this effect opened has ended, so the document may be read again: a request that
+      // arrived while that answer was on its way is served by the run that follows this one rather
+      // than waiting for a read nobody started.
+      if (coordinator !== undefined && document !== undefined) coordinator.settle(document);
       if (repeat !== undefined) window.clearInterval(repeat);
     };
   }, [load, coordinator, document, session, requested, refreshMilliseconds, attempt]);
