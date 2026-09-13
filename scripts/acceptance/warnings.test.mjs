@@ -29,6 +29,7 @@ import {
   outboxTasksFor,
   publishedVehicle,
   race,
+  reservationsOnDay,
   reserve,
   sql,
   storedRental,
@@ -43,6 +44,24 @@ const QUIET_MS = 2500;
 
 /** The two moments a prepared reservation is given, as SQL offsets from the database clock. */
 const RESERVATION_STARTED_SECONDS_AGO = 840;
+
+/** The lead a reservation observed before its warning window opens is given. */
+const BEFORE_WINDOW_SECONDS = 90;
+
+/** The remaining time that reservation must still have when the absence of a warning is read. */
+const BEFORE_WINDOW_REMAINING_MS = 30_000;
+
+/** The lead a reservation observed at the moment its warning window opens is given. */
+const AT_WINDOW_SECONDS = 60;
+
+/** How long before its deadline a reservation is warned, which is the lead the rule declares. */
+const WARNING_LEAD_MS = 60_000;
+
+/** The deadline the check of the window's last moment moves its reservation to. */
+const FINAL_SECOND_SECONDS = 10;
+
+/** How far from that deadline the check waits to be before it reads what the moment produced. */
+const FINAL_SECOND_REMAINING_MS = 9000;
 
 /** The zone every stored moment is rendered in, which is the one the contract publishes. */
 const STORED_MOMENT_ZONE = 'UTC';
@@ -62,13 +81,43 @@ after(async () => {
   compose('up', '--detach', '--scale', 'worker=1', 'worker');
 });
 
-describe('the last minute of a reservation', () => {
-  test('warns a reservation inside its last minute exactly once', async () => {
-    const account = await newAccount(`${ACCOUNT_PREFIX}-inside`);
-    const vehicleId = await availableVehicle();
-    const rentalId = prepareReservation({ account, vehicleId, deadlineSeconds: 30 });
+// The four moments of the rule, observed through the consequences the assembled stack produces for a
+// reservation that sits on each of them. A check states where the reservation stands relative to the
+// deadline it stored, and waits for what the deadline pass does with it; the microseconds of the rule
+// itself are decided in `backend/internal/rentals/deadline_test.go`, which is where a moment can be
+// stated exactly. The window is half-open — [expires_at − one minute, expires_at) — so the first
+// moment below is on the near side of it, the second is the moment it opens, the third is its last
+// moment, and the fourth is the deadline itself, at which the reservation is released and the warning
+// it was given stops being current.
+describe('the four moments of the deadline', () => {
+  test('before the last minute nothing is written', async () => {
+    const account = await newAccount(`${ACCOUNT_PREFIX}-before-window`);
+    const rentalId = prepareReservation({
+      account,
+      vehicleId: await availableVehicle(),
+      deadlineSeconds: BEFORE_WINDOW_SECONDS,
+    });
 
-    await until(() => notificationsOf(rentalId).length === 1, 'no warning was created for the last minute');
+    // The deadline is stated ninety seconds from the clock of the database, and the check reads the
+    // row about three seconds later. The window therefore opens half a minute after the absence below
+    // has been read, however many passes run in between, so what the check observes is the near side
+    // of the boundary rather than the schedule of a pass.
+    await delay(QUIET_MS);
+
+    assert.deepEqual(notificationsOf(rentalId), [], 'a warning was created before the last minute');
+    assert.equal(signalsOf(rentalId).length, 0, 'a signal was queued before the last minute');
+    assert.equal(storedRental(rentalId)[0], 'reserved');
+  });
+
+  test('at the last minute exactly one warning is created', async () => {
+    const account = await newAccount(`${ACCOUNT_PREFIX}-window-open`);
+    const rentalId = prepareReservation({
+      account,
+      vehicleId: await availableVehicle(),
+      deadlineSeconds: AT_WINDOW_SECONDS,
+    });
+
+    await until(() => notificationsOf(rentalId).length === 1, 'no warning was created once the last minute had begun');
 
     const [warning] = notificationsOf(rentalId);
     assert.equal(warning.kind, 'reservation_expiring');
@@ -76,6 +125,13 @@ describe('the last minute of a reservation', () => {
     assert.equal(warning.version, 1);
     assert.equal(warning.readAt, '');
     assert.equal(warning.userId, await accountId(account.email));
+
+    // The warning the pass created carries a moment inside the half-open window, so what decided it
+    // is the deadline rather than the fact that a pass happened to run.
+    const deadlineAt = rentalMoment(rentalId, 'expires_at');
+    const createdAt = Date.parse(warning.createdAt);
+    assert.ok(createdAt >= deadlineAt - WARNING_LEAD_MS, 'the warning was created before its window opened');
+    assert.ok(createdAt < deadlineAt, 'the warning was created at or after the deadline');
 
     const [signal] = signalsOf(rentalId);
     assert.equal(signal.kind, 'notification.changed');
@@ -93,30 +149,77 @@ describe('the last minute of a reservation', () => {
     assert.equal(again.version, 1, 'a repeated pass moved the version');
   });
 
-  test('does not warn a reservation that has more than its last minute left', async () => {
-    const account = await newAccount(`${ACCOUNT_PREFIX}-early`);
+  test('at the last moment of the window the warning stands and the reservation is still held', async () => {
+    const account = await newAccount(`${ACCOUNT_PREFIX}-window-last`);
     const vehicleId = await availableVehicle();
-    const rentalId = prepareReservation({ account, vehicleId, deadlineSeconds: 300 });
+    const rentalId = prepareReservation({
+      account,
+      vehicleId,
+      deadlineSeconds: AT_WINDOW_SECONDS,
+    });
 
-    await delay(QUIET_MS);
+    await until(() => notificationsOf(rentalId).length === 1, 'the pass did not warn the reservation');
+    const [warning] = notificationsOf(rentalId);
 
-    assert.deepEqual(notificationsOf(rentalId), [], 'a warning was created before the last minute');
-    assert.equal(signalsOf(rentalId).length, 0, 'a signal was queued before the last minute');
-    assert.equal(storedRental(rentalId)[0], 'reserved');
+    // The deadline is moved to the last moment this check observes, and the check waits until the
+    // reservation stands inside the final second of it. A pass that has already warned found a
+    // reservation one moment before its deadline, and a pass after this reading finds it released
+    // rather than warned again, which is what the assertions below say.
+    moveDeadline(rentalId, FINAL_SECOND_SECONDS);
+    await until(
+      () => rentalMoment(rentalId, 'expires_at') - Date.now() <= FINAL_SECOND_REMAINING_MS,
+      'the deadline never arrived',
+    );
+
+    const [stored] = notificationsOf(rentalId);
+    assert.equal(notificationsOf(rentalId).length, 1, 'the last moment created a second warning');
+    assert.equal(stored.id, warning.id);
+    assert.equal(stored.createdAt, warning.createdAt, 'the last moment replaced the stored moment');
+    assert.equal(stored.active, true, 'the warning stopped being current before the deadline');
+    assert.equal(storedRental(rentalId)[0], 'reserved', 'the reservation ended before its deadline');
+    assert.equal((await publishedVehicle(vehicleId)).status, 'reserved');
+    assert.deepEqual(
+      signalsOf(rentalId).map((one) => one.version),
+      [1],
+      'the warning was deactivated before the deadline',
+    );
   });
 
-  test('releases a reservation whose deadline has passed instead of warning it', async () => {
-    const account = await newAccount(`${ACCOUNT_PREFIX}-past`);
+  test('at the deadline the reservation is released and its warning stops being current', async () => {
+    const account = await newAccount(`${ACCOUNT_PREFIX}-at-deadline`);
+    const taker = await newAccount(`${ACCOUNT_PREFIX}-at-deadline-taker`);
     const vehicleId = await availableVehicle();
-    const rentalId = prepareReservation({ account, vehicleId, deadlineSeconds: -1 });
+    const rentalId = prepareReservation({ account, vehicleId, deadlineSeconds: AT_WINDOW_SECONDS });
 
-    await until(() => storedRental(rentalId)[0] === 'expired', 'the pass did not release the reservation');
+    // The warning this reservation is given belongs to the minute that follows, so the deadline below
+    // is reached with a warning already stored rather than with nothing.
+    await until(() => notificationsOf(rentalId).length === 1, 'the pass did not warn the reservation');
+    const [warning] = notificationsOf(rentalId);
+
+    moveDeadline(rentalId, -1);
+    await until(() => notificationsOf(rentalId)[0].active === false, 'the deadline left the warning current');
 
     const stored = storedRental(rentalId);
+    assert.equal(stored[0], 'expired', 'the deadline did not release the reservation');
     assert.equal(stored[6], stored[5], `the reservation ended at ${stored[6]} rather than its deadline`);
-    assert.deepEqual(notificationsOf(rentalId), [], 'a warning was created after the deadline');
-    assert.equal(signalsOf(rentalId).length, 0, 'a signal was queued after the deadline');
+    assert.equal(notificationsOf(rentalId).length, 1, 'the deadline created a second warning');
+    assert.equal(notificationsOf(rentalId)[0].version, 2, 'the deadline did not move the version of the warning');
+    assert.deepEqual(
+      signalsOf(rentalId).map((one) => one.version),
+      [1, 2],
+      'the deadline did not announce the warning it ended',
+    );
+    assert.equal(warning.userId, await accountId(account.email));
     assert.equal((await publishedVehicle(vehicleId)).status, 'available');
+
+    // A vehicle the deadline released is free: another account takes it, and the collection of that
+    // account holds no warning about the reservation that ended.
+    const taken = await reserve(vehicleId, newCommandKey(), taker);
+    assert.equal(taken.status, 201, taken.text);
+    assert.notEqual(taken.json.rental.id, rentalId, 'the released vehicle was given back to its holder');
+    assert.equal(await reservationsOnDay(await accountId(taker.email)), 1);
+    assert.deepEqual(notificationsOf(taken.json.rental.id), [], 'a fresh reservation was warned at once');
+    assert.equal(storedRental(rentalId)[0], 'expired');
   });
 });
 
@@ -519,6 +622,14 @@ function prepareReservation({
     }),
   );
   return id;
+}
+
+/**
+ * One stored moment of a rental as the epoch milliseconds a check compares with its own clock. The
+ * moment is read from the database, because that is the clock every deadline rule acts on.
+ */
+function rentalMoment(rentalId, column) {
+  return Number(sql(`SELECT (extract(epoch FROM ${column}) * 1000)::bigint FROM rentals WHERE id = '${rentalId}'`));
 }
 
 /** Every notification the database holds for one rental, in the order the collection reads them. */
