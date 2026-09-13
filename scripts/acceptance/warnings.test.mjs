@@ -48,9 +48,6 @@ const RESERVATION_STARTED_SECONDS_AGO = 840;
 /** The lead a reservation observed before its warning window opens is given. */
 const BEFORE_WINDOW_SECONDS = 90;
 
-/** The remaining time that reservation must still have when the absence of a warning is read. */
-const BEFORE_WINDOW_REMAINING_MS = 30_000;
-
 /** The lead a reservation observed at the moment its warning window opens is given. */
 const AT_WINDOW_SECONDS = 60;
 
