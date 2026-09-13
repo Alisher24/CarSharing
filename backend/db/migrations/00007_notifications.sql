@@ -20,7 +20,10 @@ CREATE TABLE notifications (
     read_at timestamptz,
     active boolean NOT NULL,
     version bigint NOT NULL CHECK (version > 0),
-    CHECK (read_at IS NULL OR read_at >= created_at)
+    CHECK (read_at IS NULL OR read_at >= created_at),
+    -- One notification per rental and kind, which is what the insert conflicts on and what makes a
+    -- repeated attempt write nothing.
+    UNIQUE (rental_id, kind)
 );
 
 -- The owner's collection is read newest first with the identifier as its tie-break, and the index is
