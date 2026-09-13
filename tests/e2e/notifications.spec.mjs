@@ -67,9 +67,11 @@ test('the warning arrives on the signal within two seconds of the commit', async
     const { model, rentalId } = await prepareReservation(page, LAST_MINUTE_SECONDS);
 
     // The warning is created by the worker's own sweep and reaches the page through its personal
-    // signal; the commit it is measured from is the one the database wrote.
+    // signal; the commit it is measured from is the one the database wrote. The measurement is
+    // reported as well as asserted, so a run says what the delivery actually cost.
     await expect(page.locator(WARNING)).toBeVisible({ timeout: RECONCILIATION_PATIENCE_MS });
     const arrivedIn = Date.now() - committedAt(rentalId);
+    console.log(`the warning reached the browser ${arrivedIn} ms after the commit`);
     expect(arrivedIn, `the warning reached the browser ${arrivedIn} ms after the commit`).toBeLessThan(
       DELIVERY_BOUND_MS,
     );
