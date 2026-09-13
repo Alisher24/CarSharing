@@ -67,6 +67,11 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON idempotency_requests TO carsharing_app;
 -- is given it here; nothing in the application updates an account.
 GRANT UPDATE ON users TO carsharing_app;
 
+-- Creating a reservation writes a rental, which earlier tasks only ever updated. The columns that
+-- hold the conditions it was made under are written by the same statement, so the one privilege
+-- covers both.
+GRANT INSERT ON rentals TO carsharing_app;
+
 -- +goose Down
 DROP TABLE idempotency_requests;
 

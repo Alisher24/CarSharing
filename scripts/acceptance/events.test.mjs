@@ -28,6 +28,7 @@ import {
   waitForFrame,
   STREAM_PATIENCE_MS,
 } from './events.mjs';
+import { rentalConditions } from './rentalrows.mjs';
 
 const PUBLIC_EVENTS_PATH = '/api/v1/events';
 const PRIVATE_EVENTS_PATH = '/api/v1/me/events';
@@ -394,15 +395,17 @@ async function insertDueReservation(cookie) {
        WHERE live.id IS NULL
        ORDER BY vehicle.id
        LIMIT 1
+     ), price AS (
+       SELECT * FROM tariffs ORDER BY id LIMIT 1
      ), written AS (
        INSERT INTO rentals (
-         id, user_id, vehicle_id, stage, tariff_id, zone_id, reserved_at, expires_at, version
+         id, user_id, vehicle_id, stage, tariff_id, zone_id, reserved_at, expires_at, version,${rentalConditions.columns}
        )
        SELECT gen_random_uuid(), '${userId}', free_vehicle.id, 'reserved',
-              (SELECT id FROM tariffs ORDER BY id LIMIT 1),
+              price.id,
               (SELECT id FROM service_zones ORDER BY id LIMIT 1),
-              now() - interval '20 minutes', now() - interval '5 minutes', 1
-       FROM free_vehicle
+              now() - interval '20 minutes', now() - interval '5 minutes', 1,${rentalConditions.values}
+       FROM free_vehicle, price
        RETURNING id, vehicle_id
      )
      SELECT id, vehicle_id, (extract(epoch FROM clock_timestamp()) * 1000)::bigint FROM written`,

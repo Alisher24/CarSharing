@@ -15,6 +15,7 @@ import {
   tryRestoreScenario,
   VEHICLES_PATH,
 } from './fleet.mjs';
+import { insertRental } from './rentalrows.mjs';
 
 /** The rentals these cases write on behalf of a person, and remove again afterwards. */
 const COMMITTED_PERSONAL_RENTAL = '01994342-6ba7-7000-8000-000900000001';
@@ -332,18 +333,14 @@ function stageOf(rentalId) {
  * restoration finds a rental it does not own and stops.
  */
 function personalRental(rentalId, email, vehicleId) {
-  return `
-    INSERT INTO rentals (id, user_id, vehicle_id, stage, tariff_id, zone_id, reserved_at, expires_at)
-    VALUES (
-      '${rentalId}',
-      (SELECT id FROM users WHERE email = '${email}'),
-      '${vehicleId}',
-      'reserved',
-      (SELECT id FROM tariffs ORDER BY id LIMIT 1),
-      (SELECT id FROM service_zones ORDER BY id LIMIT 1),
-      now(),
-      now() + interval '15 minutes'
-    );`;
+  return insertRental({
+    id: rentalId,
+    email,
+    vehicleId,
+    stage: 'reserved',
+    reservedAt: 'now()',
+    expiresAt: `now() + interval '15 minutes'`,
+  });
 }
 
 /**
@@ -352,20 +349,14 @@ function personalRental(rentalId, email, vehicleId) {
  * finds a rental it does not own, and leaves it as it stands.
  */
 function finishedPersonalRental(rentalId, email, vehicleId) {
-  return `
-    INSERT INTO rentals (
-      id, user_id, vehicle_id, stage, tariff_id, zone_id, reserved_at, expires_at, started_at, ended_at
-    )
-    VALUES (
-      '${rentalId}',
-      (SELECT id FROM users WHERE email = '${email}'),
-      '${vehicleId}',
-      'completed',
-      (SELECT id FROM tariffs ORDER BY id LIMIT 1),
-      (SELECT id FROM service_zones ORDER BY id LIMIT 1),
-      now() - interval '30 minutes',
-      now() - interval '16 minutes',
-      now() - interval '29 minutes',
-      now() - interval '2 minutes'
-    );`;
+  return insertRental({
+    id: rentalId,
+    email,
+    vehicleId,
+    stage: 'completed',
+    reservedAt: `now() - interval '30 minutes'`,
+    expiresAt: `now() - interval '16 minutes'`,
+    startedAt: `now() - interval '29 minutes'`,
+    endedAt: `now() - interval '2 minutes'`,
+  });
 }
