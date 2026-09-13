@@ -235,6 +235,26 @@ func transact(
 	return fmt.Errorf("%w: %s", ErrConcurrencyExhausted, last)
 }
 
+// rentalParticipants is the rows the transition of one named rental touches: the account that holds
+// it, its vehicle and the rental itself. Nothing here reads a second rental, so the transaction that
+// takes these rows cannot meet a set of relationships it did not plan for.
+func rentalParticipants(pool *pgxpool.Pool, id string) func(context.Context) (participants, error) {
+	return func(ctx context.Context) (participants, error) {
+		target, err := rentalByID(ctx, pool, id)
+		if errors.Is(err, ErrRentalNotFound) {
+			return participants{}, nil
+		}
+		if err != nil {
+			return participants{}, err
+		}
+		return participants{
+			users:    []uuid.UUID{target.UserID},
+			vehicles: []string{target.VehicleID},
+			rentals:  []string{target.ID},
+		}, nil
+	}
+}
+
 // lock takes the planned rows in the shared order. Each selection is ordered, so two transactions
 // reaching the same set wait in the same sequence.
 func lock(ctx context.Context, pool *pgxpool.Pool, planned participants) error {

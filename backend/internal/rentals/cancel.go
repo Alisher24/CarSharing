@@ -107,6 +107,11 @@ func (s *Service) cancelWithin(ctx context.Context, moment time.Time, target Ren
 		// answer rather than reporting a cancellation that did not happen.
 		return refused(moment, Refusal{Kind: InvalidRentalState}), nil
 	}
+	// The reservation has left the reserved stage, so its warning stops being current in the same
+	// transaction that moved it.
+	if err = deactivateWarning(ctx, s.pool, cancelled); err != nil {
+		return Outcome{}, err
+	}
 	if err = announceEnd(ctx, s.pool, target, cancelled); err != nil {
 		return Outcome{}, err
 	}
@@ -159,9 +164,9 @@ func endReservationAs(
 	return ended, true, rows.Err()
 }
 
-// endReservation ends one reservation at its own deadline, releases its vehicle and announces both
-// changes. It is the single implementation of the transition: the sweep, the read that discovers a
-// deadline and the command that arrives after one all reach it.
+// endReservation ends one reservation at its own deadline, releases its vehicle, deactivates its
+// warning and announces all three changes. It is the single implementation of the transition: the
+// sweep, the read that discovers a deadline and the command that arrives after one all reach it.
 //
 // The rental ends at its deadline rather than at the moment this ran, so a sweep that arrives late
 // does not extend a reservation that had already run out. A reservation another transaction has
@@ -169,6 +174,9 @@ func endReservationAs(
 func endReservation(ctx context.Context, pool *pgxpool.Pool, due Rental) (bool, error) {
 	ended, moved, err := endReservationAs(ctx, pool, due.ID, stage.Expired, due.ExpiresAt)
 	if err != nil || !moved {
+		return false, err
+	}
+	if err = deactivateWarning(ctx, pool, ended); err != nil {
 		return false, err
 	}
 	return true, announceEnd(ctx, pool, due, ended)

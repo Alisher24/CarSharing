@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
-	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -38,7 +37,7 @@ func (s *Service) Current(ctx context.Context, caller uuid.UUID) (Current, error
 	var current Current
 	err := transact(ctx, s.pool, currentParticipants(s.pool, caller),
 		func(txCtx context.Context, moment time.Time) error {
-			held, err := s.liveRentalAt(txCtx, moment, caller)
+			held, err := liveRentalAt(txCtx, s.pool, moment, userLiveRentalSelection, caller)
 			if err != nil {
 				return err
 			}
@@ -49,6 +48,12 @@ func (s *Service) Current(ctx context.Context, caller uuid.UUID) (Current, error
 			current = Current{Moment: moment, Limit: limit}
 			if held == nil {
 				return nil
+			}
+			// The read fixes a warning the worker missed through the transition the worker performs,
+			// as it already fixes an expiry the worker missed: a person whose worker was stopped
+			// still learns about the last minute when they open the application.
+			if _, err = createDueWarning(txCtx, s.pool, *held, moment); err != nil {
+				return err
 			}
 			vehicle, err := s.vehicles.VehicleAt(txCtx, held.VehicleID, moment)
 			if err != nil {
@@ -62,23 +67,6 @@ func (s *Service) Current(ctx context.Context, caller uuid.UUID) (Current, error
 		return Current{}, err
 	}
 	return current, nil
-}
-
-// liveRentalAt reads the rental that currently holds a vehicle for this account, ending a
-// reservation whose deadline has passed on the way. A rental that was ended is no longer current,
-// so the read answers that nothing is.
-func (s *Service) liveRentalAt(ctx context.Context, moment time.Time, caller uuid.UUID) (*Rental, error) {
-	held, err := liveRentalOf(ctx, s.pool, userLiveRentalSelection, caller)
-	if err != nil || held == nil {
-		return nil, err
-	}
-	if held.Stage != stage.Reserved || !held.Overdue(moment) {
-		return held, nil
-	}
-	if _, err = endReservation(ctx, s.pool, *held); err != nil {
-		return nil, err
-	}
-	return nil, nil
 }
 
 // currentParticipants is the rows this read touches: the account, and the vehicle and rental that

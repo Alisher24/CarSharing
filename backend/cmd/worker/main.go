@@ -53,15 +53,16 @@ func run() error {
 // behaviour it performs and the schedule it runs on; the process only decides that they run at all.
 //
 // Two workers may run side by side: the queue hands a task to one attempt at a time under a lease
-// that runs out on its own, and the reservation sweep performs one transition per reservation
-// whichever process performs it.
+// that runs out on its own, and the deadline pass performs one transition per reservation — its
+// release or its warning — whichever process performs it.
 func work(ctx context.Context, pool *pgxpool.Pool) error {
 	delivery, err := outbox.NewWorker(pool, events.Deliveries(pool).Deliver)
 	if err != nil {
 		return err
 	}
 	go delivery.Run(ctx)
-	go periodic.Run(ctx, "reservation expiry", rentals.ExpirySweepInterval, rentals.NewExpiry(pool).ExpireDue)
+	go periodic.Run(ctx, "reservation deadlines", rentals.DeadlineSweepInterval,
+		rentals.NewDeadlines(pool).Due)
 	go periodic.Run(ctx, "signal retention", events.RetentionInterval, events.NewReaper(pool).Delete)
 	go periodic.Run(ctx, "command result retention", idempotency.RetentionInterval,
 		idempotency.NewReaper(pool).Delete)
