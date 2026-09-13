@@ -4,7 +4,7 @@ COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 COPY backend/ ./
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/ \
-    ./cmd/api ./cmd/migrate ./cmd/seed ./cmd/demoscenario ./cmd/healthcheck
+    ./cmd/api ./cmd/worker ./cmd/migrate ./cmd/seed ./cmd/demoscenario ./cmd/healthcheck
 
 FROM scratch
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/

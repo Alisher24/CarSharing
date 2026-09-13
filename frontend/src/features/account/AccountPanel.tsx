@@ -1,16 +1,25 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
+import type { Account, Submission } from './useAccount';
 import type { AccountIntent } from './accountIntent';
-import type { Submission } from './useAccount';
-import { useAccount } from './useAccount';
 import { refusalText } from './refusalText';
 import type { Credentials, SessionSnapshot } from '../../shared/api/session';
 
 // One section holds every account panel, so the heading it is labelled by is declared once.
 const ACCOUNT_TITLE_ID = 'account-title';
 
-export function AccountPanel() {
-  const { account, submission, submit, leave } = useAccount();
+type AccountPanelProps = {
+  account: Account;
+  submission: Submission;
+  onSubmit: (intent: AccountIntent, credentials: Credentials) => Promise<void>;
+  onLeave: () => Promise<void>;
+};
 
+/**
+ * AccountPanel shows the session the application owns. It holds nothing of it: the session is
+ * restored, replaced and ended above this panel, so that closing the panel changes nothing about
+ * who is signed in or about the stream that belongs to them.
+ */
+export function AccountPanel({ account, submission, onSubmit, onLeave }: AccountPanelProps) {
   if (account.state === 'checking') {
     return (
       <AccountHeading>
@@ -22,10 +31,10 @@ export function AccountPanel() {
   }
 
   if (account.state === 'signed-in') {
-    return <SignedInPanel snapshot={account.snapshot} submission={submission} onLeave={leave} />;
+    return <SignedInPanel snapshot={account.snapshot} submission={submission} onLeave={onLeave} />;
   }
 
-  return <CredentialsForm submission={submission} onSubmit={submit} />;
+  return <CredentialsForm submission={submission} onSubmit={onSubmit} />;
 }
 
 /** Every panel renders the same section and label, so only the panel itself decides the rest. */

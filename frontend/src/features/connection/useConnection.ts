@@ -11,6 +11,10 @@ const CONNECTION_CHECK_MILLISECONDS = 10_000;
 /** What the interface knows about the service behind it. */
 export type Connection = Resource<ReadyStatus>;
 
+/**
+ * The health probe is the reader's own link to the service rather than a published resource, so it
+ * is read on its own interval and sequenced by nothing: no change signal addresses it.
+ */
 export function useConnection(): Connection {
-  return useResource(getHealth, CONNECTION_CHECK_MILLISECONDS).resource;
+  return useResource(getHealth, undefined, CONNECTION_CHECK_MILLISECONDS).resource;
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Alisher24/CarSharing/backend/internal/auth"
+	"github.com/Alisher24/CarSharing/backend/internal/events"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals"
 	"github.com/google/uuid"
@@ -46,15 +47,18 @@ func (r restorer) restore(ctx context.Context) error {
 	if err := r.refuseVehiclesRentedByPeople(ctx, scenario, vehicleIDs); err != nil {
 		return err
 	}
-	if err := r.store.deleteScenarioRentals(ctx, vehicleIDs); err != nil {
+	if err := r.store.deleteScenarioRentals(ctx, vehicleIDs, preparedRentalIDs(scenario)); err != nil {
 		return err
 	}
-	for _, vehicle := range scenario {
-		if err := r.store.restoreVehicle(ctx, vehicle); err != nil {
-			return err
-		}
+	signals, err := r.restoreVehicles(ctx, scenario)
+	if err != nil {
+		return err
 	}
-	return r.restoreRentals(ctx, scenario)
+	rentals, err := r.restoreRentals(ctx, scenario)
+	if err != nil {
+		return err
+	}
+	return events.Record(ctx, r.store.pool, append(signals, rentals...)...)
 }
 
 func (r restorer) refuseVehiclesRentedByPeople(
@@ -70,21 +74,49 @@ func (r restorer) refuseVehiclesRentedByPeople(
 	return fmt.Errorf("%w: %s", ErrScenarioVehicleInUse, strings.Join(inUse, ", "))
 }
 
-func (r restorer) restoreRentals(ctx context.Context, scenario []Vehicle) error {
+// restoreVehicles puts every scenario vehicle back and states the public change each one is, because
+// a restoration that nobody was told about would leave every connected map showing the state the
+// previous person left behind.
+func (r restorer) restoreVehicles(ctx context.Context, scenario []Vehicle) ([]events.Signal, error) {
+	signals := make([]events.Signal, 0, len(scenario))
+	for _, vehicle := range scenario {
+		version, err := r.store.restoreVehicle(ctx, vehicle)
+		if err != nil {
+			return nil, err
+		}
+		signals = append(signals, events.Signal{
+			Kind:       events.VehicleChanged,
+			ResourceID: vehicle.ID,
+			Version:    version,
+		})
+	}
+	return signals, nil
+}
+
+// restoreRentals puts the prepared rentals back and states the private change each holder is told.
+func (r restorer) restoreRentals(ctx context.Context, scenario []Vehicle) ([]events.Signal, error) {
 	zone, tariff := Zone(), Tariff()
+	var signals []events.Signal
 	for _, vehicle := range scenario {
 		if vehicle.HeldBy == rentals.NotHeld {
 			continue
 		}
 		owner, err := r.scenarioAccount(ctx, vehicle.ScenarioAccount)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		if err = r.store.insertRental(ctx, vehicle.preparedRental(owner, tariff.ID, zone.ID)); err != nil {
-			return err
+		version, err := r.store.restoreRental(ctx, vehicle.preparedRental(owner, tariff.ID, zone.ID))
+		if err != nil {
+			return nil, err
 		}
+		signals = append(signals, events.Signal{
+			Kind:       events.RentalChanged,
+			ResourceID: vehicle.PreparedRentalID,
+			Version:    version,
+			Recipient:  owner,
+		})
 	}
-	return nil
+	return signals, nil
 }
 
 func (r restorer) scenarioAccount(ctx context.Context, address string) (uuid.UUID, error) {
@@ -115,6 +147,18 @@ func identifiersOf(vehicles []Vehicle) []string {
 	identifiers := make([]string, 0, len(vehicles))
 	for _, vehicle := range vehicles {
 		identifiers = append(identifiers, vehicle.ID)
+	}
+	return identifiers
+}
+
+// preparedRentalIDs names the rentals a restoration puts back, which are the rows it keeps: every
+// other rental on a scenario vehicle is removed, because the scenario is what put it there.
+func preparedRentalIDs(vehicles []Vehicle) []string {
+	var identifiers []string
+	for _, vehicle := range vehicles {
+		if vehicle.PreparedRentalID != "" {
+			identifiers = append(identifiers, vehicle.PreparedRentalID)
+		}
 	}
 	return identifiers
 }

@@ -9,9 +9,12 @@
   "scripts": {
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "format:staged": "node scripts/format-staged.mjs"
+    "format:staged": "node scripts/format-staged.mjs",
+    "e2e": "playwright test --config tests/e2e/playwright.config.mjs",
+    "e2e:install": "playwright install chromium"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "prettier": "3.9.6"
   }
 }

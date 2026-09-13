@@ -43,6 +43,33 @@
   color: var(--color-ink-muted);
 }
 
+/* The change stream says what it is doing beside the reader's own link to the service: a stream
+   that is retried is a delay in updates, which is not the same fact as no service at all. It sits
+   at the far end of the header and carries the gap that pushes both facts there. */
+.stream-notice {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-left: auto;
+  font-size: var(--font-size-detail);
+  color: var(--color-ink-muted);
+}
+
+.stream-notice-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--color-accent-soft);
+  border-radius: 50%;
+}
+
+.stream-notice[data-stream='delayed'] {
+  color: var(--color-danger);
+}
+
+.stream-notice[data-stream='delayed'] .stream-notice-dot {
+  background: var(--color-danger);
+}
+
 .connection-indicator-dot {
   width: 8px;
   height: 8px;

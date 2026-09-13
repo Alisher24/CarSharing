@@ -2,8 +2,8 @@ package httpapi
 
 import "github.com/getkin/kin-openapi/openapi3"
 
-// The header names whose behaviour this package defines, the media type it accepts, and the cache
-// policy it answers every response with.
+// The header names whose behaviour this package defines, the media types it accepts and answers with,
+// and the cache policy every response carries.
 const (
 	originHeader         = "Origin"
 	csrfTokenHeader      = "X-CSRF-Token"
@@ -14,6 +14,7 @@ const (
 	cacheControlHeader   = "Cache-Control"
 	noStoreCacheControl  = "no-store"
 	jsonMediaType        = "application/json"
+	streamMediaType      = "text/event-stream"
 )
 
 // declaresHeader reports whether an operation declares a header parameter, optionally demanding

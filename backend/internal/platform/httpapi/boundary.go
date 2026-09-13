@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
@@ -55,8 +56,32 @@ func boundary(spec *openapi3.T, next http.Handler, policy transport) http.Handle
 				return
 			}
 		}
+		releaseWriteDeadline(w, route.Operation)
 		validate.ServeHTTP(w, pending.request)
 	})
+}
+
+// releaseWriteDeadline removes the server's write deadline for an operation whose response is a
+// stream. That deadline bounds an ordinary request, and a connection that stays open for as long as
+// the browser holds it would be cut off by it; the stream bounds its own writes instead, with the
+// limit the contract states. A response writer that cannot carry a deadline — a recorder in a test —
+// is left as it is.
+func releaseWriteDeadline(w http.ResponseWriter, operation *openapi3.Operation) {
+	if !declaresStreamingResponse(operation) {
+		return
+	}
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
+}
+
+// declaresStreamingResponse reports whether any response of an operation is a stream, which the
+// contract states through the media type it declares.
+func declaresStreamingResponse(operation *openapi3.Operation) bool {
+	for _, response := range operation.Responses.Map() {
+		if response.Value.Content.Get(streamMediaType) != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // transportSteps is the policy every request passes through, in the order it must be applied. A

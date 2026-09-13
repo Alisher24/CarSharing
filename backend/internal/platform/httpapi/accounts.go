@@ -11,6 +11,7 @@ import (
 	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/sessions"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/timestamp"
 	"github.com/jackc/pgx/v5/pgxpool"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
@@ -319,13 +320,13 @@ func (a accounts) validationError(ctx context.Context, failed violation) serveda
 // absent: it reaches the browser only as a cookie.
 func snapshotOf(user auth.User, session sessions.Snapshot) servedapi.SessionSnapshot {
 	return servedapi.SessionSnapshot{
-		ServerTime:       timestamp(),
+		ServerTime:       serverTime(),
 		CsrfToken:        session.CSRFToken,
-		SessionExpiresAt: formatTimestamp(session.ExpiresAt),
+		SessionExpiresAt: timestamp.Format(session.ExpiresAt),
 		User: servedapi.User{
 			Id:        user.ID.String(),
 			Email:     openapi_types.Email(user.Email),
-			CreatedAt: formatTimestamp(user.CreatedAt),
+			CreatedAt: timestamp.Format(user.CreatedAt),
 		},
 	}
 }

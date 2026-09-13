@@ -157,6 +157,47 @@ func (s store) insertRental(ctx context.Context, prepared preparedRental) error 
 	return err
 }
 
+// A restoration puts a prepared rental back rather than creating it again: the row keeps its
+// identity and its version is raised, because a version that started over would look to every client
+// like a change older than the one it already shows, and would be discarded.
+const restoreRentalStatement = `
+INSERT INTO rentals (
+    id, user_id, vehicle_id, stage, tariff_id, zone_id, reserved_at, expires_at, started_at, version
+)
+VALUES ($1, $2, $3, $4, $5, $6, now(), now() + make_interval(secs => $7),
+        CASE WHEN $8 THEN now() END, $9)
+ON CONFLICT (id) DO UPDATE SET
+    stage = EXCLUDED.stage,
+    tariff_id = EXCLUDED.tariff_id,
+    zone_id = EXCLUDED.zone_id,
+    reserved_at = EXCLUDED.reserved_at,
+    expires_at = EXCLUDED.expires_at,
+    started_at = EXCLUDED.started_at,
+    ended_at = CASE WHEN EXCLUDED.stage IN ('reserved', 'active', 'paused') THEN NULL ELSE now() END,
+    version = rentals.version + 1
+RETURNING version`
+
+// restoredVersion is the version a prepared rental is created with. It is the starting point of a
+// sequence rather than a value that means anything on its own.
+const restoredVersion = 1
+
+// restoreRental puts one prepared rental back and reports the version it reached.
+func (s store) restoreRental(ctx context.Context, prepared preparedRental) (int64, error) {
+	var version int64
+	err := s.querier(ctx).QueryRow(ctx, restoreRentalStatement,
+		prepared.id,
+		prepared.userID,
+		prepared.vehicleID,
+		prepared.stage,
+		prepared.tariffID,
+		prepared.zoneID,
+		rentals.ReservationLifetime.Seconds(),
+		prepared.stage != rentals.Reserved,
+		restoredVersion,
+	).Scan(&version)
+	return version, err
+}
+
 // lockScenarioVehicles takes the scenario vehicles for update. A rental references its vehicle, so
 // inserting one takes a conflicting lock on that row: holding these locks first is what keeps a
 // rental started at the same moment from slipping past the conflict check below.
@@ -197,16 +238,25 @@ func (s store) vehiclesRentedByPeople(
 	return conflicting, rows.Err()
 }
 
+// The rentals a restoration removes are the ones it is about to put back, so that a prepared rental
+// keeps its row and its version: everything else on a scenario vehicle belongs to the scenario as
+// well, and a person's rental on one of them has already stopped the command.
 const deleteScenarioRentalsStatement = `
-DELETE FROM rentals WHERE vehicle_id = ANY($1)`
+DELETE FROM rentals WHERE vehicle_id = ANY($1) AND NOT (id = ANY($2))`
 
-func (s store) deleteScenarioRentals(ctx context.Context, vehicleIDs []string) error {
-	_, err := s.querier(ctx).Exec(ctx, deleteScenarioRentalsStatement, vehicleIDs)
+func (s store) deleteScenarioRentals(ctx context.Context, vehicleIDs, preparedIDs []string) error {
+	_, err := s.querier(ctx).Exec(ctx, deleteScenarioRentalsStatement, vehicleIDs, preparedIDs)
 	return err
 }
 
+// A restored vehicle is published differently: its link, its reserves and the age of its reading are
+// what the catalog shows. Its version is raised rather than set, so putting a vehicle back never
+// makes its sequence move backwards.
 const restoreVehicleStatement = `
-UPDATE vehicles SET connected = $2, reporting = $3 WHERE id = $1`
+UPDATE vehicles
+SET connected = $2, reporting = $3, version = version + 1
+WHERE id = $1
+RETURNING version`
 
 const restoreEnergySourceStatement = `
 UPDATE vehicle_energy_sources
@@ -220,22 +270,23 @@ SET position = ST_SetSRID(ST_MakePoint($2, $3), $4),
 WHERE vehicle_id = $1`
 
 // restoreVehicle puts one prepared vehicle back where it stood, with the reserves it started from
-// and the link it demonstrates.
-func (s store) restoreVehicle(ctx context.Context, vehicle Vehicle) error {
+// and the link it demonstrates, and reports the version the restoration published.
+func (s store) restoreVehicle(ctx context.Context, vehicle Vehicle) (int64, error) {
 	querier := s.querier(ctx)
-	if _, err := querier.Exec(ctx, restoreVehicleStatement,
-		vehicle.ID, vehicle.Connected, vehicle.Reporting); err != nil {
-		return err
+	var version int64
+	if err := querier.QueryRow(ctx, restoreVehicleStatement,
+		vehicle.ID, vehicle.Connected, vehicle.Reporting).Scan(&version); err != nil {
+		return 0, err
 	}
 	for _, source := range vehicle.Sources {
 		_, err := querier.Exec(ctx, restoreEnergySourceStatement,
 			vehicle.ID, source.Kind, source.Capacity.Decimal(), source.Remaining.Decimal())
 		if err != nil {
-			return err
+			return 0, err
 		}
 	}
 	_, err := querier.Exec(ctx, restoreTelemetryStatement,
 		vehicle.ID, vehicle.Position.Longitude, vehicle.Position.Latitude, wgs84SRID,
 		vehicle.confirmedAgo().Seconds())
-	return err
+	return version, err
 }

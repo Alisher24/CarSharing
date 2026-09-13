@@ -27,6 +27,11 @@ type Dependencies struct {
 	Users    *auth.UserStore
 	Throttle *auth.Throttle
 
+	// Events is the fan-out of the changes the streams this process serves write out. Only the
+	// full application serves them: a router built for the health probe and the routing tests is
+	// given an implementation that refuses every stream instead.
+	Events EventStream
+
 	// Catalog is what the operations that need no account read. Both routers are given it,
 	// because the anonymous one serves those operations too.
 	Catalog Catalog
@@ -44,4 +49,5 @@ type server struct {
 	health
 	accounts
 	catalogHandlers
+	streams
 }
