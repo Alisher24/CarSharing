@@ -36,12 +36,6 @@ type Rental struct {
 	Tariff tariffs.Tariff
 }
 
-// Overdue reports whether the reservation's deadline has been reached at an instant. The boundary
-// itself counts: a reservation is due at exactly its deadline, not a moment later.
-func (r Rental) Overdue(at time.Time) bool {
-	return !at.Before(r.ExpiresAt)
-}
-
 // rentalFields is the shape every rental read and every rental transition returns. One declaration
 // keeps a rental read by identifier, by owner or by vehicle, and a rental returned by a transition,
 // from drifting apart.
