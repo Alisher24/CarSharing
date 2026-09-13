@@ -3,7 +3,7 @@ import type { ObservedVersions } from './changes.ts';
 import type { AnswerHandlers, DocumentKind } from './readCycle.ts';
 
 /** Every public resource the catalog reads, in the order the interface shows them. */
-export const DOCUMENT_KINDS: readonly DocumentKind[] = ['vehicles', 'zones', 'tariffs'];
+export const PUBLIC_DOCUMENT_KINDS: readonly DocumentKind[] = ['vehicles', 'zones', 'tariffs'];
 
 /** A read the coordinator has opened, and which answer is allowed to store. */
 export type ReadTicket = { document: DocumentKind; session: string; generation: number };

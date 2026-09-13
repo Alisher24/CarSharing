@@ -2,17 +2,18 @@ package rentals
 
 import (
 	"context"
+	"errors"
 	"time"
 
-	"github.com/Alisher24/CarSharing/backend/internal/events"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
+	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // ExpirySweepInterval is how often reservations are checked against their deadlines. A reservation
-// is therefore released within a second of running out, which is close enough for a person
-// watching the map to see the vehicle free itself.
+// is therefore released within a second of running out, which is close enough for a person watching
+// the map to see the vehicle free itself.
 const ExpirySweepInterval = time.Second
 
 // Expiry ends reservations whose deadline has passed. It is the rentals module's own transition: the
@@ -21,102 +22,95 @@ type Expiry struct{ pool *pgxpool.Pool }
 
 func NewExpiry(pool *pgxpool.Pool) *Expiry { return &Expiry{pool: pool} }
 
-// ExpireDue ends every reservation already past its deadline and reports how many it ended. The
-// rental ends at the deadline itself rather than at the moment this ran, so a late sweep does not
-// extend a reservation that had already run out.
-//
-// Ending a reservation changes what the fleet publishes and what its holder is told, so the version
-// of the rental and of its vehicle are raised and the signals of both are recorded in the same
-// transaction as the transition: a release nobody is told about would leave two clients showing a
-// vehicle as taken.
-func (e *Expiry) ExpireDue(ctx context.Context) (int64, error) {
-	var ended int64
-	err := database.InTransaction(ctx, e.pool, func(txCtx context.Context) error {
-		due, err := dueReservations(txCtx, e.pool)
-		if err != nil {
-			return err
-		}
-		signals := make([]events.Signal, 0, len(due)*2)
-		for _, reservation := range due {
-			version, err := expireReservation(txCtx, e.pool, reservation.id)
-			if err != nil {
-				return err
-			}
-			vehicleVersion, err := raiseVehicleVersion(txCtx, e.pool, reservation.vehicleID)
-			if err != nil {
-				return err
-			}
-			signals = append(signals,
-				events.Signal{Kind: events.RentalChanged, ResourceID: reservation.id,
-					Version: version, Recipient: reservation.userID},
-				events.Signal{Kind: events.VehicleChanged, ResourceID: reservation.vehicleID,
-					Version: vehicleVersion},
-			)
-		}
-		ended = int64(len(due))
-		return events.Record(txCtx, e.pool, signals...)
-	})
-	return ended, err
-}
-
-// reservation is a reservation that has run out, resolved to what ending it needs.
-type reservation struct {
-	id        string
-	vehicleID string
-	userID    uuid.UUID
-}
-
-// dueReservations takes the reservations that have run out and locks them. The lock is what makes two
-// sweeps arriving together end each reservation once: the second one waits, then finds the row in a
-// stage that no longer matches and leaves it alone.
+// dueReservations finds the reservations that have run out. The selection takes no lock: a
+// reservation an equally timed sweep or a command has already ended since is left alone by the
+// transition below, which is where the decision is made rather than here.
 const dueReservationsStatement = `
-SELECT id, vehicle_id, user_id
+SELECT id
 FROM rentals
-WHERE stage = $1 AND expires_at <= now()
-ORDER BY expires_at, id
-FOR UPDATE`
+WHERE stage = $1 AND expires_at <= clock_timestamp()
+ORDER BY expires_at, id`
 
-func dueReservations(ctx context.Context, pool *pgxpool.Pool) ([]reservation, error) {
-	rows, err := database.QuerierFrom(ctx, pool).Query(ctx, dueReservationsStatement, Reserved)
+func dueReservations(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
+	rows, err := database.QuerierFrom(ctx, pool).Query(ctx, dueReservationsStatement, stage.Reserved)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var due []reservation
+	var due []string
 	for rows.Next() {
-		var current reservation
-		if err = rows.Scan(&current.id, &current.vehicleID, &current.userID); err != nil {
+		var id string
+		if err = rows.Scan(&id); err != nil {
 			return nil, err
 		}
-		due = append(due, current)
+		due = append(due, id)
 	}
 	return due, rows.Err()
 }
 
-// expireReservation ends one reservation at its own deadline and returns the version it reached.
-const expireReservationStatement = `
-UPDATE rentals
-SET stage = $1, ended_at = expires_at, version = version + 1
-WHERE id = $2 AND stage = $3
-RETURNING version`
-
-func expireReservation(ctx context.Context, pool *pgxpool.Pool, id string) (int64, error) {
-	var version int64
-	err := database.QuerierFrom(ctx, pool).QueryRow(ctx, expireReservationStatement,
-		Expired, id, Reserved).Scan(&version)
-	return version, err
+// ExpireDue ends every reservation already past its deadline and reports how many it ended.
+//
+// Each reservation is ended in its own transaction under the shared lock order, so a sweep and a
+// command arriving at the same moment wait for each other rather than taking the accounts and
+// vehicles of the fleet in two different orders. A reservation another transaction ended first is
+// counted as not ended by this sweep: the transition happened once.
+func (e *Expiry) ExpireDue(ctx context.Context) (int64, error) {
+	due, err := dueReservations(ctx, e.pool)
+	if err != nil {
+		return 0, err
+	}
+	var ended int64
+	for _, id := range due {
+		moved, err := e.expire(ctx, id)
+		if err != nil {
+			return ended, err
+		}
+		if moved {
+			ended++
+		}
+	}
+	return ended, nil
 }
 
-// raiseVehicleVersion marks the vehicle as changed for every reader of the catalog and returns the
-// version it reached. A version is raised rather than set, because a client compares the version of
-// two readings to decide which one is newer.
-const raiseVehicleVersionStatement = `
-UPDATE vehicles SET version = version + 1 WHERE id = $1 RETURNING version`
+// expire ends one reservation that was due when the sweep read it. The deadline is compared again
+// after the locks with the moment the transaction fixed, because the wait for those locks may have
+// been long: a reservation that is not due at that moment is left for a later sweep.
+func (e *Expiry) expire(ctx context.Context, id string) (bool, error) {
+	var ended bool
+	err := transact(ctx, e.pool, expiryParticipants(e.pool, id),
+		func(txCtx context.Context, moment time.Time) error {
+			due, err := rentalByID(txCtx, e.pool, id)
+			if errors.Is(err, ErrRentalNotFound) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			if due.Stage != stage.Reserved || !due.Overdue(moment) {
+				return nil
+			}
+			ended, err = endReservation(txCtx, e.pool, due)
+			return err
+		})
+	return ended, err
+}
 
-func raiseVehicleVersion(ctx context.Context, pool *pgxpool.Pool, vehicleID string) (int64, error) {
-	var version int64
-	err := database.QuerierFrom(ctx, pool).QueryRow(ctx, raiseVehicleVersionStatement, vehicleID).
-		Scan(&version)
-	return version, err
+// expiryParticipants is the rows ending one reservation touches: the account that holds it, its
+// vehicle, and the rental itself.
+func expiryParticipants(pool *pgxpool.Pool, id string) func(context.Context) (participants, error) {
+	return func(ctx context.Context) (participants, error) {
+		due, err := rentalByID(ctx, pool, id)
+		if errors.Is(err, ErrRentalNotFound) {
+			return participants{}, nil
+		}
+		if err != nil {
+			return participants{}, err
+		}
+		return participants{
+			users:    []uuid.UUID{due.UserID},
+			vehicles: []string{due.VehicleID},
+			rentals:  []string{due.ID},
+		}, nil
+	}
 }

@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
-	"github.com/Alisher24/CarSharing/backend/internal/rentals"
+	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 )
 
 var observedAt = time.Date(2026, time.September, 13, 7, 15, 30, 0, time.UTC)
@@ -24,15 +24,15 @@ func source(kind fleet.SourceKind, percent float64) fleet.EnergySource {
 // vehicle builds an otherwise faultless vehicle, so a case changes only the fact it is about.
 func vehicle(powertrain fleet.PowertrainType, sources ...fleet.EnergySource) fleet.Vehicle {
 	return fleet.Vehicle{
-		ID:                "01994342-6ba7-7000-8000-000000000001",
-		Model:             "Демо",
-		PowertrainType:    powertrain,
-		Version:           1,
-		Connected:         true,
-		Telemetry:         fleet.Telemetry{ConfirmedAt: observedAt},
-		InsideServiceZone: true,
-		Sources:           sources,
-		HeldBy:            rentals.NotHeld,
+		ID:             "01994342-6ba7-7000-8000-000000000001",
+		Model:          "Демо",
+		PowertrainType: powertrain,
+		Version:        1,
+		Connected:      true,
+		Telemetry:      fleet.Telemetry{ConfirmedAt: observedAt},
+		ServiceZoneID:  "01994342-6ba7-7000-8000-000200000001",
+		Sources:        sources,
+		HeldBy:         stage.NotHeld,
 	}
 }
 
@@ -109,19 +109,19 @@ func TestTelemetryIsFreshUpToAndIncludingTheLimit(t *testing.T) {
 
 func TestALiveRentalDecidesOccupancyWhateverTheVehicleCondition(t *testing.T) {
 	for _, tc := range []struct {
-		stage    rentals.Stage
+		stage    stage.Stage
 		status   fleet.Status
 		rideMode fleet.RideMode
 	}{
-		{rentals.Reserved, fleet.Reserved, ""},
-		{rentals.Active, fleet.InTrip, fleet.Driving},
-		{rentals.Paused, fleet.InTrip, fleet.Paused},
+		{stage.Reserved, fleet.Reserved, ""},
+		{stage.Active, fleet.InTrip, fleet.Driving},
+		{stage.Paused, fleet.InTrip, fleet.Paused},
 	} {
 		t.Run(string(tc.stage), func(t *testing.T) {
 			// Everything that would otherwise make this vehicle unavailable is true at once.
 			under := vehicle(fleet.PowertrainElectric, source(fleet.SourceBattery, 1))
 			under.Connected = false
-			under.InsideServiceZone = false
+			under.ServiceZoneID = ""
 			under.HeldBy = tc.stage
 
 			state := under.StateAt(observedAt)
@@ -141,7 +141,7 @@ func TestEverySimultaneousReasonIsReported(t *testing.T) {
 		source(fleet.SourceLPG, 5),
 	)
 	under.Connected = false
-	under.InsideServiceZone = false
+	under.ServiceZoneID = ""
 
 	state := under.StateAt(observedAt)
 	want := []fleet.UnavailableReason{

@@ -1,0 +1,284 @@
+package rentals
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/Alisher24/CarSharing/backend/internal/fleet"
+	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
+	"github.com/Alisher24/CarSharing/backend/internal/tariffs"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+// ErrConcurrencyExhausted reports that a command could not be completed after starting over the
+// permitted number of times. It is a refusal to keep trying rather than a report that nothing
+// happened, and the caller may repeat the command with the same key to get a fresh decision.
+var ErrConcurrencyExhausted = errors.New("the command could not be completed after repeated attempts")
+
+// RefusalKind is the domain answer a command gave instead of moving a rental. Each one is a checked
+// answer rather than a failure: it is stored with the command's key, so a repeat reproduces it.
+type RefusalKind string
+
+const (
+	// VehicleUnavailable reports a vehicle that does not exist, that another rental holds, or that
+	// does not meet the conditions the catalog states for starting.
+	VehicleUnavailable RefusalKind = "vehicle_unavailable"
+
+	// ActiveRentalExists reports that the account already holds a rental.
+	ActiveRentalExists RefusalKind = "active_rental_exists"
+
+	// DailyLimitReached reports that the account has already spent the day's free reservation.
+	DailyLimitReached RefusalKind = "daily_limit_reached"
+
+	// ReservationExpired reports a reservation whose deadline had already been reached, which the
+	// command recorded before answering.
+	ReservationExpired RefusalKind = "reservation_expired"
+
+	// RentalCompleted reports a ride that has already finished, which no longer responds to the
+	// commands that only apply to a reservation.
+	RentalCompleted RefusalKind = "rental_completed"
+
+	// InvalidRentalState reports a rental in a stage the command does not apply to.
+	InvalidRentalState RefusalKind = "invalid_rental_state"
+
+	// RentalNotFound reports an identifier this account holds no rental for, whether no such rental
+	// exists or it belongs to somebody else.
+	RentalNotFound RefusalKind = "rental_not_found"
+)
+
+// Refusal is a domain answer that changed nothing, together with what displaying it needs.
+type Refusal struct {
+	Kind RefusalKind
+
+	// UnavailableReasons is why the chosen vehicle could not be used, in the vocabulary the public
+	// catalog publishes. It is empty for a refusal the catalog does not explain.
+	UnavailableReasons []fleet.UnavailableReason
+
+	// Limit is the state of the day's allowance at the moment of the command, which the refusal
+	// that reports an exhausted allowance displays.
+	Limit DailyLimit
+}
+
+// Outcome is what a command decided: the rental it moved, the vehicle as the answer publishes it at
+// the moment the command fixed, and that moment — or the refusal that changed nothing.
+type Outcome struct {
+	Rental  Rental
+	Vehicle fleet.Vehicle
+	Moment  time.Time
+	Refusal Refusal
+}
+
+// Refused reports whether the command decided nothing.
+func (o Outcome) Refused() bool { return o.Refusal.Kind != "" }
+
+// Response is one answer as the client receives it: the status and the encoded body.
+type Response struct {
+	Status int
+	Body   []byte
+}
+
+// Render spells what a command decided as the answer the client receives. The transport layer
+// supplies it, because the shape of an answer is the contract's business rather than this module's.
+//
+// The module calls it inside the transaction that makes the change and stores the bytes it produced
+// with the command's key, so a repeat answers what the first attempt answered rather than a fresh
+// rendering that a later change could contradict.
+type Render func(Outcome) (Response, error)
+
+// Attempt identifies one client attempt at a command: the key that makes a repeat answer the first
+// answer, the fingerprint of what it asked for, and how its answer is spelled.
+type Attempt struct {
+	Key         idempotency.Key
+	Fingerprint idempotency.Fingerprint
+	Render      Render
+}
+
+// Answered is a command's answer, together with whether an earlier attempt already gave it.
+type Answered struct {
+	Response
+	Replayed bool
+}
+
+// Service runs the reservation commands and answers what is current for one account. It is the
+// module's runtime over one connection pool: every statement runs on the querier the context
+// carries, so a command and the records it depends on commit together.
+type Service struct {
+	pool     *pgxpool.Pool
+	vehicles *fleet.Store
+	prices   *tariffs.Store
+	results  *idempotency.Store
+}
+
+func NewService(pool *pgxpool.Pool, vehicles *fleet.Store, prices *tariffs.Store) (*Service, error) {
+	for _, required := range []struct {
+		name     string
+		supplied bool
+	}{
+		{"database pool", pool != nil},
+		{"vehicle catalog", vehicles != nil},
+		{"price lists", prices != nil},
+	} {
+		if !required.supplied {
+			return nil, fmt.Errorf("%w: %s", ErrIncompleteModule, required.name)
+		}
+	}
+	return &Service{
+		pool:     pool,
+		vehicles: vehicles,
+		prices:   prices,
+		results:  idempotency.NewStore(pool),
+	}, nil
+}
+
+// ErrIncompleteModule refuses to serve a module whose dependencies were not all supplied. A command
+// that reached a missing one would fail on the first request instead of at startup.
+var ErrIncompleteModule = errors.New("the rentals module is missing a dependency")
+
+// participants is every row one rental transaction will touch, worked out from an unlocked read
+// before the first lock: the accounts it belongs to, the vehicles it concerns, and the rentals that
+// currently hold them.
+type participants struct {
+	users    []uuid.UUID
+	vehicles []string
+	rentals  []string
+}
+
+// sameRows reports whether two plans describe the same rows. The reads that produce them are
+// ordered, so comparing them is comparing the relationships they found.
+func (p participants) sameRows(other participants) bool {
+	return sameOrder(p.users, other.users) &&
+		sameOrder(p.vehicles, other.vehicles) &&
+		sameOrder(p.rentals, other.rentals)
+}
+
+func sameOrder[T comparable](left, right []T) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
+
+// The order every rental transaction locks in: accounts, then vehicles, then rentals. A transaction
+// that took them in another order could wait for one another for ever, so the command, the read of
+// what is current and the expiry sweep all come through here.
+const (
+	lockUsersStatement    = `SELECT id FROM users WHERE id = ANY($1) ORDER BY id FOR UPDATE`
+	lockVehiclesStatement = `SELECT id FROM vehicles WHERE id = ANY($1) ORDER BY id FOR UPDATE`
+	lockRentalsStatement  = `SELECT id FROM rentals WHERE id = ANY($1) ORDER BY id FOR UPDATE`
+)
+
+// momentStatement reads the one moment a transaction acts on. It is read after the locks rather
+// than at the start of the transaction, because a wait for a lock can outlast the moment the
+// request arrived, and a deadline computed from the arrival would be wrong by the wait.
+const momentStatement = `SELECT clock_timestamp()`
+
+// maxTransactionAttempts bounds how many times one command starts over. A transaction that keeps
+// meeting a new participant is refused rather than retried for ever, and the refusal is repeatable:
+// the client may send the same command again.
+const maxTransactionAttempts = 5
+
+// errParticipantsChanged reports that the relationships a transaction planned to touch are no longer
+// the ones it locked. The transaction is started over rather than taking the missing lock at the
+// end, which is what keeps the lock order the one above.
+var errParticipantsChanged = errors.New("the relationships changed while the transaction was starting")
+
+// transact runs one attempt at a rental transaction under the shared lock order.
+//
+// discover reads the relationships the command intends to touch, without locking anything, and is
+// read a second time once the locks are taken. work runs with the locks held and the moment fixed.
+func transact(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	discover func(context.Context) (participants, error),
+	work func(context.Context, time.Time) error,
+) error {
+	var last error
+	for attempt := 1; attempt <= maxTransactionAttempts; attempt++ {
+		last = database.InTransaction(ctx, pool, func(txCtx context.Context) error {
+			planned, err := discover(txCtx)
+			if err != nil {
+				return err
+			}
+			if err = lock(txCtx, pool, planned); err != nil {
+				return err
+			}
+			locked, err := discover(txCtx)
+			if err != nil {
+				return err
+			}
+			if !planned.sameRows(locked) {
+				return errParticipantsChanged
+			}
+			moment, err := readMoment(txCtx, pool)
+			if err != nil {
+				return err
+			}
+			return work(txCtx, moment)
+		})
+		if last == nil {
+			return nil
+		}
+		if !restartable(last) {
+			return last
+		}
+	}
+	return fmt.Errorf("%w: %s", ErrConcurrencyExhausted, last)
+}
+
+// lock takes the planned rows in the shared order. Each selection is ordered, so two transactions
+// reaching the same set wait in the same sequence.
+func lock(ctx context.Context, pool *pgxpool.Pool, planned participants) error {
+	querier := database.QuerierFrom(ctx, pool)
+	if len(planned.users) > 0 {
+		if _, err := querier.Exec(ctx, lockUsersStatement, planned.users); err != nil {
+			return err
+		}
+	}
+	if len(planned.vehicles) > 0 {
+		if _, err := querier.Exec(ctx, lockVehiclesStatement, planned.vehicles); err != nil {
+			return err
+		}
+	}
+	if len(planned.rentals) > 0 {
+		if _, err := querier.Exec(ctx, lockRentalsStatement, planned.rentals); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func readMoment(ctx context.Context, pool *pgxpool.Pool) (time.Time, error) {
+	var moment time.Time
+	err := database.QuerierFrom(ctx, pool).QueryRow(ctx, momentStatement).Scan(&moment)
+	return moment, err
+}
+
+// restartable reports whether a failure is one the transaction may start over from. A deadlock or a
+// serialization failure is the database telling this transaction it lost a race it can retry, and a
+// changed participant set is the module telling itself the same thing.
+func restartable(err error) bool {
+	if errors.Is(err, errParticipantsChanged) {
+		return true
+	}
+	var failure *pgconn.PgError
+	if !errors.As(err, &failure) {
+		return false
+	}
+	return failure.Code == codeDeadlockDetected || failure.Code == codeSerializationFailure
+}
+
+// The SQLSTATE codes a transaction may start over from.
+const (
+	codeDeadlockDetected     = "40P01"
+	codeSerializationFailure = "40001"
+)

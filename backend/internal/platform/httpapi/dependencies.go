@@ -32,6 +32,10 @@ type Dependencies struct {
 	// given an implementation that refuses every stream instead.
 	Events EventStream
 
+	// Reservations is the account's own reservation: the commands that move it and the read that
+	// answers what is current. Only the full application serves those operations.
+	Reservations Reservations
+
 	// Catalog is what the operations that need no account read. Both routers are given it,
 	// because the anonymous one serves those operations too.
 	Catalog Catalog
@@ -49,5 +53,6 @@ type server struct {
 	health
 	accounts
 	catalogHandlers
+	reservationHandlers
 	streams
 }

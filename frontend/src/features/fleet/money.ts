@@ -1,4 +1,4 @@
-import { INTERFACE_LOCALE } from '../../shared/locale';
+import { INTERFACE_LOCALE } from '../../shared/locale.ts';
 
 /** How many tyiyn make one som. Prices arrive as whole tyiyn and are shown as som. */
 const TYIYN_IN_A_SOM = 100n;

@@ -17,6 +17,9 @@ output-options:
     - getVehicle
     - getZones
     - getTariffs
+    - getCurrentRental
+    - reserve
+    - cancelRental
     # The two streams are served here too: the boundary validates them against the contract, and the
     # generated streaming response writes the frames as they are produced.
     - getPublicEvents

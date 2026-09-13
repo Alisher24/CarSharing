@@ -10,16 +10,26 @@ export type CatalogSession = {
 };
 
 /**
- * catalogAnswers builds the three resources' answers. Each one states which session it belongs to
- * and what storing it means; how many answers may still arrive is the coordinator's business.
+ * catalogAnswers builds the answers of the catalog's coordinator. Each one states which session it
+ * belongs to and what storing it means; how many answers may still arrive is the coordinator's
+ * business. The private resource is answered by nobody here: the catalog reads what a visitor reads,
+ * and the account's own reservation has its own reader.
  */
 export function catalogAnswers(catalog: CatalogSession): Record<DocumentKind, AnswerHandlers> {
   return {
     vehicles: fleetAnswers(catalog),
     zones: listAnswers<Zone>(catalog.session),
     tariffs: listAnswers<Tariff>(catalog.session),
+    current: notReadHere,
   };
 }
+
+// A document this coordinator does not read answers nothing, so a signal that names one is left to
+// the reader that holds it.
+const notReadHere: AnswerHandlers = {
+  accepts: () => false,
+  observe: () => undefined,
+};
 
 // The fleet is the one resource whose answer can say nothing new: every vehicle in it can be a
 // version the snapshot already holds, and freshness is measured against the moment the read was

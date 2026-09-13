@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
-	"github.com/Alisher24/CarSharing/backend/internal/rentals"
+	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 )
 
 // membersPerPowertrain is how many vehicles each powertrain contributes: two a person can book,
@@ -23,9 +23,9 @@ const (
 // stands in for. The two negative fields are written only where they apply, so an ordinary vehicle
 // reads as ordinary.
 type member struct {
-	// heldBy is the stage of the rental prepared for this vehicle, or rentals.NotHeld when the
+	// heldBy is the stage of the rental prepared for this vehicle, or stage.NotHeld when the
 	// vehicle is left for a person to book.
-	heldBy rentals.Stage
+	heldBy stage.Stage
 
 	// unlinked is a vehicle the platform has no link to, which reports offline however recent its
 	// last reading was.
@@ -71,8 +71,8 @@ var groups = []group{
 			{charge: map[fleet.SourceKind]int{fleet.SourceBattery: 8200}},
 			// Exactly the start threshold, which is enough.
 			{charge: map[fleet.SourceKind]int{fleet.SourceBattery: 2000}},
-			{heldBy: rentals.Reserved, charge: map[fleet.SourceKind]int{fleet.SourceBattery: 7400}},
-			{heldBy: rentals.Active, charge: map[fleet.SourceKind]int{fleet.SourceBattery: 5600}},
+			{heldBy: stage.Reserved, charge: map[fleet.SourceKind]int{fleet.SourceBattery: 7400}},
+			{heldBy: stage.Active, charge: map[fleet.SourceKind]int{fleet.SourceBattery: 5600}},
 			// One ten-thousandth below the threshold, which is not.
 			{charge: map[fleet.SourceKind]int{fleet.SourceBattery: 1999}},
 		},
@@ -91,8 +91,8 @@ var groups = []group{
 		members: [membersPerPowertrain]member{
 			{charge: map[fleet.SourceKind]int{fleet.SourceGasoline: 9100}},
 			{charge: map[fleet.SourceKind]int{fleet.SourceGasoline: 4300}},
-			{heldBy: rentals.Reserved, charge: map[fleet.SourceKind]int{fleet.SourceGasoline: 6600}},
-			{heldBy: rentals.Paused, charge: map[fleet.SourceKind]int{fleet.SourceGasoline: 3800}},
+			{heldBy: stage.Reserved, charge: map[fleet.SourceKind]int{fleet.SourceGasoline: 6600}},
+			{heldBy: stage.Paused, charge: map[fleet.SourceKind]int{fleet.SourceGasoline: 3800}},
 			{silent: true, charge: map[fleet.SourceKind]int{fleet.SourceGasoline: 1500}},
 		},
 	},
@@ -110,8 +110,8 @@ var groups = []group{
 		members: [membersPerPowertrain]member{
 			{charge: map[fleet.SourceKind]int{fleet.SourceDiesel: 8800}},
 			{charge: map[fleet.SourceKind]int{fleet.SourceDiesel: 3100}},
-			{heldBy: rentals.Reserved, charge: map[fleet.SourceKind]int{fleet.SourceDiesel: 7000}},
-			{heldBy: rentals.Active, charge: map[fleet.SourceKind]int{fleet.SourceDiesel: 4500}},
+			{heldBy: stage.Reserved, charge: map[fleet.SourceKind]int{fleet.SourceDiesel: 7000}},
+			{heldBy: stage.Active, charge: map[fleet.SourceKind]int{fleet.SourceDiesel: 4500}},
 			{unlinked: true, charge: map[fleet.SourceKind]int{fleet.SourceDiesel: 1200}},
 		},
 	},
@@ -134,11 +134,11 @@ var groups = []group{
 			{charge: map[fleet.SourceKind]int{fleet.SourceBattery: 0, fleet.SourceGasoline: 6000}},
 			{charge: map[fleet.SourceKind]int{fleet.SourceBattery: 5000, fleet.SourceGasoline: 1000}},
 			{
-				heldBy: rentals.Reserved,
+				heldBy: stage.Reserved,
 				charge: map[fleet.SourceKind]int{fleet.SourceBattery: 3000, fleet.SourceGasoline: 4000},
 			},
 			{
-				heldBy: rentals.Paused,
+				heldBy: stage.Paused,
 				charge: map[fleet.SourceKind]int{fleet.SourceBattery: 1500, fleet.SourceGasoline: 3300},
 			},
 			// Both sources below the threshold: nineteen per cent twice is not thirty-eight.
@@ -163,11 +163,11 @@ var groups = []group{
 			{charge: map[fleet.SourceKind]int{fleet.SourceGasoline: 7200, fleet.SourceLPG: 6400}},
 			{charge: map[fleet.SourceKind]int{fleet.SourceGasoline: 1000, fleet.SourceLPG: 5000}},
 			{
-				heldBy: rentals.Reserved,
+				heldBy: stage.Reserved,
 				charge: map[fleet.SourceKind]int{fleet.SourceGasoline: 5500, fleet.SourceLPG: 3000},
 			},
 			{
-				heldBy: rentals.Active,
+				heldBy: stage.Active,
 				charge: map[fleet.SourceKind]int{fleet.SourceGasoline: 4100, fleet.SourceLPG: 2200},
 			},
 			{charge: map[fleet.SourceKind]int{fleet.SourceGasoline: 1800, fleet.SourceLPG: 1700}},
@@ -185,8 +185,8 @@ type Vehicle struct {
 	Reporting      bool
 	Sources        []fleet.EnergySource
 
-	// HeldBy is the stage of the rental prepared for this vehicle, or rentals.NotHeld when none is.
-	HeldBy rentals.Stage
+	// HeldBy is the stage of the rental prepared for this vehicle, or stage.NotHeld when none is.
+	HeldBy stage.Stage
 
 	// ScenarioAccount is the service account the prepared rental belongs to, empty for a vehicle
 	// no rental is prepared for. A prepared rental never belongs to a person's own account.
@@ -213,7 +213,7 @@ func (v Vehicle) confirmedAgo() time.Duration {
 // Restored reports whether the scenario command puts this vehicle back. A vehicle that is free and
 // fit to drive is one a person books by hand, and the command never touches it.
 func (v Vehicle) Restored() bool {
-	return v.HeldBy != rentals.NotHeld || !v.fitToStart()
+	return v.HeldBy != stage.NotHeld || !v.fitToStart()
 }
 
 // fitToStart asks the domain rule rather than restating it, so a declared vehicle is judged by
@@ -244,7 +244,7 @@ func (g group) vehicle(declared member, positionInGroup, number int) Vehicle {
 		Sources:        g.sources(declared),
 		HeldBy:         declared.heldBy,
 	}
-	if vehicle.HeldBy != rentals.NotHeld {
+	if vehicle.HeldBy != stage.NotHeld {
 		vehicle.ScenarioAccount = scenarioAccountAddress(number)
 		vehicle.PreparedRentalID = resourceID(rentalFamily, number)
 	}

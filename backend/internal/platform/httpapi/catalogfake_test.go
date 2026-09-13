@@ -9,7 +9,7 @@ import (
 
 	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
-	"github.com/Alisher24/CarSharing/backend/internal/rentals"
+	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 	"github.com/Alisher24/CarSharing/backend/internal/tariffs"
 	"github.com/Alisher24/CarSharing/backend/internal/zones"
 )
@@ -80,16 +80,16 @@ func demoSnapshot() fleet.Snapshot {
 	return fleet.Snapshot{
 		ObservedAt: observedAt,
 		Vehicles: []fleet.Vehicle{
-			catalogVehicle(observedAt, "01994342-6ba7-7000-8000-000100000001", 9000, rentals.NotHeld),
-			catalogVehicle(observedAt, "01994342-6ba7-7000-8000-000100000002", 9000, rentals.Reserved),
-			catalogVehicle(observedAt, "01994342-6ba7-7000-8000-000100000003", 9000, rentals.Paused),
-			catalogVehicle(observedAt, "01994342-6ba7-7000-8000-000100000004", 100, rentals.NotHeld),
+			catalogVehicle(observedAt, "01994342-6ba7-7000-8000-000100000001", 9000, stage.NotHeld),
+			catalogVehicle(observedAt, "01994342-6ba7-7000-8000-000100000002", 9000, stage.Reserved),
+			catalogVehicle(observedAt, "01994342-6ba7-7000-8000-000100000003", 9000, stage.Paused),
+			catalogVehicle(observedAt, "01994342-6ba7-7000-8000-000100000004", 100, stage.NotHeld),
 		},
 	}
 }
 
 func catalogVehicle(
-	observedAt time.Time, id string, remainingBasisPoints int64, heldBy rentals.Stage,
+	observedAt time.Time, id string, remainingBasisPoints int64, heldBy stage.Stage,
 ) fleet.Vehicle {
 	const capacity = fleet.Amount(10_000 * fleet.AmountScale)
 	return fleet.Vehicle{
@@ -102,7 +102,7 @@ func catalogVehicle(
 			Position:    fleet.Position{Longitude: 74.6, Latitude: 42.87},
 			ConfirmedAt: observedAt,
 		},
-		InsideServiceZone: true,
+		ServiceZoneID: "01994342-6ba7-7000-8000-000200000001",
 		Sources: []fleet.EnergySource{{
 			Kind:      fleet.SourceBattery,
 			Capacity:  capacity,

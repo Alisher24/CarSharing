@@ -555,6 +555,134 @@
   border-top: 1px solid var(--color-border-row);
 }
 
+/* The reservation in force, above the map and outside every panel that can be closed: a person who
+   filtered the list, closed a card or opened the account must not lose sight of a running
+   reservation. */
+.reservation-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-lg);
+  align-items: baseline;
+  padding: var(--space-md) var(--space-lg);
+  margin: 0 var(--space-2xl) var(--space-md);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.reservation-panel-heading {
+  margin: 0;
+  font-size: var(--font-size-detail);
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--color-ink-label);
+}
+
+.reservation-panel-empty,
+.reservation-panel-limit {
+  margin: 0;
+  font-size: var(--font-size-detail);
+  color: var(--color-ink-body);
+}
+
+.reservation-panel-current {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-lg);
+  align-items: baseline;
+}
+
+.reservation-panel-vehicle {
+  margin: 0;
+  font-weight: 650;
+}
+
+.reservation-panel-time {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.reservation-panel-time[data-expired='true'] {
+  color: var(--color-danger);
+}
+
+.reservation-panel-rates {
+  display: flex;
+  gap: var(--space-xs) var(--space-md);
+  margin: 0;
+  font-size: var(--font-size-detail);
+}
+
+.reservation-panel-rates dt {
+  color: var(--color-ink-label);
+}
+
+.reservation-panel-rates dd {
+  margin: 0;
+}
+
+.reservation-panel-actions,
+.reservation-panel-confirm,
+.reservation-panel-unknown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-md);
+  align-items: center;
+}
+
+.reservation-panel-question,
+.reservation-panel-warning,
+.reservation-panel-notice {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: var(--font-size-detail);
+  color: var(--color-ink-muted);
+}
+
+.reservation-panel-warning {
+  color: var(--color-danger);
+}
+
+/* The booking step of an open card: the conditions are read and agreed to before anything is sent. */
+.vehicle-card-booking {
+  padding-top: var(--space-md);
+  margin: var(--space-lg) 0 0;
+  border-top: 1px solid var(--color-border-row);
+}
+
+.vehicle-card-booking-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-md);
+}
+
+.vehicle-card-booking-vehicle {
+  margin: var(--space-xs) 0;
+  font-weight: 650;
+}
+
+.vehicle-card-booking-period {
+  margin: var(--space-xs) 0;
+  font-size: var(--font-size-detail);
+  color: var(--color-ink-body);
+}
+
+.vehicle-card-warning {
+  padding: var(--space-sm) var(--space-md);
+  margin: var(--space-sm) 0;
+  font-size: var(--font-size-detail);
+  color: var(--color-danger);
+  background: var(--color-surface-highlight);
+  border-radius: var(--radius-sm);
+}
+
+.vehicle-card-limit {
+  margin: var(--space-xs) 0 0;
+  font-size: var(--font-size-detail);
+  color: var(--color-ink-muted);
+}
+
 @media (width <= 900px) {
   .fleet-layout {
     grid-template-columns: 1fr;
@@ -578,5 +706,9 @@
     left: var(--space-md);
     width: auto;
     max-height: 56svh;
+  }
+
+  .reservation-panel {
+    margin: 0 var(--space-md) var(--space-md);
   }
 }

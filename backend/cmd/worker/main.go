@@ -1,6 +1,6 @@
 // Command worker runs the background work of the backend: the delivery of the tasks the outbox
-// holds, the release of reservations whose deadline has passed, and the retention of delivered
-// signals. It is a separate process from the API so that either one can be restarted without
+// holds, the release of reservations whose deadline has passed, and the retention of the records
+// that outlive the work they describe. It is a separate process from the API so that either one can be restarted without
 // stopping the other, and both use the same modules rather than a second copy of the rules.
 package main
 
@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/Alisher24/CarSharing/backend/internal/events"
+	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
 	"github.com/Alisher24/CarSharing/backend/internal/outbox"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/config"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
@@ -62,6 +63,8 @@ func work(ctx context.Context, pool *pgxpool.Pool) error {
 	go delivery.Run(ctx)
 	go periodic.Run(ctx, "reservation expiry", rentals.ExpirySweepInterval, rentals.NewExpiry(pool).ExpireDue)
 	go periodic.Run(ctx, "signal retention", events.RetentionInterval, events.NewReaper(pool).Delete)
+	go periodic.Run(ctx, "command result retention", idempotency.RetentionInterval,
+		idempotency.NewReaper(pool).Delete)
 
 	slog.Info("worker started")
 	<-ctx.Done()

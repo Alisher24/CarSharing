@@ -7,7 +7,7 @@ import (
 
 	"github.com/Alisher24/CarSharing/backend/internal/demo"
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
-	"github.com/Alisher24/CarSharing/backend/internal/rentals"
+	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 )
 
 // declaredFleetSize is the size the demonstration promises: five vehicles of each of the five
@@ -21,12 +21,12 @@ var observedAt = time.Date(2026, time.September, 13, 7, 15, 30, 0, time.UTC)
 // published resolves a declared vehicle to the state the catalog would show for it.
 func published(vehicle demo.Vehicle) fleet.State {
 	return fleet.Vehicle{
-		PowertrainType:    vehicle.PowertrainType,
-		Connected:         vehicle.Connected,
-		Telemetry:         fleet.Telemetry{Position: vehicle.Position, ConfirmedAt: observedAt},
-		InsideServiceZone: true,
-		Sources:           vehicle.Sources,
-		HeldBy:            vehicle.HeldBy,
+		PowertrainType: vehicle.PowertrainType,
+		Connected:      vehicle.Connected,
+		Telemetry:      fleet.Telemetry{Position: vehicle.Position, ConfirmedAt: observedAt},
+		ServiceZoneID:  "01994342-6ba7-7000-8000-000200000001",
+		Sources:        vehicle.Sources,
+		HeldBy:         vehicle.HeldBy,
 	}.StateAt(observedAt)
 }
 
@@ -119,7 +119,7 @@ func TestRestorationCoversPreparedVehiclesOnly(t *testing.T) {
 func TestEveryPreparedRentalHasItsOwnServiceAccount(t *testing.T) {
 	accounts := map[string]string{}
 	for _, vehicle := range demo.Fleet() {
-		if vehicle.HeldBy == rentals.NotHeld {
+		if vehicle.HeldBy == stage.NotHeld {
 			if vehicle.ScenarioAccount != "" || vehicle.PreparedRentalID != "" {
 				t.Errorf("%s has no prepared rental but names one", vehicle.Model)
 			}

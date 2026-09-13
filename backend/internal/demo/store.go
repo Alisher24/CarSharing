@@ -5,6 +5,7 @@ import (
 
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals"
+	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 	"github.com/Alisher24/CarSharing/backend/internal/tariffs"
 	"github.com/Alisher24/CarSharing/backend/internal/zones"
 	"github.com/google/uuid"
@@ -111,13 +112,21 @@ func (s store) insertTelemetry(ctx context.Context, vehicle Vehicle) error {
 }
 
 // A prepared rental is inserted with the ordinary reservation deadline, measured from the database
-// clock. Any unique violation leaves it out, so a rental a person has since started on the same
-// vehicle is never displaced by one that was merely prepared.
+// clock, and with the conditions it is made under taken from the price list it names. Any unique
+// violation leaves it out, so a rental a person has since started on the same vehicle is never
+// displaced by one that was merely prepared.
 const insertRentalStatement = `
 INSERT INTO rentals (
-    id, user_id, vehicle_id, stage, tariff_id, zone_id, reserved_at, expires_at, started_at
+    id, user_id, vehicle_id, stage, tariff_id, zone_id, reserved_at, expires_at, started_at,
+    tariff_currency, tariff_billing_policy, tariff_driving_rate_tyiyn_per_started_minute,
+    tariff_paused_rate_tyiyn_per_started_minute, tariff_version
 )
-VALUES ($1, $2, $3, $4, $5, $6, now(), now() + make_interval(secs => $7), CASE WHEN $8 THEN now() END)
+SELECT $1, $2, $3, $4, $5, $6, now(), now() + make_interval(secs => $7),
+       CASE WHEN $8 THEN now() END,
+       price.currency, price.billing_policy, price.driving_rate_tyiyn_per_started_minute,
+       price.paused_rate_tyiyn_per_started_minute, price.version
+FROM tariffs price
+WHERE price.id = $5
 ON CONFLICT DO NOTHING`
 
 // preparedRental is one rental of the scenario, resolved to the row it is written from.
@@ -125,7 +134,7 @@ type preparedRental struct {
 	id        string
 	userID    uuid.UUID
 	vehicleID string
-	stage     rentals.Stage
+	stage     stage.Stage
 	tariffID  string
 	zoneID    string
 }
@@ -152,7 +161,7 @@ func (s store) insertRental(ctx context.Context, prepared preparedRental) error 
 		prepared.tariffID,
 		prepared.zoneID,
 		rentals.ReservationLifetime.Seconds(),
-		prepared.stage != rentals.Reserved,
+		prepared.stage != stage.Reserved,
 	)
 	return err
 }
@@ -162,10 +171,16 @@ func (s store) insertRental(ctx context.Context, prepared preparedRental) error 
 // like a change older than the one it already shows, and would be discarded.
 const restoreRentalStatement = `
 INSERT INTO rentals (
-    id, user_id, vehicle_id, stage, tariff_id, zone_id, reserved_at, expires_at, started_at, version
+    id, user_id, vehicle_id, stage, tariff_id, zone_id, reserved_at, expires_at, started_at, version,
+    tariff_currency, tariff_billing_policy, tariff_driving_rate_tyiyn_per_started_minute,
+    tariff_paused_rate_tyiyn_per_started_minute, tariff_version
 )
-VALUES ($1, $2, $3, $4, $5, $6, now(), now() + make_interval(secs => $7),
-        CASE WHEN $8 THEN now() END, $9)
+SELECT $1, $2, $3, $4, $5, $6, now(), now() + make_interval(secs => $7),
+       CASE WHEN $8 THEN now() END, $9,
+       price.currency, price.billing_policy, price.driving_rate_tyiyn_per_started_minute,
+       price.paused_rate_tyiyn_per_started_minute, price.version
+FROM tariffs price
+WHERE price.id = $5
 ON CONFLICT (id) DO UPDATE SET
     stage = EXCLUDED.stage,
     tariff_id = EXCLUDED.tariff_id,
@@ -174,6 +189,11 @@ ON CONFLICT (id) DO UPDATE SET
     expires_at = EXCLUDED.expires_at,
     started_at = EXCLUDED.started_at,
     ended_at = CASE WHEN EXCLUDED.stage IN ('reserved', 'active', 'paused') THEN NULL ELSE now() END,
+    tariff_currency = EXCLUDED.tariff_currency,
+    tariff_billing_policy = EXCLUDED.tariff_billing_policy,
+    tariff_driving_rate_tyiyn_per_started_minute = EXCLUDED.tariff_driving_rate_tyiyn_per_started_minute,
+    tariff_paused_rate_tyiyn_per_started_minute = EXCLUDED.tariff_paused_rate_tyiyn_per_started_minute,
+    tariff_version = EXCLUDED.tariff_version,
     version = rentals.version + 1
 RETURNING version`
 
@@ -192,7 +212,7 @@ func (s store) restoreRental(ctx context.Context, prepared preparedRental) (int6
 		prepared.tariffID,
 		prepared.zoneID,
 		rentals.ReservationLifetime.Seconds(),
-		prepared.stage != rentals.Reserved,
+		prepared.stage != stage.Reserved,
 		restoredVersion,
 	).Scan(&version)
 	return version, err

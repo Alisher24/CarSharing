@@ -12,7 +12,7 @@ import { loadedValue, type Resource } from '../../shared/api/Resource';
 import { useResource, type ResourceHandle, type ResourceRead } from '../../shared/api/useResource';
 import { catalogAnswers } from '../events/catalogAnswers';
 import { changedResources } from '../events/changes';
-import { createReadCoordinator, DOCUMENT_KINDS, type ReadCoordinator } from '../events/coordinator';
+import { createReadCoordinator, PUBLIC_DOCUMENT_KINDS, type ReadCoordinator } from '../events/coordinator';
 import { RECONCILE_MILLISECONDS, reconciliationEnabled } from '../events/reconciliation';
 import type { DocumentKind } from '../events/readCycle';
 import type { EventsFeed } from '../events/useEvents';
@@ -74,6 +74,9 @@ function readsOf(coordinator: ReadCoordinator): Record<DocumentKind, ResourceRea
     vehicles: { coordinator, document: 'vehicles', session: ANONYMOUS_SESSION },
     zones: { coordinator, document: 'zones', session: ANONYMOUS_SESSION },
     tariffs: { coordinator, document: 'tariffs', session: ANONYMOUS_SESSION },
+    // The private resource is read by the reader of the account's own reservation; this coordinator
+    // answers nothing for it, and nothing here ever asks for it.
+    current: { coordinator, document: 'current', session: ANONYMOUS_SESSION },
   };
 }
 
@@ -104,7 +107,7 @@ function askFor(coordinator: ReadCoordinator, documents: readonly DocumentKind[]
 /** Answers a handshake by asking for every resource to be read again, reconnects included. */
 function useReadyFrame(coordinator: ReadCoordinator, readyCount: number): void {
   useEffect(() => {
-    if (readyCount > 0) coordinator.request(DOCUMENT_KINDS);
+    if (readyCount > 0) coordinator.request(PUBLIC_DOCUMENT_KINDS);
   }, [coordinator, readyCount]);
 }
 
@@ -116,7 +119,7 @@ function useReadyFrame(coordinator: ReadCoordinator, readyCount: number): void {
 function useReconciliation(coordinator: ReadCoordinator): void {
   useEffect(() => {
     const repeat = window.setInterval(() => {
-      if (reconciliationEnabled()) coordinator.request(DOCUMENT_KINDS);
+      if (reconciliationEnabled()) coordinator.request(PUBLIC_DOCUMENT_KINDS);
     }, RECONCILE_MILLISECONDS);
     return () => window.clearInterval(repeat);
   }, [coordinator]);
