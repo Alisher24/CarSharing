@@ -1,19 +1,17 @@
 package httpapi
 
 import (
-	"context"
 	"errors"
 
 	"github.com/Alisher24/CarSharing/backend/internal/auth"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/sessions"
-	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Dependencies is everything the served application needs from the process around it. The process
-// that builds them supplies all of them; a caller that serves only the health operations — an
-// isolated contract router, or a routing test — supplies the probe alone and is served by
-// NewProbeRouter instead.
+// that builds them supplies all of them; a caller that serves only what needs no account — an
+// isolated contract router, or a routing test — supplies the probe and the catalog and is served
+// by NewAnonymousRouter instead.
 type Dependencies struct {
 	// Probe answers whether the dependencies this deployment needs are usable. It is the only
 	// dependency the health operations have.
@@ -28,6 +26,10 @@ type Dependencies struct {
 	Auth     *auth.Service
 	Users    *auth.UserStore
 	Throttle *auth.Throttle
+
+	// Catalog is what the operations that need no account read. Both routers are given it,
+	// because the anonymous one serves those operations too.
+	Catalog Catalog
 }
 
 // ErrIncompleteApplication refuses to serve an application whose dependencies were not all
@@ -41,19 +43,5 @@ var ErrIncompleteApplication = errors.New("the HTTP application is missing a dep
 type server struct {
 	health
 	accounts
-}
-
-// originSet indexes the allowed origins for lookup, so the check is a comparison rather than a scan.
-func originSet(origins []string) map[string]bool {
-	allowed := make(map[string]bool, len(origins))
-	for _, origin := range origins {
-		allowed[origin] = true
-	}
-	return allowed
-}
-
-// refuseCredentials answers an operation the probe router does not serve as an unauthenticated
-// request: the operation exists in the contract, and this router has no credentials to check.
-func refuseCredentials(context.Context, *openapi3filter.AuthenticationInput) error {
-	return errNoLiveSession
+	catalogHandlers
 }

@@ -1,0 +1,555 @@
+/* The map screen: the header strip, the map beside the vehicle panel, and the card over them. */
+
+:root {
+  /* Above the controls the map library draws, which it puts at one thousand. */
+  --layer-over-map: 1001;
+  --layer-card: 1000;
+
+  /* One declaration of the colour each public state is shown in. The legend, the list, the
+     card and the markers on the map all read these, so none of them can drift from another. */
+  --status-available: #2f7d54;
+  --status-reserved: #a8720f;
+  --status-in-trip: #2b6ba8;
+  --status-unavailable: #9a3f3f;
+
+  /* A pane that floats over the map lets the scheme show faintly through it. */
+  --color-surface-veil: color-mix(in sRGB, var(--color-surface-raised) 86%, transparent);
+}
+
+.page-header {
+  flex-wrap: wrap;
+  gap: var(--space-md);
+}
+
+.header-action {
+  padding: 10px 18px;
+  color: var(--color-on-ink);
+  cursor: pointer;
+  background: var(--color-ink);
+  border: 0;
+  border-radius: var(--radius-pill);
+}
+
+.header-action:hover {
+  background: var(--color-ink-hover);
+}
+
+.connection-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-left: auto;
+  font-size: var(--font-size-detail);
+  color: var(--color-ink-muted);
+}
+
+.connection-indicator-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--color-accent-soft);
+  border-radius: 50%;
+}
+
+.connection-indicator-stale .connection-indicator-dot,
+.connection-indicator-failed .connection-indicator-dot {
+  background: var(--color-danger);
+}
+
+.fleet-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md) var(--space-lg);
+  align-items: center;
+  padding: var(--space-lg) 0;
+}
+
+.fleet-status {
+  margin: 0;
+  font-size: var(--font-size-detail);
+  color: var(--color-ink-faint);
+}
+
+.fleet-status-warning {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+  font-weight: 600;
+  color: var(--color-danger);
+}
+
+.resource-notice {
+  max-width: 240px;
+  padding: 0;
+  margin: 0;
+  font-size: var(--font-size-detail);
+  color: var(--color-ink-faint);
+}
+
+.resource-notice-warning {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+  justify-content: flex-end;
+  padding: 8px 12px;
+  color: var(--color-danger);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.fleet-retry {
+  padding: 5px 12px;
+  font-size: var(--font-size-detail);
+  cursor: pointer;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md) var(--space-lg);
+  align-items: center;
+}
+
+.filter-switch {
+  display: inline-flex;
+  gap: var(--space-sm);
+  align-items: center;
+  padding: 9px 16px;
+  font-weight: 650;
+  cursor: pointer;
+  background: var(--color-surface-highlight);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-pill);
+}
+
+.filter-group {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.filter-legend {
+  float: left;
+  padding: 0 var(--space-sm) 0 0;
+  font-size: var(--font-size-micro);
+  font-weight: 650;
+  letter-spacing: var(--tracking-label);
+  color: var(--color-ink-label);
+}
+
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.filter-chip {
+  padding: 7px 14px;
+  font-size: var(--font-size-detail);
+  cursor: pointer;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+}
+
+.filter-chip[aria-pressed='true'] {
+  color: var(--color-on-ink);
+  background: var(--color-ink);
+  border-color: var(--color-ink);
+}
+
+.view-switch {
+  display: none;
+  gap: var(--space-xs);
+  margin-left: auto;
+}
+
+.view-tab {
+  padding: 8px 18px;
+  cursor: pointer;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+}
+
+.view-tab[aria-pressed='true'] {
+  color: var(--color-on-ink);
+  background: var(--color-ink);
+  border-color: var(--color-ink);
+}
+
+.fleet-layout {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1.9fr) minmax(280px, 1fr);
+  gap: var(--space-lg);
+  padding-bottom: var(--space-xl);
+}
+
+.fleet-map-pane {
+  display: flex;
+  min-height: 62svh;
+}
+
+.fleet-side-pane {
+  display: flex;
+  flex-direction: column;
+  max-height: 70svh;
+  overflow-y: auto;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-lg);
+}
+
+/* The map keeps its own stacking context, so the controls the map library draws stay inside it
+   and cannot rise through the card a person has opened over the page. */
+.map {
+  position: relative;
+  z-index: 0;
+  flex: 1;
+  min-height: 420px;
+  overflow: hidden;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-lg);
+}
+
+/* The canvas fills the pane rather than sizing itself, so Leaflet is never asked to lay out a
+   viewport that has not been given its height yet. */
+.map-canvas {
+  position: absolute;
+  inset: 0;
+  background: var(--color-surface-raised);
+}
+
+.map-caption {
+  position: absolute;
+  right: var(--space-md);
+  bottom: var(--space-md);
+  z-index: var(--layer-over-map);
+  padding: 6px 12px;
+  font-size: var(--font-size-micro);
+  color: var(--color-ink-muted);
+  background: var(--color-surface-veil);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+}
+
+.map-controls {
+  position: absolute;
+  top: var(--space-md);
+  right: var(--space-md);
+  z-index: var(--layer-over-map);
+  display: grid;
+  gap: var(--space-xs);
+  justify-items: end;
+}
+
+.map-action {
+  padding: 9px 16px;
+  cursor: pointer;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+}
+
+.map-action:disabled {
+  color: var(--color-ink-faint);
+  cursor: not-allowed;
+}
+
+.map-legend {
+  position: absolute;
+  bottom: var(--space-md);
+  left: var(--space-md);
+  z-index: var(--layer-over-map);
+  padding: var(--space-md);
+  background: var(--color-surface-veil);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.map-legend-title {
+  margin: 0 0 var(--space-xs);
+  font-size: var(--font-size-micro);
+  font-weight: 650;
+  letter-spacing: var(--tracking-label);
+  color: var(--color-ink-label);
+}
+
+.map-legend-items {
+  display: grid;
+  gap: 4px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.map-legend-item {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+  font-size: var(--font-size-detail);
+}
+
+.map-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.map-legend-zone {
+  width: 16px;
+  height: 0;
+  border-top: 2px dashed var(--color-accent);
+}
+
+.map-street-name {
+  font-size: var(--font-size-micro);
+  color: var(--color-ink-faint);
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+
+.map-landmark-name {
+  font-size: var(--font-size-micro);
+  color: var(--color-ink-muted);
+  background: var(--color-surface-veil);
+  border: 0;
+  box-shadow: none;
+}
+
+.fleet-list {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.fleet-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px var(--space-md);
+  width: 100%;
+  padding: var(--space-md) var(--space-lg);
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--color-border-row);
+}
+
+.fleet-row:hover {
+  background: var(--color-surface-highlight);
+}
+
+.fleet-row[aria-current='true'] {
+  background: var(--color-surface-highlight);
+  box-shadow: inset 3px 0 0 var(--color-ink);
+}
+
+.fleet-row-model {
+  font-weight: 600;
+}
+
+.fleet-row-type {
+  grid-row: 2;
+  font-size: var(--font-size-detail);
+  color: var(--color-ink-faint);
+}
+
+.fleet-row-status {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: center;
+  font-size: var(--font-size-detail);
+}
+
+.fleet-row-status[data-status='available'] {
+  color: var(--status-available);
+}
+
+.fleet-row-status[data-status='reserved'] {
+  color: var(--status-reserved);
+}
+
+.fleet-row-status[data-status='in_trip'] {
+  color: var(--status-in-trip);
+}
+
+.fleet-row-status[data-status='unavailable'] {
+  color: var(--status-unavailable);
+}
+
+.fleet-empty {
+  padding: var(--space-lg);
+  margin: 0;
+  color: var(--color-ink-body);
+}
+
+.vehicle-card {
+  position: fixed;
+  right: var(--space-lg);
+  bottom: var(--space-lg);
+  z-index: var(--layer-card);
+  width: min(360px, calc(100vw - 2 * var(--space-lg)));
+  max-height: 72svh;
+  padding: var(--space-lg);
+  overflow-y: auto;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 18px 48px #213b271f;
+}
+
+.vehicle-card-header {
+  display: flex;
+  gap: var(--space-md);
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.vehicle-card-model {
+  margin: 0;
+  font-size: var(--font-size-lead);
+  font-weight: 650;
+}
+
+.vehicle-card-type {
+  margin: 2px 0 0;
+  font-size: var(--font-size-detail);
+  color: var(--color-ink-faint);
+}
+
+.vehicle-card-close {
+  padding: 4px 10px;
+  cursor: pointer;
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+}
+
+.vehicle-card-notice {
+  padding: var(--space-sm) var(--space-md);
+  margin: var(--space-md) 0 0;
+  font-size: var(--font-size-detail);
+  color: var(--color-ink-muted);
+  background: var(--color-surface-highlight);
+  border-radius: var(--radius-sm);
+}
+
+.vehicle-card-status {
+  margin: var(--space-md) 0 0;
+  font-weight: 650;
+}
+
+.vehicle-card-status[data-status='available'] {
+  color: var(--status-available);
+}
+
+.vehicle-card-status[data-status='reserved'] {
+  color: var(--status-reserved);
+}
+
+.vehicle-card-status[data-status='in_trip'] {
+  color: var(--status-in-trip);
+}
+
+.vehicle-card-status[data-status='unavailable'] {
+  color: var(--status-unavailable);
+}
+
+.vehicle-card-telemetry {
+  margin: 4px 0 0;
+  font-size: var(--font-size-detail);
+  color: var(--color-ink-faint);
+}
+
+.vehicle-card-section {
+  margin-top: var(--space-lg);
+}
+
+.vehicle-card-heading {
+  margin: 0 0 var(--space-xs);
+  font-size: var(--font-size-micro);
+  font-weight: 650;
+  letter-spacing: var(--tracking-label);
+  color: var(--color-ink-label);
+}
+
+.vehicle-card-sources,
+.vehicle-card-reasons {
+  display: grid;
+  gap: 4px;
+  padding: 0;
+  margin: 0;
+  font-size: var(--font-size-detail);
+  list-style: none;
+}
+
+.vehicle-card-reason {
+  color: var(--status-unavailable);
+}
+
+.vehicle-card-tariff {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px var(--space-md);
+  margin: 0;
+  font-size: var(--font-size-detail);
+}
+
+.vehicle-card-tariff dt {
+  color: var(--color-ink-faint);
+}
+
+.vehicle-card-tariff dd {
+  margin: 0;
+}
+
+.vehicle-card-tariff-missing {
+  margin: 0;
+  font-size: var(--font-size-detail);
+  color: var(--color-danger);
+}
+
+.vehicle-card-later {
+  padding-top: var(--space-md);
+  margin: var(--space-lg) 0 0;
+  font-size: var(--font-size-detail);
+  color: var(--color-ink-body);
+  border-top: 1px solid var(--color-border-row);
+}
+
+@media (width <= 900px) {
+  .fleet-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .view-switch {
+    display: flex;
+  }
+
+  .fleet-side-pane {
+    max-height: none;
+  }
+
+  .fleet-layout-map .fleet-side-pane,
+  .fleet-layout-list .fleet-map-pane {
+    display: none;
+  }
+
+  .vehicle-card {
+    right: var(--space-md);
+    left: var(--space-md);
+    width: auto;
+    max-height: 56svh;
+  }
+}

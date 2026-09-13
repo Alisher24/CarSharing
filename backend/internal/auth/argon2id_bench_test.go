@@ -7,7 +7,7 @@ import (
 
 // deployedParameters are the parameters the service ships with, restated here so the benchmark
 // measures what is actually deployed rather than a convenient smaller cost.
-var deployedParameters = HashingParameters{
+var deployedParameters = hashingParameters{
 	MemoryKiB: 19 * 1024, Passes: 2, Parallelism: 1, SaltLength: SaltLength, KeyLength: KeyLength,
 }
 
@@ -15,7 +15,7 @@ var deployedParameters = HashingParameters{
 // Docker environment and its result is recorded in the README beside the settings, so that the
 // documented cost and the shipped cost cannot drift apart unnoticed.
 func BenchmarkDeployedHashing(b *testing.B) {
-	hasher := NewPasswordHasher(deployedParameters, 1)
+	hasher := newPasswordHasher(deployedParameters, 1)
 	var before, after runtime.MemStats
 	runtime.GC()
 	runtime.ReadMemStats(&before)

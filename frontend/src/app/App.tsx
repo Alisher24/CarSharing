@@ -1,24 +1,79 @@
+import { useCallback, useState } from 'react';
 import { AccountPanel } from '../features/account/AccountPanel';
-import { ConnectionCard } from '../features/connection/ConnectionCard';
-import { useConnection } from '../features/connection/useConnection';
+import { ConnectionIndicator } from '../features/connection/ConnectionIndicator';
+import { useConnection, type Connection } from '../features/connection/useConnection';
+import { FilterBar } from '../features/fleet/FilterBar';
+import { FleetStatus } from '../features/fleet/FleetStatus';
+import { NO_FILTERS, selectVehicles, type FleetFilters } from '../features/fleet/filters';
+import { catalogVehicles, foundTariff, foundZones, useCatalog } from '../features/fleet/useCatalog';
+import { useSelectedVehicle } from '../features/fleet/useSelectedVehicle';
+import { VehicleCard } from '../features/fleet/VehicleCard';
+import { VehicleList } from '../features/fleet/VehicleList';
+import { FleetMap } from '../features/map/FleetMap';
+
+/** What a narrow screen is showing, where the map and the list cannot both fit. */
+type NarrowView = 'map' | 'list';
 
 export function App() {
-  const { connection, retry } = useConnection();
+  const connection = useConnection();
+  const catalog = useCatalog();
+  const [filters, setFilters] = useState<FleetFilters>(NO_FILTERS);
+  const [selectedId, setSelectedId] = useState<string>();
+  const [narrowView, setNarrowView] = useState<NarrowView>('map');
+  const [accountOpen, setAccountOpen] = useState(false);
+
+  const vehicles = catalogVehicles(catalog);
+  const shown = selectVehicles(vehicles, filters);
+  const selected = useSelectedVehicle(vehicles, selectedId);
+
+  const select = useCallback((vehicleId: string) => setSelectedId(vehicleId), []);
 
   return (
     <div className="page">
-      <AppHeader />
-      <main className="page-main">
-        <Intro />
-        <AccountPanel />
-        <ConnectionCard connection={connection} onRetry={retry} />
+      <AppHeader
+        connection={connection}
+        accountOpen={accountOpen}
+        onToggleAccount={() => setAccountOpen((open) => !open)}
+      />
+      {accountOpen && <AccountPanel />}
+
+      <div className="fleet-bar">
+        <FleetStatus resource={catalog.fleet.resource} onRetry={catalog.fleet.retry} />
+        <NarrowViewSwitch view={narrowView} onChange={setNarrowView} />
+        <FilterBar filters={filters} onChange={setFilters} />
+      </div>
+
+      <main className={`fleet-layout fleet-layout-${narrowView}`}>
+        <div className="fleet-map-pane">
+          <FleetMap
+            vehicles={shown}
+            zones={foundZones(catalog)}
+            onRetryZones={catalog.zones.retry}
+            selectedId={selectedId}
+            onSelect={select}
+          />
+        </div>
+        <div className="fleet-side-pane">
+          <VehicleList vehicles={shown} selectedId={selectedId} onSelect={select} />
+        </div>
       </main>
-      <AppFooter />
+
+      {selected !== undefined && (
+        <VehicleCard
+          vehicle={selected}
+          tariff={foundTariff(catalog)}
+          onRetryTariff={catalog.tariffs.retry}
+          withinFilters={shown.some((vehicle) => vehicle.id === selected.id)}
+          onClose={() => setSelectedId(undefined)}
+        />
+      )}
     </div>
   );
 }
 
-function AppHeader() {
+type AppHeaderProps = { connection: Connection; accountOpen: boolean; onToggleAccount: () => void };
+
+function AppHeader({ connection, accountOpen, onToggleAccount }: AppHeaderProps) {
   return (
     <header className="page-header">
       <a className="brand" href="/" aria-label="CarSharing — главная">
@@ -33,36 +88,27 @@ function AppHeader() {
         </span>
         Бишкек
       </span>
+      <ConnectionIndicator connection={connection} />
+      <button className="header-action" type="button" aria-expanded={accountOpen} onClick={onToggleAccount}>
+        Вход
+      </button>
     </header>
   );
 }
 
-function Intro() {
+/**
+ * NarrowViewSwitch is how a phone moves between the map and the list. It changes only which of the
+ * two is on screen: the filters and the selected vehicle are held above it and survive the switch.
+ */
+function NarrowViewSwitch({ view, onChange }: { view: NarrowView; onChange: (view: NarrowView) => void }) {
   return (
-    <section className="intro" aria-labelledby="title">
-      <p className="eyebrow">СВОЙ РИТМ. СВОЙ МАРШРУТ.</p>
-      <h1 className="intro-title" id="title">
-        Город ближе,
-        <br />
-        чем кажется.
-      </h1>
-      <p className="lead">
-        Каршеринг для повседневных поездок по Бишкеку.
-        <br className="desktop-break" /> Готовимся к первой поездке вместе с вами.
-      </p>
-      <div className="notice">
-        <span className="notice-dot" aria-hidden="true" />
-        Локальная версия · в разработке
-      </div>
-    </section>
-  );
-}
-
-function AppFooter() {
-  return (
-    <footer className="page-footer">
-      <span>CarSharing · Бишкек</span>
-      <span>Электро · Бензин · Дизель · Гибрид · Газ</span>
-    </footer>
+    <div className="view-switch" role="group" aria-label="Карта или список">
+      <button className="view-tab" type="button" aria-pressed={view === 'map'} onClick={() => onChange('map')}>
+        Карта
+      </button>
+      <button className="view-tab" type="button" aria-pressed={view === 'list'} onClick={() => onChange('list')}>
+        Список
+      </button>
+    </div>
   );
 }

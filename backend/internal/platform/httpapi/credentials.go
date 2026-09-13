@@ -1,12 +1,20 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
 )
+
+// refuseCredentials answers an operation the anonymous router does not serve as an
+// unauthenticated request: the operation exists in the contract, and this router has no
+// credentials to check.
+func refuseCredentials(context.Context, *openapi3filter.AuthenticationInput) error {
+	return errNoLiveSession
+}
 
 // requireCredentials rejects a request that does not satisfy the security requirements of its
 // operation, or of the specification when the operation declares none.

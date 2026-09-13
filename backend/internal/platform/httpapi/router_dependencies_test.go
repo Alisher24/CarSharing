@@ -28,6 +28,9 @@ func TestIncompleteApplicationIsRefusedAtConstruction(t *testing.T) {
 		{"account service", func(d *Dependencies) { d.Auth = &auth.Service{} }},
 		{"user store", func(d *Dependencies) { d.Users = &auth.UserStore{} }},
 		{"rate-limit throttle", func(d *Dependencies) { d.Throttle = &auth.Throttle{} }},
+		{"vehicle catalog", func(d *Dependencies) { d.Catalog.Vehicles = fixedCatalog{} }},
+		{"service zones", func(d *Dependencies) { d.Catalog.Zones = zoneReader{} }},
+		{"tariffs", func(d *Dependencies) { d.Catalog.Tariffs = tariffReader{} }},
 	}
 
 	for _, step := range steps {

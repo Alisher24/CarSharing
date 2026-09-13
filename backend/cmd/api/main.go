@@ -13,10 +13,16 @@ import (
 	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/auth"
+	"github.com/Alisher24/CarSharing/backend/internal/demo"
+	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/config"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/httpapi"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/periodic"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/sessions"
+	"github.com/Alisher24/CarSharing/backend/internal/rentals"
+	"github.com/Alisher24/CarSharing/backend/internal/tariffs"
+	"github.com/Alisher24/CarSharing/backend/internal/zones"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -52,13 +58,7 @@ func main() {
 // account rules, all over the one pool so that a request can commit a user and its session together.
 func application(cfg config.Config, pool *pgxpool.Pool) (httpapi.Dependencies, error) {
 	users := auth.NewUserStore(pool)
-	hasher := auth.NewPasswordHasher(auth.HashingParameters{
-		MemoryKiB:   cfg.Argon2.MemoryKiB,
-		Passes:      cfg.Argon2.Passes,
-		Parallelism: cfg.Argon2.Parallelism,
-		SaltLength:  auth.SaltLength,
-		KeyLength:   auth.KeyLength,
-	}, cfg.Argon2.Concurrent)
+	hasher := auth.NewPasswordHasher(cfg.Argon2)
 	service, err := auth.NewService(users, hasher)
 	if err != nil {
 		return httpapi.Dependencies{}, err
@@ -71,7 +71,23 @@ func application(cfg config.Config, pool *pgxpool.Pool) (httpapi.Dependencies, e
 		Auth:           service,
 		Users:          users,
 		Throttle:       auth.NewThrottle(pool, cfg.RateLimits),
+		Catalog: httpapi.Catalog{
+			Vehicles: fleet.NewStore(pool),
+			Zones:    zones.NewStore(pool),
+			Tariffs:  tariffs.NewStore(pool),
+		},
 	}, nil
+}
+
+// startBackgroundWork starts the recurring work this process owns. The reservation deadline is a
+// rule of every deployment, so its sweep always runs; the telemetry source stands in for vehicles
+// that do not exist outside a demonstration, so it runs only where the demonstration does.
+func startBackgroundWork(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) {
+	go periodic.Run(ctx, "reservation expiry", rentals.ExpirySweepInterval, rentals.NewExpiry(pool).ExpireDue)
+	if cfg.Environment != config.DemoEnvironment {
+		return
+	}
+	go periodic.Run(ctx, "demonstration telemetry", demo.ConfirmationInterval, demo.NewConfirmations(pool).Confirm)
 }
 
 // newServer is the HTTP server this process runs, with the timeouts a publicly reachable listener
@@ -113,6 +129,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	startBackgroundWork(ctx, cfg, pool)
 	return serve(ctx, newServer(cfg, handler))
 }
 

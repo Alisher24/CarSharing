@@ -225,7 +225,7 @@ func TestPlannedRoutesRemainAbsentFromProduction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := testRouter(servedapi.ReadyStatus{})
+	handler := testRouter(t, servedapi.ReadyStatus{})
 	for path, pathItem := range spec.Paths.Map() {
 		for method, operation := range pathItem.Operations() {
 			if operation.Extensions["x-implementation-status"] != "planned" {
@@ -249,7 +249,7 @@ func TestImplementedRoutesAreServed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := testRouter(servedapi.ReadyStatus{})
+	handler := testRouter(t, servedapi.ReadyStatus{})
 	served := 0
 	for path, pathItem := range spec.Paths.Map() {
 		for method, operation := range pathItem.Operations() {
@@ -267,14 +267,6 @@ func TestImplementedRoutesAreServed(t *testing.T) {
 	if served == 0 {
 		t.Fatal("no operation is marked implemented, so this test proved nothing")
 	}
-}
-
-// testRouter is the router over a probe that answers with the given readiness, so a test that is
-// about which paths are served does not have to build an application of its own.
-func testRouter(readiness servedapi.ReadyStatus) http.Handler {
-	return NewProbeRouter(func(context.Context) (servedapi.ReadyStatus, error) {
-		return readiness, nil
-	})
 }
 
 func hasErrorCode(w *httptest.ResponseRecorder, code string) bool {

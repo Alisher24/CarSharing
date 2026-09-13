@@ -51,6 +51,9 @@ services:
       <<: *database
       DB_USER: carsharing_app
       DB_PASSWORD_FILE: /run/secrets/db_app_password
+      # The demonstration telemetry source stands in for vehicles that exist only here, so it runs
+      # under this profile and nowhere else.
+      APP_ENV: demo
       # Left empty so the service applies its own documented defaults. Setting one in the
       # environment is how an operator changes a limit, and how the acceptance suite proves the
       # running service reads the configuration rather than a constant.
@@ -103,6 +106,22 @@ services:
       APP_ENV: demo
       DB_USER: carsharing_migrator
       DB_PASSWORD_FILE: /run/secrets/db_admin_password
+      DEMO_USER_PASSWORD_FILE: /run/secrets/demo_user_password
+    secrets: [db_admin_password, demo_user_password]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  # Restoring the prepared scenario is a separate deliberate command, never part of starting the
+  # stack: a restart must leave the demonstration exactly where the last person left it.
+  demo-scenario:
+    <<: *backend
+    profiles: [demo]
+    entrypoint: [/usr/local/bin/demoscenario]
+    environment:
+      <<: *database
+      APP_ENV: demo
+      DB_USER: carsharing_migrator
+      DB_PASSWORD_FILE: /run/secrets/db_admin_password
     secrets: [db_admin_password]
     depends_on:
       migrate: { condition: service_completed_successfully }
@@ -115,3 +134,5 @@ secrets:
     file: ./.secrets/db_admin_password
   db_app_password:
     file: ./.secrets/db_app_password
+  demo_user_password:
+    file: ./.secrets/demo_user_password

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Alisher24/CarSharing/backend/internal/platform/hashing"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/ratelimit"
 )
 
@@ -35,6 +36,15 @@ func HTTPAddrFromEnvironment() string {
 	}
 	return DefaultHTTPAddr
 }
+
+// DatabasePasswordFileVariable names the file holding the password the process connects to the
+// database with. Every process is given one; none of them is given the password itself.
+const DatabasePasswordFileVariable = "DB_PASSWORD_FILE"
+
+// DemoUserPasswordFileVariable names the file holding the password the two demonstration accounts
+// a person signs in as are created with. Only the command that installs the demonstration is given
+// it, so nothing else can create an account somebody could sign in as.
+const DemoUserPasswordFileVariable = "DEMO_USER_PASSWORD_FILE"
 
 // minPasswordLength is the shortest database password setup generates, restated here so a
 // hand-edited secret cannot quietly weaken it. Its length is the one the failure below states.
@@ -69,20 +79,7 @@ const (
 	defaultArgon2Concurrent  = 2
 )
 
-// Argon2Config is the cost of one password hash. The starting values above fix the defaults; the
-// final ones come from measurements in the target Docker environment, which is why they are
-// configuration rather than constants.
-type Argon2Config struct {
-	MemoryKiB   uint32
-	Passes      uint32
-	Parallelism uint8
-
-	// Concurrent is how many password hashes one instance computes at a time. Beyond it a request
-	// is refused rather than queued, because a queue in front of a memory-hard function is how the
-	// instance is made to run out of memory.
-	Concurrent int
-}
-
+// Config is everything a process is told about the installation it runs in.
 type Config struct {
 	HTTPAddr   string
 	DBHost     string
@@ -102,10 +99,18 @@ type Config struct {
 	// SessionCookieSecure adds Secure to the session cookie. It is off only for the documented
 	// local HTTP profile; any deployment over HTTPS turns it on.
 	SessionCookieSecure bool
-	Argon2              Argon2Config
+
+	// Argon2 is the cost of one password hash. Both the service and the command that installs the
+	// demonstration hash with it, because an account one wrote has to be one the other can verify.
+	Argon2 hashing.Cost
 
 	// RateLimits is the budget of each counted account operation.
 	RateLimits ratelimit.Limits
+
+	// DemoUserPassword is what the demonstration accounts a person signs in as are created with.
+	// It is empty in a process that was not given the file, and the command that needs it refuses
+	// to run rather than invent one.
+	DemoUserPassword string
 }
 
 func Load() (Config, error) {
@@ -120,17 +125,19 @@ func Load() (Config, error) {
 		return cfg, errors.New("DB_PORT must be between 1 and 65535")
 	}
 	cfg.DBPort = uint16(port)
-	path := os.Getenv("DB_PASSWORD_FILE")
-	if path == "" {
-		return cfg, errors.New("DB_PASSWORD_FILE is required")
+	if os.Getenv(DatabasePasswordFileVariable) == "" {
+		return cfg, errors.New(DatabasePasswordFileVariable + " is required")
 	}
-	secret, err := os.ReadFile(path)
+	cfg.DBPassword, err = secretFromFile(DatabasePasswordFileVariable)
 	if err != nil {
-		return cfg, errors.New("cannot read DB_PASSWORD_FILE")
+		return cfg, err
 	}
-	cfg.DBPassword = strings.TrimSpace(string(secret))
 	if len(cfg.DBPassword) < minPasswordLength {
 		return cfg, errors.New(minPasswordLengthMessage)
+	}
+	cfg.DemoUserPassword, err = secretFromFile(DemoUserPasswordFileVariable)
+	if err != nil {
+		return cfg, err
 	}
 	cfg.AllowedOrigins = splitOrigins(envOrDefault("ALLOWED_ORIGINS", defaultAllowedOrigins))
 	cfg.SessionCookieSecure = os.Getenv("SESSION_COOKIE_SECURE") == "true"
@@ -192,24 +199,24 @@ func loadLimit(name string, attempts uint64, window time.Duration) (ratelimit.Li
 	return ratelimit.Limit{Attempts: int(counted), Window: window}, nil
 }
 
-func loadArgon2() (Argon2Config, error) {
+func loadArgon2() (hashing.Cost, error) {
 	memory, err := positiveNumber("AUTH_ARGON2_MEMORY_KIB", defaultArgon2MemoryKiB, 32)
 	if err != nil {
-		return Argon2Config{}, err
+		return hashing.Cost{}, err
 	}
 	passes, err := positiveNumber("AUTH_ARGON2_PASSES", defaultArgon2Passes, 32)
 	if err != nil {
-		return Argon2Config{}, err
+		return hashing.Cost{}, err
 	}
 	parallelism, err := positiveNumber("AUTH_ARGON2_PARALLELISM", defaultArgon2Parallelism, 8)
 	if err != nil {
-		return Argon2Config{}, err
+		return hashing.Cost{}, err
 	}
 	concurrent, err := positiveNumber("AUTH_ARGON2_CONCURRENT", defaultArgon2Concurrent, 8)
 	if err != nil {
-		return Argon2Config{}, err
+		return hashing.Cost{}, err
 	}
-	return Argon2Config{
+	return hashing.Cost{
 		MemoryKiB: uint32(memory), Passes: uint32(passes), Parallelism: uint8(parallelism),
 		Concurrent: int(concurrent),
 	}, nil
@@ -227,6 +234,21 @@ func positiveNumber(key string, fallback uint64, bits int) (uint64, error) {
 		return 0, errors.New(key + " must be a positive number")
 	}
 	return value, nil
+}
+
+// secretFromFile reads the secret a setting points at. A setting that names no file yields no
+// secret, because a process is given only the secrets it needs; a setting that names a file that
+// cannot be read is a misconfiguration and stops the process.
+func secretFromFile(key string) (string, error) {
+	path := os.Getenv(key)
+	if path == "" {
+		return "", nil
+	}
+	secret, err := os.ReadFile(path)
+	if err != nil {
+		return "", errors.New("cannot read " + key)
+	}
+	return strings.TrimSpace(string(secret)), nil
 }
 
 func envOrDefault(key, fallback string) string {

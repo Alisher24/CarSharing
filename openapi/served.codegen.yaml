@@ -13,3 +13,7 @@ output-options:
     - login
     - logout
     - getMe
+    - getVehicles
+    - getVehicle
+    - getZones
+    - getTariffs
