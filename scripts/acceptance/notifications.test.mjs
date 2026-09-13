@@ -84,6 +84,8 @@ after(endSuiteNotifications);
 describe('reading the collection of one account', () => {
   test('answers an empty collection with a null cursor and the moment of the read', async () => {
     const account = await newSuiteAccount('empty');
+    const holder = await newSuiteAccount('empty-holder');
+    storedAgo(holder, 100);
 
     const answer = await notificationsOf(account);
     assert.equal(answer.status, 200, answer.text);
@@ -91,11 +93,12 @@ describe('reading the collection of one account', () => {
     assert.equal(answer.json.next_cursor, null);
     assert.match(answer.json.server_time, MOMENT);
 
-    // The owner comes from the session, so a fresh account reads nothing even though the database
-    // holds notifications for other accounts.
-    assert.ok(
-      Number(sql('SELECT count(*) FROM notifications')) > 0,
-      'the check proved nothing: the database holds no notification at all',
+    // The owner comes from the session, so an account reads nothing even while the database holds a
+    // notification for another account.
+    assert.equal(
+      Number(sql(`SELECT count(*) FROM notifications WHERE user_id = '${await ownerOf(holder)}'`)),
+      1,
+      'the check proved nothing: the other account holds no notification',
     );
   });
 

@@ -64,10 +64,9 @@ FOR UPDATE OF note`
 
 	// ownerPageSelection walks one owner's collection from a position, newest first. The position is
 	// the pair the collection is ordered by, so the page after it continues exactly after the record
-	// the cursor was taken from. A page that starts at the newest record states no position at all,
-	// and every notification of the owner is then ahead of the one that holds the oldest identifier
-	// of that moment: an identifier this table never assigns, which is what makes the first page the
-	// whole collection rather than a comparison against a null.
+	// the cursor was taken from. A page that starts at the newest record states no position: the
+	// comparison is then against the last moment there can be, where every stored one is below it,
+	// and the identifier it is compared with second never has to decide anything.
 	ownerPageSelection = notificationColumns + `
 WHERE note.user_id = $1
   AND (note.created_at, note.id) <
@@ -97,7 +96,10 @@ func (s *Store) Create(
 			notificationOfRentalSelection, about.RentalID, about.Kind)
 		return existing, false, err
 	}
-	stored, err := s.ByID(ctx, created.UserID, created.ID)
+	// The record is read back through the selection every reader of this store uses, so the write is
+	// the only statement that has to know the shape of a row: what a creation answers is what a read
+	// of the same notification answers.
+	stored, err := readNotification(ctx, s.pool, notificationByIDForSelection, created.ID, created.UserID)
 	if err != nil {
 		return Notification{}, false, err
 	}
@@ -287,7 +289,7 @@ func (s *Store) change(ctx context.Context, next Notification) (Notification, bo
 	if err := s.update(ctx, next); err != nil {
 		return Notification{}, false, err
 	}
-	stored, err := s.ByID(ctx, next.UserID, next.ID)
+	stored, err := readNotification(ctx, s.pool, notificationByIDForSelection, next.ID, next.UserID)
 	if err != nil {
 		return Notification{}, false, err
 	}
