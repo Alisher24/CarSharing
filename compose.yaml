@@ -51,6 +51,8 @@ services:
       <<: *database
       DB_USER: carsharing_app
       DB_PASSWORD_FILE: /run/secrets/db_app_password
+      # The signed cursors of the collection reads this process serves are issued under this key.
+      CURSOR_HMAC_KEY_FILE: /run/secrets/cursor_hmac_key
       # The demonstration telemetry source stands in for vehicles that exist only here, so it runs
       # under this profile and nowhere else.
       APP_ENV: demo
@@ -65,7 +67,7 @@ services:
       RATE_LIMIT_SIGNIN_EMAIL_WINDOW: ${RATE_LIMIT_SIGNIN_EMAIL_WINDOW:-}
       RATE_LIMIT_SIGNIN_ADDRESS_WINDOW: ${RATE_LIMIT_SIGNIN_ADDRESS_WINDOW:-}
       RATE_LIMIT_REGISTRATION_ADDRESS_WINDOW: ${RATE_LIMIT_REGISTRATION_ADDRESS_WINDOW:-}
-    secrets: [db_app_password]
+    secrets: [db_app_password, cursor_hmac_key]
     depends_on:
       migrate: { condition: service_completed_successfully }
     healthcheck:
@@ -150,5 +152,7 @@ secrets:
     file: ./.secrets/db_admin_password
   db_app_password:
     file: ./.secrets/db_app_password
+  cursor_hmac_key:
+    file: ./.secrets/cursor_hmac_key
   demo_user_password:
     file: ./.secrets/demo_user_password
