@@ -39,13 +39,10 @@ const BOOTSTRAP_SEED_APPLIED_AT_QUERY = `SELECT applied_at FROM seed_runs WHERE 
 const BOOTSTRAP_SEED_COUNT_QUERY = `SELECT count(*) FROM seed_runs WHERE name = '${BOOTSTRAP_SEED}'`;
 
 // Retired health URLs, planned operations and the internal API must all be unreachable from outside.
-const UNREACHABLE_PATHS = [
-  '/health/live',
-  '/health/ready',
-  '/api/health',
-  '/api/v1/vehicles',
-  '/internal/v1/simulation/tick',
-];
+const UNREACHABLE_PATHS = ['/health/live', '/health/ready', '/api/health', '/internal/v1/simulation/tick'];
+
+// The public catalog is served through the same proxy, with no account and no cookie.
+const PUBLIC_CATALOG_PATHS = ['/api/v1/vehicles', '/api/v1/zones', '/api/v1/tariffs'];
 
 /**
  * The role the API runs as, read from the database rather than restated here. The service records
@@ -121,6 +118,14 @@ async function checkUnreachablePaths(origin) {
   }
 }
 
+async function checkPublicCatalogIsServed(origin) {
+  for (const path of PUBLIC_CATALOG_PATHS) {
+    const response = await fetch(`${origin}${path}`);
+    assert.equal(response.status, 200, path);
+    assert.ok(Array.isArray((await response.json()).items), path);
+  }
+}
+
 // An implemented operation behind a session answers as unauthenticated rather than as absent, so a
 // caller can tell "sign in" from "no such resource".
 async function checkSessionRequirementIsDistinguishable(origin) {
@@ -186,13 +191,14 @@ async function main() {
   await awaitReady(origin);
   await checkFrontendIsServed(origin);
   await checkUnreachablePaths(origin);
+  await checkPublicCatalogIsServed(origin);
   await checkSessionRequirementIsDistinguishable(origin);
   checkDatabaseRoleIsUnprivileged();
   const recordedState = checkRepeatedMigrationAndSeedAreIdempotent();
   await checkOutageIsReportedAndRecovered(origin);
   checkRecordedStatePersists(recordedState);
   console.log(
-    'PASS: frontend/proxy, live API/PostGIS, runtime role,',
+    'PASS: frontend/proxy, live API/PostGIS, public catalog, runtime role,',
     'repeated migrations/seed, outage recovery and persistent data.',
   );
 }

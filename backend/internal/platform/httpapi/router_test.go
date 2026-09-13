@@ -16,11 +16,10 @@ func TestRoutingErrorsUseTheAPIErrorContract(t *testing.T) {
 		{"GET", "/api/health", "RESOURCE_NOT_FOUND", 404},
 		{"GET", "/health/live", "RESOURCE_NOT_FOUND", 404},
 		{"GET", "/health/ready", "RESOURCE_NOT_FOUND", 404},
-		{"GET", "/api/v1/vehicles", "RESOURCE_NOT_FOUND", 404},
 		{"POST", "/api/v1/health/live", "METHOD_NOT_ALLOWED", 405},
 	} {
 		t.Run(tc.method+tc.path, func(t *testing.T) {
-			r := testRouter(servedapi.ReadyStatus{})
+			r := testRouter(t, servedapi.ReadyStatus{})
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, httptest.NewRequest(tc.method, tc.path, nil))
 			var body struct {

@@ -15,6 +15,7 @@ export const CAPABILITY_SECRETS = [
   'mailstub_demo_token',
   'cursor_hmac_key',
   'mailstub_cursor_hmac_key',
+  'demo_user_password',
 ];
 
 const SECRET_NAMES = [...DATABASE_SECRETS, ...CAPABILITY_SECRETS];

@@ -7,13 +7,18 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
-// NewProbeRouter serves the health operations over one readiness probe and nothing else, which is
-// what a probe outside the application and a routing test need. It refuses the operations that
-// depend on the account rules before reaching for a handler they were not given.
-func NewProbeRouter(probe ReadinessProbe) http.Handler {
-	served := server{health: health{probe: probe}}
+// NewAnonymousRouter serves the operations that need no account: the health probes and the public
+// catalog. Everything an account is required for is refused before a handler it was not given is
+// reached, which is what a probe outside the application and a routing test need.
+func NewAnonymousRouter(probe ReadinessProbe, catalog Catalog) (http.Handler, error) {
+	handlers, err := newCatalogHandlers(catalog)
+	if err != nil {
+		return nil, err
+	}
+	served := server{health: health{probe: probe}, catalogHandlers: handlers}
 	policy := transport{allowedOrigins: map[string]bool{}, authenticate: refuseCredentials}
-	return servedRouter(servedapi.Handler(servedapi.NewStrictHandler(served, nil)), policy)
+	strict := servedapi.NewStrictHandlerWithOptions(served, nil, strictErrorHandlers())
+	return servedRouter(servedapi.Handler(strict), policy), nil
 }
 
 // NewHandler builds the router this process serves. It reports the dependencies it was not given
@@ -23,7 +28,15 @@ func NewHandler(dependencies Dependencies) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	served := server{health: health{probe: dependencies.Probe}, accounts: accounts}
+	handlers, err := newCatalogHandlers(dependencies.Catalog)
+	if err != nil {
+		return nil, err
+	}
+	served := server{
+		health:          health{probe: dependencies.Probe},
+		accounts:        accounts,
+		catalogHandlers: handlers,
+	}
 	strict := servedapi.NewStrictHandlerWithOptions(served, nil, strictErrorHandlers())
 	policy := transport{
 		allowedOrigins: originSet(dependencies.AllowedOrigins),

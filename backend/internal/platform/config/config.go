@@ -36,6 +36,15 @@ func HTTPAddrFromEnvironment() string {
 	return DefaultHTTPAddr
 }
 
+// DatabasePasswordFileVariable names the file holding the password the process connects to the
+// database with. Every process is given one; none of them is given the password itself.
+const DatabasePasswordFileVariable = "DB_PASSWORD_FILE"
+
+// DemoUserPasswordFileVariable names the file holding the password the two demonstration accounts
+// a person signs in as are created with. Only the command that installs the demonstration is given
+// it, so nothing else can create an account somebody could sign in as.
+const DemoUserPasswordFileVariable = "DEMO_USER_PASSWORD_FILE"
+
 // minPasswordLength is the shortest database password setup generates, restated here so a
 // hand-edited secret cannot quietly weaken it. Its length is the one the failure below states.
 const minPasswordLength = 32
@@ -106,6 +115,11 @@ type Config struct {
 
 	// RateLimits is the budget of each counted account operation.
 	RateLimits ratelimit.Limits
+
+	// DemoUserPassword is what the demonstration accounts a person signs in as are created with.
+	// It is empty in a process that was not given the file, and the command that needs it refuses
+	// to run rather than invent one.
+	DemoUserPassword string
 }
 
 func Load() (Config, error) {
@@ -120,17 +134,19 @@ func Load() (Config, error) {
 		return cfg, errors.New("DB_PORT must be between 1 and 65535")
 	}
 	cfg.DBPort = uint16(port)
-	path := os.Getenv("DB_PASSWORD_FILE")
-	if path == "" {
-		return cfg, errors.New("DB_PASSWORD_FILE is required")
+	if os.Getenv(DatabasePasswordFileVariable) == "" {
+		return cfg, errors.New(DatabasePasswordFileVariable + " is required")
 	}
-	secret, err := os.ReadFile(path)
+	cfg.DBPassword, err = secretFromFile(DatabasePasswordFileVariable)
 	if err != nil {
-		return cfg, errors.New("cannot read DB_PASSWORD_FILE")
+		return cfg, err
 	}
-	cfg.DBPassword = strings.TrimSpace(string(secret))
 	if len(cfg.DBPassword) < minPasswordLength {
 		return cfg, errors.New(minPasswordLengthMessage)
+	}
+	cfg.DemoUserPassword, err = secretFromFile(DemoUserPasswordFileVariable)
+	if err != nil {
+		return cfg, err
 	}
 	cfg.AllowedOrigins = splitOrigins(envOrDefault("ALLOWED_ORIGINS", defaultAllowedOrigins))
 	cfg.SessionCookieSecure = os.Getenv("SESSION_COOKIE_SECURE") == "true"
@@ -227,6 +243,21 @@ func positiveNumber(key string, fallback uint64, bits int) (uint64, error) {
 		return 0, errors.New(key + " must be a positive number")
 	}
 	return value, nil
+}
+
+// secretFromFile reads the secret a setting points at. A setting that names no file yields no
+// secret, because a process is given only the secrets it needs; a setting that names a file that
+// cannot be read is a misconfiguration and stops the process.
+func secretFromFile(key string) (string, error) {
+	path := os.Getenv(key)
+	if path == "" {
+		return "", nil
+	}
+	secret, err := os.ReadFile(path)
+	if err != nil {
+		return "", errors.New("cannot read " + key)
+	}
+	return strings.TrimSpace(string(secret)), nil
 }
 
 func envOrDefault(key, fallback string) string {

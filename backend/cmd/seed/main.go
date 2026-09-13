@@ -1,4 +1,6 @@
-// Command seed inserts demo data and refuses to run outside the demo environment.
+// Command seed installs the demonstration data and refuses to run outside the demo environment.
+// It creates what is missing and changes nothing that is already there, so a second run and a
+// restart both leave the demonstration exactly as it stands.
 package main
 
 import (
@@ -7,18 +9,29 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
+	"github.com/Alisher24/CarSharing/backend/internal/auth"
+	"github.com/Alisher24/CarSharing/backend/internal/demo"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/config"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // seedMarker is the row this command writes. It names the seed set, not a run, so a second run
 // leaves the first one's date alone.
 const seedMarker = "bootstrap-v1"
 
-// errDemoEnvironmentRequired refuses a seed run outside the demo environment, where the demo data
-// would land in a deployment that never asked for it.
-var errDemoEnvironmentRequired = errors.New("seed requires APP_ENV=demo")
+// seedTimeout bounds the whole installation, which hashes a password for every demonstration
+// account before it writes anything.
+const seedTimeout = 5 * time.Minute
+
+// Reasons this command refuses to run. Each names what an operator must supply rather than letting
+// the run continue with a value it invented.
+var (
+	errDemoEnvironmentRequired = errors.New("seed requires APP_ENV=demo")
+	errDemoPasswordRequired    = errors.New("seed requires " + config.DemoUserPasswordFileVariable)
+)
 
 func main() {
 	if err := run(); err != nil {
@@ -35,21 +48,49 @@ func run() error {
 	if cfg.Environment != config.DemoEnvironment {
 		return errDemoEnvironmentRequired
 	}
+	if cfg.DemoUserPassword == "" {
+		return errDemoPasswordRequired
+	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), database.DatabaseStartupTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), seedTimeout)
 	defer cancel()
-	pool, err := database.Open(ctx, cfg)
+
+	startup, cancelStartup := context.WithTimeout(ctx, database.DatabaseStartupTimeout)
+	pool, err := database.Open(startup, cfg)
+	cancelStartup()
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
 
-	_, err = pool.Exec(ctx, `INSERT INTO seed_runs (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`,
-		seedMarker)
+	if err = recordSeedSet(ctx, pool); err != nil {
+		return err
+	}
+	if err = demo.Seed(ctx, pool, passwordHasher(cfg), cfg.DemoUserPassword); err != nil {
+		return err
+	}
+
+	slog.Info("demonstration seed completed", "vehicles", len(demo.Fleet()))
+	return nil
+}
+
+func recordSeedSet(ctx context.Context, pool *pgxpool.Pool) error {
+	_, err := pool.Exec(ctx,
+		`INSERT INTO seed_runs (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`, seedMarker)
 	if err != nil {
 		return fmt.Errorf("seed failed; run migrations first: %w", err)
 	}
-
-	slog.Info("bootstrap seed completed; demo users and vehicles are not implemented yet")
 	return nil
+}
+
+// passwordHasher is the same Argon2id cost the API verifies against, so an account this command
+// creates can be signed in to by the running service.
+func passwordHasher(cfg config.Config) *auth.PasswordHasher {
+	return auth.NewPasswordHasher(auth.HashingParameters{
+		MemoryKiB:   cfg.Argon2.MemoryKiB,
+		Passes:      cfg.Argon2.Passes,
+		Parallelism: cfg.Argon2.Parallelism,
+		SaltLength:  auth.SaltLength,
+		KeyLength:   auth.KeyLength,
+	}, cfg.Argon2.Concurrent)
 }

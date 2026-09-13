@@ -1,48 +1,16 @@
-import { useEffect, useState } from 'react';
-import { getHealth } from '../../shared/api/health';
-import type { Connection } from './Connection';
-
-const HEALTH_REQUEST_TIMEOUT_MS = 8000;
-
-// A failed check and a slow check are one outcome for the interface: the service did not answer.
-async function checkConnection(signal: AbortSignal): Promise<Connection> {
-  try {
-    return { state: 'ready', status: await getHealth(signal) };
-  } catch {
-    return { state: 'error' };
-  }
-}
+import { getHealth, type ReadyStatus } from '../../shared/api/health';
+import type { Resource } from '../../shared/api/Resource';
+import { useResource } from '../../shared/api/useResource';
 
 /**
- * useConnection asks the service whether it is reachable, and asks again whenever the person
- * retries. The request is abandoned on unmount and on a new attempt, so a slow answer never lands
- * on a screen that has moved on.
+ * How often the browser checks that it can still reach the service. This is the reader's own link,
+ * shown in the header; a vehicle's link to the platform is a separate fact reported on its card.
  */
-export function useConnection() {
-  const [connection, setConnection] = useState<Connection>({ state: 'loading' });
-  const [attempt, setAttempt] = useState(0);
+const CONNECTION_CHECK_MILLISECONDS = 10_000;
 
-  useEffect(() => {
-    const controller = new AbortController();
-    const abortTimer = window.setTimeout(() => controller.abort(), HEALTH_REQUEST_TIMEOUT_MS);
-    let mounted = true;
+/** What the interface knows about the service behind it. */
+export type Connection = Resource<ReadyStatus>;
 
-    setConnection({ state: 'loading' });
-    checkConnection(controller.signal).then((result) => {
-      window.clearTimeout(abortTimer);
-      if (mounted) setConnection(result);
-    });
-
-    return () => {
-      mounted = false;
-      window.clearTimeout(abortTimer);
-      controller.abort();
-    };
-  }, [attempt]);
-
-  function retry() {
-    setAttempt((count) => count + 1);
-  }
-
-  return { connection, retry };
+export function useConnection(): Connection {
+  return useResource(getHealth, CONNECTION_CHECK_MILLISECONDS).resource;
 }

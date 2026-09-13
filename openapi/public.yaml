@@ -1066,7 +1066,7 @@ paths:
     get:
       operationId: getVehicles
       summary: get Vehicles
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-body-limit: 65536
       description: >-
         Complete unpaginated demo fleet snapshot. Status and powertrain filters belong to the frontend. No
@@ -1218,7 +1218,7 @@ paths:
     get:
       operationId: getVehicle
       summary: get Vehicle
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-body-limit: 65536
       description: No request body is permitted, including an empty JSON object.
       parameters:
@@ -1390,7 +1390,7 @@ paths:
     get:
       operationId: getZones
       summary: get Zones
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-body-limit: 65536
       description: >-
         Current zones only; no public version history. No request body is permitted, including an empty JSON
@@ -1535,7 +1535,7 @@ paths:
     get:
       operationId: getTariffs
       summary: get Tariffs
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-body-limit: 65536
       description: >-
         Current tariffs only; no public version history. No request body is permitted, including an empty JSON
@@ -5653,8 +5653,10 @@ components:
       type: array
       items:
         type: number
+        format: double
         minimum: -180
         maximum: 180
+        x-go-type: float64
       minItems: 2
       maxItems: 2
       description: WGS84 [longitude, latitude]. Latitude must be within -90..90.

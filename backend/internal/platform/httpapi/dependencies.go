@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/Alisher24/CarSharing/backend/internal/auth"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/sessions"
@@ -11,9 +12,9 @@ import (
 )
 
 // Dependencies is everything the served application needs from the process around it. The process
-// that builds them supplies all of them; a caller that serves only the health operations — an
-// isolated contract router, or a routing test — supplies the probe alone and is served by
-// NewProbeRouter instead.
+// that builds them supplies all of them; a caller that serves only what needs no account — an
+// isolated contract router, or a routing test — supplies the probe and the catalog and is served
+// by NewAnonymousRouter instead.
 type Dependencies struct {
 	// Probe answers whether the dependencies this deployment needs are usable. It is the only
 	// dependency the health operations have.
@@ -28,6 +29,48 @@ type Dependencies struct {
 	Auth     *auth.Service
 	Users    *auth.UserStore
 	Throttle *auth.Throttle
+
+	// Catalog is what the operations that need no account read. Both routers are given it,
+	// because the anonymous one serves those operations too.
+	Catalog Catalog
+}
+
+// Catalog is the read side of everything a visitor sees without signing in. Each resource is read
+// on its own, so one of them failing leaves the other two answerable.
+type Catalog struct {
+	Vehicles VehicleReader
+	Zones    ZoneReader
+	Tariffs  TariffReader
+}
+
+// catalogHandlers are the operations a visitor reads without an account, each over the reader
+// that answers it.
+type catalogHandlers struct {
+	vehicles
+	serviceZones
+	prices
+}
+
+// newCatalogHandlers builds them, or names the reader that is missing. A reader is refused rather
+// than defaulted, because a handler that reached a nil one would answer a request it never read.
+func newCatalogHandlers(catalog Catalog) (catalogHandlers, error) {
+	for _, required := range []struct {
+		name     string
+		supplied bool
+	}{
+		{"vehicle catalog", catalog.Vehicles != nil},
+		{"service zones", catalog.Zones != nil},
+		{"tariffs", catalog.Tariffs != nil},
+	} {
+		if !required.supplied {
+			return catalogHandlers{}, fmt.Errorf("%w: %s", ErrIncompleteApplication, required.name)
+		}
+	}
+	return catalogHandlers{
+		vehicles:     vehicles{reader: catalog.Vehicles},
+		serviceZones: serviceZones{reader: catalog.Zones},
+		prices:       prices{reader: catalog.Tariffs},
+	}, nil
 }
 
 // ErrIncompleteApplication refuses to serve an application whose dependencies were not all
@@ -41,6 +84,7 @@ var ErrIncompleteApplication = errors.New("the HTTP application is missing a dep
 type server struct {
 	health
 	accounts
+	catalogHandlers
 }
 
 // originSet indexes the allowed origins for lookup, so the check is a comparison rather than a scan.
@@ -52,8 +96,9 @@ func originSet(origins []string) map[string]bool {
 	return allowed
 }
 
-// refuseCredentials answers an operation the probe router does not serve as an unauthenticated
-// request: the operation exists in the contract, and this router has no credentials to check.
+// refuseCredentials answers an operation the anonymous router does not serve as an
+// unauthenticated request: the operation exists in the contract, and this router has no
+// credentials to check.
 func refuseCredentials(context.Context, *openapi3filter.AuthenticationInput) error {
 	return errNoLiveSession
 }

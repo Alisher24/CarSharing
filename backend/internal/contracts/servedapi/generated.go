@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -21,6 +22,42 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AvailableVehicleStatus.
+const (
+	Available AvailableVehicleStatus = "available"
+)
+
+// Valid indicates whether the value is a known member of the AvailableVehicleStatus enum.
+func (e AvailableVehicleStatus) Valid() bool {
+	switch e {
+	case Available:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AvailableVehicleTelemetryStatus.
+const (
+	AvailableVehicleTelemetryStatusFresh   AvailableVehicleTelemetryStatus = "fresh"
+	AvailableVehicleTelemetryStatusOffline AvailableVehicleTelemetryStatus = "offline"
+	AvailableVehicleTelemetryStatusStale   AvailableVehicleTelemetryStatus = "stale"
+)
+
+// Valid indicates whether the value is a known member of the AvailableVehicleTelemetryStatus enum.
+func (e AvailableVehicleTelemetryStatus) Valid() bool {
+	switch e {
+	case AvailableVehicleTelemetryStatusFresh:
+		return true
+	case AvailableVehicleTelemetryStatusOffline:
+		return true
+	case AvailableVehicleTelemetryStatusStale:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for BodyViolationLocation.
 const (
 	Body BodyViolationLocation = "body"
@@ -30,6 +67,27 @@ const (
 func (e BodyViolationLocation) Valid() bool {
 	switch e {
 	case Body:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EnergySourceUnit.
+const (
+	G  EnergySourceUnit = "g"
+	Ml EnergySourceUnit = "ml"
+	Wh EnergySourceUnit = "wh"
+)
+
+// Valid indicates whether the value is a known member of the EnergySourceUnit enum.
+func (e EnergySourceUnit) Valid() bool {
+	switch e {
+	case G:
+		return true
+	case Ml:
+		return true
+	case Wh:
 		return true
 	default:
 		return false
@@ -147,6 +205,60 @@ func (e ErrorCode) Valid() bool {
 	}
 }
 
+// Defines values for InTripVehicleRideMode.
+const (
+	Driving InTripVehicleRideMode = "driving"
+	Paused  InTripVehicleRideMode = "paused"
+)
+
+// Valid indicates whether the value is a known member of the InTripVehicleRideMode enum.
+func (e InTripVehicleRideMode) Valid() bool {
+	switch e {
+	case Driving:
+		return true
+	case Paused:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for InTripVehicleStatus.
+const (
+	InTrip InTripVehicleStatus = "in_trip"
+)
+
+// Valid indicates whether the value is a known member of the InTripVehicleStatus enum.
+func (e InTripVehicleStatus) Valid() bool {
+	switch e {
+	case InTrip:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for InTripVehicleTelemetryStatus.
+const (
+	InTripVehicleTelemetryStatusFresh   InTripVehicleTelemetryStatus = "fresh"
+	InTripVehicleTelemetryStatusOffline InTripVehicleTelemetryStatus = "offline"
+	InTripVehicleTelemetryStatusStale   InTripVehicleTelemetryStatus = "stale"
+)
+
+// Valid indicates whether the value is a known member of the InTripVehicleTelemetryStatus enum.
+func (e InTripVehicleTelemetryStatus) Valid() bool {
+	switch e {
+	case InTripVehicleTelemetryStatusFresh:
+		return true
+	case InTripVehicleTelemetryStatusOffline:
+		return true
+	case InTripVehicleTelemetryStatusStale:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for LiveStatusStatus.
 const (
 	LiveStatusStatusOk LiveStatusStatus = "ok"
@@ -156,6 +268,21 @@ const (
 func (e LiveStatusStatus) Valid() bool {
 	switch e {
 	case LiveStatusStatusOk:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MultiPolygonType.
+const (
+	MultiPolygonTypeMultiPolygon MultiPolygonType = "MultiPolygon"
+)
+
+// Valid indicates whether the value is a known member of the MultiPolygonType enum.
+func (e MultiPolygonType) Valid() bool {
+	switch e {
+	case MultiPolygonTypeMultiPolygon:
 		return true
 	default:
 		return false
@@ -183,6 +310,63 @@ func (e ParameterViolationLocation) Valid() bool {
 	}
 }
 
+// Defines values for PointType.
+const (
+	PointTypePoint PointType = "Point"
+)
+
+// Valid indicates whether the value is a known member of the PointType enum.
+func (e PointType) Valid() bool {
+	switch e {
+	case PointTypePoint:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PolygonType.
+const (
+	PolygonTypePolygon PolygonType = "Polygon"
+)
+
+// Valid indicates whether the value is a known member of the PolygonType enum.
+func (e PolygonType) Valid() bool {
+	switch e {
+	case PolygonTypePolygon:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PowertrainType.
+const (
+	PowertrainTypeDiesel   PowertrainType = "diesel"
+	PowertrainTypeElectric PowertrainType = "electric"
+	PowertrainTypeGas      PowertrainType = "gas"
+	PowertrainTypeGasoline PowertrainType = "gasoline"
+	PowertrainTypeHybrid   PowertrainType = "hybrid"
+)
+
+// Valid indicates whether the value is a known member of the PowertrainType enum.
+func (e PowertrainType) Valid() bool {
+	switch e {
+	case PowertrainTypeDiesel:
+		return true
+	case PowertrainTypeElectric:
+		return true
+	case PowertrainTypeGas:
+		return true
+	case PowertrainTypeGasoline:
+		return true
+	case PowertrainTypeHybrid:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ReadyStatusCity.
 const (
 	Бишкек ReadyStatusCity = "Бишкек"
@@ -200,13 +384,13 @@ func (e ReadyStatusCity) Valid() bool {
 
 // Defines values for ReadyStatusCurrency.
 const (
-	KGS ReadyStatusCurrency = "KGS"
+	ReadyStatusCurrencyKGS ReadyStatusCurrency = "KGS"
 )
 
 // Valid indicates whether the value is a known member of the ReadyStatusCurrency enum.
 func (e ReadyStatusCurrency) Valid() bool {
 	switch e {
-	case KGS:
+	case ReadyStatusCurrencyKGS:
 		return true
 	default:
 		return false
@@ -243,6 +427,99 @@ func (e ReadyStatusTimezone) Valid() bool {
 	}
 }
 
+// Defines values for ReservedVehicleStatus.
+const (
+	Reserved ReservedVehicleStatus = "reserved"
+)
+
+// Valid indicates whether the value is a known member of the ReservedVehicleStatus enum.
+func (e ReservedVehicleStatus) Valid() bool {
+	switch e {
+	case Reserved:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ReservedVehicleTelemetryStatus.
+const (
+	ReservedVehicleTelemetryStatusFresh   ReservedVehicleTelemetryStatus = "fresh"
+	ReservedVehicleTelemetryStatusOffline ReservedVehicleTelemetryStatus = "offline"
+	ReservedVehicleTelemetryStatusStale   ReservedVehicleTelemetryStatus = "stale"
+)
+
+// Valid indicates whether the value is a known member of the ReservedVehicleTelemetryStatus enum.
+func (e ReservedVehicleTelemetryStatus) Valid() bool {
+	switch e {
+	case ReservedVehicleTelemetryStatusFresh:
+		return true
+	case ReservedVehicleTelemetryStatusOffline:
+		return true
+	case ReservedVehicleTelemetryStatusStale:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SourceKind.
+const (
+	SourceKindBattery  SourceKind = "battery"
+	SourceKindCng      SourceKind = "cng"
+	SourceKindDiesel   SourceKind = "diesel"
+	SourceKindGasoline SourceKind = "gasoline"
+	SourceKindLpg      SourceKind = "lpg"
+)
+
+// Valid indicates whether the value is a known member of the SourceKind enum.
+func (e SourceKind) Valid() bool {
+	switch e {
+	case SourceKindBattery:
+		return true
+	case SourceKindCng:
+		return true
+	case SourceKindDiesel:
+		return true
+	case SourceKindGasoline:
+		return true
+	case SourceKindLpg:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TariffBillingPolicy.
+const (
+	PerModeStartedMinuteV1 TariffBillingPolicy = "per_mode_started_minute_v1"
+)
+
+// Valid indicates whether the value is a known member of the TariffBillingPolicy enum.
+func (e TariffBillingPolicy) Valid() bool {
+	switch e {
+	case PerModeStartedMinuteV1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TariffCurrency.
+const (
+	TariffCurrencyKGS TariffCurrency = "KGS"
+)
+
+// Valid indicates whether the value is a known member of the TariffCurrency enum.
+func (e TariffCurrency) Valid() bool {
+	switch e {
+	case TariffCurrencyKGS:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UnavailableReason.
 const (
 	InsufficientEnergy   UnavailableReason = "insufficient_energy"
@@ -270,6 +547,42 @@ func (e UnavailableReason) Valid() bool {
 	}
 }
 
+// Defines values for UnavailableVehicleStatus.
+const (
+	Unavailable UnavailableVehicleStatus = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the UnavailableVehicleStatus enum.
+func (e UnavailableVehicleStatus) Valid() bool {
+	switch e {
+	case Unavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UnavailableVehicleTelemetryStatus.
+const (
+	UnavailableVehicleTelemetryStatusFresh   UnavailableVehicleTelemetryStatus = "fresh"
+	UnavailableVehicleTelemetryStatusOffline UnavailableVehicleTelemetryStatus = "offline"
+	UnavailableVehicleTelemetryStatusStale   UnavailableVehicleTelemetryStatus = "stale"
+)
+
+// Valid indicates whether the value is a known member of the UnavailableVehicleTelemetryStatus enum.
+func (e UnavailableVehicleTelemetryStatus) Valid() bool {
+	switch e {
+	case UnavailableVehicleTelemetryStatusFresh:
+		return true
+	case UnavailableVehicleTelemetryStatusOffline:
+		return true
+	case UnavailableVehicleTelemetryStatusStale:
+		return true
+	default:
+		return false
+	}
+}
+
 // ApiError defines model for ApiError.
 type ApiError struct {
 	Code    ErrorCode         `json:"code"`
@@ -286,6 +599,35 @@ type ApiError struct {
 type ApiError_Details struct {
 	union json.RawMessage
 }
+
+// AvailableVehicle Example: {"energy_sources":[{"can_continue":true,"can_start":true,"capacity":"2000","kind":"battery","remaining":"1200.125","remaining_basis_points":6001,"unit":"wh"}],"id":"01994342-6ba7-7000-8000-000000000001","model":"Demo Electric","position":{"coordinates":[74.6,42.87],"type":"Point"},"powertrain_type":"electric","status":"available","telemetry_at":"2026-09-12T07:15:30.123456Z","telemetry_status":"fresh","version":"1"}
+type AvailableVehicle struct {
+	EnergySources []EnergySource `json:"energy_sources"`
+
+	// Id Example: 01994342-6ba7-7000-8000-000000000001
+	Id             ResourceId             `json:"id"`
+	Model          string                 `json:"model"`
+	Position       Point                  `json:"position"`
+	PowertrainType PowertrainType         `json:"powertrain_type"`
+	Status         AvailableVehicleStatus `json:"status"`
+
+	// TelemetryAt UTC RFC3339, exactly six fractional digits; domain commands use database time.
+	//
+	// Example: 2026-09-12T07:15:30.123456Z
+	TelemetryAt     Timestamp                       `json:"telemetry_at"`
+	TelemetryStatus AvailableVehicleTelemetryStatus `json:"telemetry_status"`
+
+	// Version Canonical nonnegative decimal integer in the inclusive range 0..9223372036854775807.
+	//
+	// Example: 42
+	Version ExactInteger `json:"version"`
+}
+
+// AvailableVehicleStatus defines model for AvailableVehicle.Status.
+type AvailableVehicleStatus string
+
+// AvailableVehicleTelemetryStatus defines model for AvailableVehicle.TelemetryStatus.
+type AvailableVehicleTelemetryStatus string
 
 // BodyViolation defines model for BodyViolation.
 type BodyViolation struct {
@@ -309,8 +651,81 @@ type Credentials struct {
 	Password string `json:"password"`
 }
 
+// EnergyDecimal Nonnegative canonical decimal, at most six fractional digits, no trailing fractional zeros or exponent.
+//
+// Example: 1200.125
+type EnergyDecimal = string
+
+// EnergySource Separate source inventories are never summed for a threshold. Capability is computed by the server from the powertrain profile; battery uses wh, liquid fuels ml and CNG g.
+type EnergySource struct {
+	CanContinue bool `json:"can_continue"`
+	CanStart    bool `json:"can_start"`
+
+	// Capacity Nonnegative canonical decimal, at most six fractional digits, no trailing fractional zeros or exponent.
+	//
+	// Example: 1200.125
+	Capacity EnergyDecimal `json:"capacity"`
+	Kind     SourceKind    `json:"kind"`
+
+	// Remaining Nonnegative canonical decimal, at most six fractional digits, no trailing fractional zeros or exponent.
+	//
+	// Example: 1200.125
+	Remaining            EnergyDecimal    `json:"remaining"`
+	RemainingBasisPoints int              `json:"remaining_basis_points"`
+	Unit                 EnergySourceUnit `json:"unit"`
+}
+
+// EnergySourceUnit defines model for EnergySource.Unit.
+type EnergySourceUnit string
+
 // ErrorCode defines model for ErrorCode.
 type ErrorCode string
+
+// ExactInteger Canonical nonnegative decimal integer in the inclusive range 0..9223372036854775807.
+//
+// Example: 42
+type ExactInteger = string
+
+// Geometry defines model for Geometry.
+type Geometry struct {
+	union json.RawMessage
+}
+
+// InTripVehicle Example: {"energy_sources":[{"can_continue":true,"can_start":true,"capacity":"2000","kind":"battery","remaining":"1200.125","remaining_basis_points":6001,"unit":"wh"}],"id":"01994342-6ba7-7000-8000-000000000001","model":"Demo Electric","position":{"coordinates":[74.6,42.87],"type":"Point"},"powertrain_type":"electric","ride_mode":"driving","status":"in_trip","telemetry_at":"2026-09-12T07:15:30.123456Z","telemetry_status":"fresh","version":"1"}
+type InTripVehicle struct {
+	EnergySources []EnergySource `json:"energy_sources"`
+
+	// Id Example: 01994342-6ba7-7000-8000-000000000001
+	Id             ResourceId            `json:"id"`
+	Model          string                `json:"model"`
+	Position       Point                 `json:"position"`
+	PowertrainType PowertrainType        `json:"powertrain_type"`
+	RideMode       InTripVehicleRideMode `json:"ride_mode"`
+	Status         InTripVehicleStatus   `json:"status"`
+
+	// TelemetryAt UTC RFC3339, exactly six fractional digits; domain commands use database time.
+	//
+	// Example: 2026-09-12T07:15:30.123456Z
+	TelemetryAt     Timestamp                    `json:"telemetry_at"`
+	TelemetryStatus InTripVehicleTelemetryStatus `json:"telemetry_status"`
+
+	// Version Canonical nonnegative decimal integer in the inclusive range 0..9223372036854775807.
+	//
+	// Example: 42
+	Version ExactInteger `json:"version"`
+}
+
+// InTripVehicleRideMode defines model for InTripVehicle.RideMode.
+type InTripVehicleRideMode string
+
+// InTripVehicleStatus defines model for InTripVehicle.Status.
+type InTripVehicleStatus string
+
+// InTripVehicleTelemetryStatus defines model for InTripVehicle.TelemetryStatus.
+type InTripVehicleTelemetryStatus string
+
+// LinearRing Closed ring: last position equals first; at least four positions.
+type LinearRing = []Position
 
 // LiveStatus defines model for LiveStatus.
 type LiveStatus struct {
@@ -324,6 +739,15 @@ type LiveStatus struct {
 // LiveStatusStatus defines model for LiveStatus.Status.
 type LiveStatusStatus string
 
+// MultiPolygon defines model for MultiPolygon.
+type MultiPolygon struct {
+	Coordinates [][]LinearRing   `json:"coordinates"`
+	Type        MultiPolygonType `json:"type"`
+}
+
+// MultiPolygonType defines model for MultiPolygon.Type.
+type MultiPolygonType string
+
 // ParameterViolation defines model for ParameterViolation.
 type ParameterViolation struct {
 	Code      string                     `json:"code"`
@@ -334,6 +758,31 @@ type ParameterViolation struct {
 
 // ParameterViolationLocation defines model for ParameterViolation.Location.
 type ParameterViolationLocation string
+
+// Point defines model for Point.
+type Point struct {
+	// Coordinates WGS84 [longitude, latitude]. Latitude must be within -90..90.
+	Coordinates Position  `json:"coordinates"`
+	Type        PointType `json:"type"`
+}
+
+// PointType defines model for Point.Type.
+type PointType string
+
+// Polygon defines model for Polygon.
+type Polygon struct {
+	Coordinates []LinearRing `json:"coordinates"`
+	Type        PolygonType  `json:"type"`
+}
+
+// PolygonType defines model for Polygon.Type.
+type PolygonType string
+
+// Position WGS84 [longitude, latitude]. Latitude must be within -90..90.
+type Position = []float64
+
+// PowertrainType defines model for PowertrainType.
+type PowertrainType string
 
 // ReadyStatus defines model for ReadyStatus.
 type ReadyStatus struct {
@@ -363,6 +812,35 @@ type ReadyStatusTimezone string
 // RequestId Example: example-request-1
 type RequestId = string
 
+// ReservedVehicle Example: {"energy_sources":[{"can_continue":true,"can_start":true,"capacity":"2000","kind":"battery","remaining":"1200.125","remaining_basis_points":6001,"unit":"wh"}],"id":"01994342-6ba7-7000-8000-000000000001","model":"Demo Electric","position":{"coordinates":[74.6,42.87],"type":"Point"},"powertrain_type":"electric","status":"reserved","telemetry_at":"2026-09-12T07:15:30.123456Z","telemetry_status":"fresh","version":"1"}
+type ReservedVehicle struct {
+	EnergySources []EnergySource `json:"energy_sources"`
+
+	// Id Example: 01994342-6ba7-7000-8000-000000000001
+	Id             ResourceId            `json:"id"`
+	Model          string                `json:"model"`
+	Position       Point                 `json:"position"`
+	PowertrainType PowertrainType        `json:"powertrain_type"`
+	Status         ReservedVehicleStatus `json:"status"`
+
+	// TelemetryAt UTC RFC3339, exactly six fractional digits; domain commands use database time.
+	//
+	// Example: 2026-09-12T07:15:30.123456Z
+	TelemetryAt     Timestamp                      `json:"telemetry_at"`
+	TelemetryStatus ReservedVehicleTelemetryStatus `json:"telemetry_status"`
+
+	// Version Canonical nonnegative decimal integer in the inclusive range 0..9223372036854775807.
+	//
+	// Example: 42
+	Version ExactInteger `json:"version"`
+}
+
+// ReservedVehicleStatus defines model for ReservedVehicle.Status.
+type ReservedVehicleStatus string
+
+// ReservedVehicleTelemetryStatus defines model for ReservedVehicle.TelemetryStatus.
+type ReservedVehicleTelemetryStatus string
+
 // ResourceId Example: 01994342-6ba7-7000-8000-000000000001
 type ResourceId = string
 
@@ -382,6 +860,44 @@ type SessionSnapshot struct {
 	User             User      `json:"user"`
 }
 
+// SourceKind defines model for SourceKind.
+type SourceKind string
+
+// Tariff defines model for Tariff.
+type Tariff struct {
+	BillingPolicy TariffBillingPolicy `json:"billing_policy"`
+	Currency      TariffCurrency      `json:"currency"`
+
+	// DrivingRateTyiynPerStartedMinute Canonical nonnegative decimal integer in the inclusive range 0..9223372036854775807.
+	//
+	// Example: 42
+	DrivingRateTyiynPerStartedMinute ExactInteger `json:"driving_rate_tyiyn_per_started_minute"`
+
+	// Id Example: 01994342-6ba7-7000-8000-000000000001
+	Id ResourceId `json:"id"`
+
+	// PausedRateTyiynPerStartedMinute Canonical nonnegative decimal integer in the inclusive range 0..9223372036854775807.
+	//
+	// Example: 42
+	PausedRateTyiynPerStartedMinute ExactInteger `json:"paused_rate_tyiyn_per_started_minute"`
+
+	// Version Canonical nonnegative decimal integer in the inclusive range 0..9223372036854775807.
+	//
+	// Example: 42
+	Version ExactInteger `json:"version"`
+}
+
+// TariffBillingPolicy defines model for Tariff.BillingPolicy.
+type TariffBillingPolicy string
+
+// TariffCurrency defines model for Tariff.Currency.
+type TariffCurrency string
+
+// TariffCollection defines model for TariffCollection.
+type TariffCollection struct {
+	Items []Tariff `json:"items"`
+}
+
 // Timestamp UTC RFC3339, exactly six fractional digits; domain commands use database time.
 //
 // Example: 2026-09-12T07:15:30.123456Z
@@ -394,6 +910,36 @@ type UnavailableDetails struct {
 
 // UnavailableReason defines model for UnavailableReason.
 type UnavailableReason string
+
+// UnavailableVehicle Example: {"energy_sources":[{"can_continue":true,"can_start":true,"capacity":"2000","kind":"battery","remaining":"1200.125","remaining_basis_points":6001,"unit":"wh"}],"id":"01994342-6ba7-7000-8000-000000000001","model":"Demo Electric","position":{"coordinates":[74.6,42.87],"type":"Point"},"powertrain_type":"electric","status":"unavailable","telemetry_at":"2026-09-12T07:15:30.123456Z","telemetry_status":"fresh","unavailable_reasons":["insufficient_energy","telemetry_stale"],"version":"1"}
+type UnavailableVehicle struct {
+	EnergySources []EnergySource `json:"energy_sources"`
+
+	// Id Example: 01994342-6ba7-7000-8000-000000000001
+	Id             ResourceId               `json:"id"`
+	Model          string                   `json:"model"`
+	Position       Point                    `json:"position"`
+	PowertrainType PowertrainType           `json:"powertrain_type"`
+	Status         UnavailableVehicleStatus `json:"status"`
+
+	// TelemetryAt UTC RFC3339, exactly six fractional digits; domain commands use database time.
+	//
+	// Example: 2026-09-12T07:15:30.123456Z
+	TelemetryAt        Timestamp                         `json:"telemetry_at"`
+	TelemetryStatus    UnavailableVehicleTelemetryStatus `json:"telemetry_status"`
+	UnavailableReasons []UnavailableReason               `json:"unavailable_reasons"`
+
+	// Version Canonical nonnegative decimal integer in the inclusive range 0..9223372036854775807.
+	//
+	// Example: 42
+	Version ExactInteger `json:"version"`
+}
+
+// UnavailableVehicleStatus defines model for UnavailableVehicle.Status.
+type UnavailableVehicleStatus string
+
+// UnavailableVehicleTelemetryStatus defines model for UnavailableVehicle.TelemetryStatus.
+type UnavailableVehicleTelemetryStatus string
 
 // User defines model for User.
 type User struct {
@@ -414,9 +960,43 @@ type ValidationDetails struct {
 	Violations []Violation `json:"violations"`
 }
 
+// Vehicle Confirmed telemetry only; never disclose renter identity, route, invoices or history. Increase version whenever the public representation changes.
+type Vehicle struct {
+	union json.RawMessage
+}
+
+// VehicleCollection defines model for VehicleCollection.
+type VehicleCollection struct {
+	Items []Vehicle `json:"items"`
+
+	// ServerTime UTC RFC3339, exactly six fractional digits; domain commands use database time.
+	//
+	// Example: 2026-09-12T07:15:30.123456Z
+	ServerTime Timestamp `json:"server_time"`
+}
+
 // Violation defines model for Violation.
 type Violation struct {
 	union json.RawMessage
+}
+
+// Zone Operator service zone in WGS84/SRID 4326, including its boundary (ST_Covers); not an official city boundary. Geometry must be valid.
+type Zone struct {
+	Geometry Geometry `json:"geometry"`
+
+	// Id Example: 01994342-6ba7-7000-8000-000000000001
+	Id   ResourceId `json:"id"`
+	Name string     `json:"name"`
+
+	// Version Canonical nonnegative decimal integer in the inclusive range 0..9223372036854775807.
+	//
+	// Example: 42
+	Version ExactInteger `json:"version"`
+}
+
+// ZoneCollection defines model for ZoneCollection.
+type ZoneCollection struct {
+	Items []Zone `json:"items"`
 }
 
 // LoginParams defines parameters for Login.
@@ -458,6 +1038,26 @@ type GetHealthReadyParams struct {
 
 // GetMeParams defines parameters for GetMe.
 type GetMeParams struct {
+	XRequestID *RequestId `json:"X-Request-ID,omitempty"`
+}
+
+// GetTariffsParams defines parameters for GetTariffs.
+type GetTariffsParams struct {
+	XRequestID *RequestId `json:"X-Request-ID,omitempty"`
+}
+
+// GetVehiclesParams defines parameters for GetVehicles.
+type GetVehiclesParams struct {
+	XRequestID *RequestId `json:"X-Request-ID,omitempty"`
+}
+
+// GetVehicleParams defines parameters for GetVehicle.
+type GetVehicleParams struct {
+	XRequestID *RequestId `json:"X-Request-ID,omitempty"`
+}
+
+// GetZonesParams defines parameters for GetZones.
+type GetZonesParams struct {
 	XRequestID *RequestId `json:"X-Request-ID,omitempty"`
 }
 
@@ -525,6 +1125,280 @@ func (t ApiError_Details) MarshalJSON() ([]byte, error) {
 }
 
 func (t *ApiError_Details) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsPolygon returns the union data inside the Geometry as a Polygon
+func (t Geometry) AsPolygon() (Polygon, error) {
+	var body Polygon
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromPolygon overwrites any union data inside the Geometry as the provided Polygon
+func (t *Geometry) FromPolygon(v Polygon) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"type":"Polygon"}`))
+	t.union = b
+	return err
+}
+
+// MergePolygon performs a merge with any union data inside the Geometry, using the provided Polygon
+func (t *Geometry) MergePolygon(v Polygon) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"type":"Polygon"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsMultiPolygon returns the union data inside the Geometry as a MultiPolygon
+func (t Geometry) AsMultiPolygon() (MultiPolygon, error) {
+	var body MultiPolygon
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromMultiPolygon overwrites any union data inside the Geometry as the provided MultiPolygon
+func (t *Geometry) FromMultiPolygon(v MultiPolygon) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"type":"MultiPolygon"}`))
+	t.union = b
+	return err
+}
+
+// MergeMultiPolygon performs a merge with any union data inside the Geometry, using the provided MultiPolygon
+func (t *Geometry) MergeMultiPolygon(v MultiPolygon) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"type":"MultiPolygon"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t Geometry) Discriminator() (string, error) {
+	var discriminator struct {
+		Discriminator string `json:"type"`
+	}
+	err := json.Unmarshal(t.union, &discriminator)
+	return discriminator.Discriminator, err
+}
+
+func (t Geometry) ValueByDiscriminator() (interface{}, error) {
+	discriminator, err := t.Discriminator()
+	if err != nil {
+		return nil, err
+	}
+	switch discriminator {
+	case "MultiPolygon":
+		return t.AsMultiPolygon()
+	case "Polygon":
+		return t.AsPolygon()
+	default:
+		return nil, errors.New("unknown discriminator value: " + discriminator)
+	}
+}
+
+func (t Geometry) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *Geometry) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsAvailableVehicle returns the union data inside the Vehicle as a AvailableVehicle
+func (t Vehicle) AsAvailableVehicle() (AvailableVehicle, error) {
+	var body AvailableVehicle
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromAvailableVehicle overwrites any union data inside the Vehicle as the provided AvailableVehicle
+func (t *Vehicle) FromAvailableVehicle(v AvailableVehicle) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"status":"available"}`))
+	t.union = b
+	return err
+}
+
+// MergeAvailableVehicle performs a merge with any union data inside the Vehicle, using the provided AvailableVehicle
+func (t *Vehicle) MergeAvailableVehicle(v AvailableVehicle) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"status":"available"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsReservedVehicle returns the union data inside the Vehicle as a ReservedVehicle
+func (t Vehicle) AsReservedVehicle() (ReservedVehicle, error) {
+	var body ReservedVehicle
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromReservedVehicle overwrites any union data inside the Vehicle as the provided ReservedVehicle
+func (t *Vehicle) FromReservedVehicle(v ReservedVehicle) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"status":"reserved"}`))
+	t.union = b
+	return err
+}
+
+// MergeReservedVehicle performs a merge with any union data inside the Vehicle, using the provided ReservedVehicle
+func (t *Vehicle) MergeReservedVehicle(v ReservedVehicle) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"status":"reserved"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsInTripVehicle returns the union data inside the Vehicle as a InTripVehicle
+func (t Vehicle) AsInTripVehicle() (InTripVehicle, error) {
+	var body InTripVehicle
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromInTripVehicle overwrites any union data inside the Vehicle as the provided InTripVehicle
+func (t *Vehicle) FromInTripVehicle(v InTripVehicle) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"status":"in_trip"}`))
+	t.union = b
+	return err
+}
+
+// MergeInTripVehicle performs a merge with any union data inside the Vehicle, using the provided InTripVehicle
+func (t *Vehicle) MergeInTripVehicle(v InTripVehicle) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"status":"in_trip"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsUnavailableVehicle returns the union data inside the Vehicle as a UnavailableVehicle
+func (t Vehicle) AsUnavailableVehicle() (UnavailableVehicle, error) {
+	var body UnavailableVehicle
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromUnavailableVehicle overwrites any union data inside the Vehicle as the provided UnavailableVehicle
+func (t *Vehicle) FromUnavailableVehicle(v UnavailableVehicle) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"status":"unavailable"}`))
+	t.union = b
+	return err
+}
+
+// MergeUnavailableVehicle performs a merge with any union data inside the Vehicle, using the provided UnavailableVehicle
+func (t *Vehicle) MergeUnavailableVehicle(v UnavailableVehicle) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"status":"unavailable"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t Vehicle) Discriminator() (string, error) {
+	var discriminator struct {
+		Discriminator string `json:"status"`
+	}
+	err := json.Unmarshal(t.union, &discriminator)
+	return discriminator.Discriminator, err
+}
+
+func (t Vehicle) ValueByDiscriminator() (interface{}, error) {
+	discriminator, err := t.Discriminator()
+	if err != nil {
+		return nil, err
+	}
+	switch discriminator {
+	case "available":
+		return t.AsAvailableVehicle()
+	case "in_trip":
+		return t.AsInTripVehicle()
+	case "reserved":
+		return t.AsReservedVehicle()
+	case "unavailable":
+		return t.AsUnavailableVehicle()
+	default:
+		return nil, errors.New("unknown discriminator value: " + discriminator)
+	}
+}
+
+func (t Vehicle) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *Vehicle) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
@@ -611,6 +1485,18 @@ type ServerInterface interface {
 	// GetMe get Me
 	// (GET /api/v1/me)
 	GetMe(w http.ResponseWriter, r *http.Request, params GetMeParams)
+	// GetTariffs get Tariffs
+	// (GET /api/v1/tariffs)
+	GetTariffs(w http.ResponseWriter, r *http.Request, params GetTariffsParams)
+	// GetVehicles get Vehicles
+	// (GET /api/v1/vehicles)
+	GetVehicles(w http.ResponseWriter, r *http.Request, params GetVehiclesParams)
+	// GetVehicle get Vehicle
+	// (GET /api/v1/vehicles/{id})
+	GetVehicle(w http.ResponseWriter, r *http.Request, id ResourceId, params GetVehicleParams)
+	// GetZones get Zones
+	// (GET /api/v1/zones)
+	GetZones(w http.ResponseWriter, r *http.Request, params GetZonesParams)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -650,6 +1536,30 @@ func (_ Unimplemented) GetHealthReady(w http.ResponseWriter, r *http.Request, pa
 // GetMe get Me
 // (GET /api/v1/me)
 func (_ Unimplemented) GetMe(w http.ResponseWriter, r *http.Request, params GetMeParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetTariffs get Tariffs
+// (GET /api/v1/tariffs)
+func (_ Unimplemented) GetTariffs(w http.ResponseWriter, r *http.Request, params GetTariffsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetVehicles get Vehicles
+// (GET /api/v1/vehicles)
+func (_ Unimplemented) GetVehicles(w http.ResponseWriter, r *http.Request, params GetVehiclesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetVehicle get Vehicle
+// (GET /api/v1/vehicles/{id})
+func (_ Unimplemented) GetVehicle(w http.ResponseWriter, r *http.Request, id ResourceId, params GetVehicleParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetZones get Zones
+// (GET /api/v1/zones)
+func (_ Unimplemented) GetZones(w http.ResponseWriter, r *http.Request, params GetZonesParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -996,6 +1906,179 @@ func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request)
 	handler.ServeHTTP(w, r)
 }
 
+// GetTariffs operation middleware
+func (siw *ServerInterfaceWrapper) GetTariffs(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetTariffsParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID RequestId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Request-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Request-ID", Err: err})
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTariffs(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetVehicles operation middleware
+func (siw *ServerInterfaceWrapper) GetVehicles(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetVehiclesParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID RequestId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Request-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Request-ID", Err: err})
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetVehicles(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetVehicle operation middleware
+func (siw *ServerInterfaceWrapper) GetVehicle(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetVehicleParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID RequestId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Request-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Request-ID", Err: err})
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetVehicle(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetZones operation middleware
+func (siw *ServerInterfaceWrapper) GetZones(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetZonesParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID RequestId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Request-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Request-ID", Err: err})
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetZones(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -1126,6 +2209,18 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/me", wrapper.GetMe)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/tariffs", wrapper.GetTariffs)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/vehicles", wrapper.GetVehicles)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/vehicles/{id}", wrapper.GetVehicle)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/zones", wrapper.GetZones)
 	})
 
 	return r
@@ -2453,6 +3548,739 @@ func (response GetMe503JSONResponse) VisitGetMeResponse(w http.ResponseWriter) e
 	return err
 }
 
+type GetTariffsRequestObject struct {
+	Params GetTariffsParams
+}
+
+type GetTariffsResponseObject interface {
+	VisitGetTariffsResponse(w http.ResponseWriter) error
+}
+
+type GetTariffs200ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetTariffs200JSONResponse struct {
+	Body    TariffCollection
+	Headers GetTariffs200ResponseHeaders
+}
+
+func (response GetTariffs200JSONResponse) VisitGetTariffsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTariffs400ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetTariffs400JSONResponse struct {
+	Body    ApiError
+	Headers GetTariffs400ResponseHeaders
+}
+
+func (response GetTariffs400JSONResponse) VisitGetTariffsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTariffs413ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetTariffs413JSONResponse struct {
+	Body    ApiError
+	Headers GetTariffs413ResponseHeaders
+}
+
+func (response GetTariffs413JSONResponse) VisitGetTariffsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTariffs422ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetTariffs422JSONResponse struct {
+	Body    ApiError
+	Headers GetTariffs422ResponseHeaders
+}
+
+func (response GetTariffs422JSONResponse) VisitGetTariffsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTariffs500ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetTariffs500JSONResponse struct {
+	Body    ApiError
+	Headers GetTariffs500ResponseHeaders
+}
+
+func (response GetTariffs500JSONResponse) VisitGetTariffsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTariffs503ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetTariffs503JSONResponse struct {
+	Body    ApiError
+	Headers GetTariffs503ResponseHeaders
+}
+
+func (response GetTariffs503JSONResponse) VisitGetTariffsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVehiclesRequestObject struct {
+	Params GetVehiclesParams
+}
+
+type GetVehiclesResponseObject interface {
+	VisitGetVehiclesResponse(w http.ResponseWriter) error
+}
+
+type GetVehicles200ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetVehicles200JSONResponse struct {
+	Body    VehicleCollection
+	Headers GetVehicles200ResponseHeaders
+}
+
+func (response GetVehicles200JSONResponse) VisitGetVehiclesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVehicles400ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetVehicles400JSONResponse struct {
+	Body    ApiError
+	Headers GetVehicles400ResponseHeaders
+}
+
+func (response GetVehicles400JSONResponse) VisitGetVehiclesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVehicles413ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetVehicles413JSONResponse struct {
+	Body    ApiError
+	Headers GetVehicles413ResponseHeaders
+}
+
+func (response GetVehicles413JSONResponse) VisitGetVehiclesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVehicles422ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetVehicles422JSONResponse struct {
+	Body    ApiError
+	Headers GetVehicles422ResponseHeaders
+}
+
+func (response GetVehicles422JSONResponse) VisitGetVehiclesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVehicles500ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetVehicles500JSONResponse struct {
+	Body    ApiError
+	Headers GetVehicles500ResponseHeaders
+}
+
+func (response GetVehicles500JSONResponse) VisitGetVehiclesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVehicles503ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetVehicles503JSONResponse struct {
+	Body    ApiError
+	Headers GetVehicles503ResponseHeaders
+}
+
+func (response GetVehicles503JSONResponse) VisitGetVehiclesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVehicleRequestObject struct {
+	Id     ResourceId `json:"id"`
+	Params GetVehicleParams
+}
+
+type GetVehicleResponseObject interface {
+	VisitGetVehicleResponse(w http.ResponseWriter) error
+}
+
+type GetVehicle200ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetVehicle200JSONResponse struct {
+	Body    Vehicle
+	Headers GetVehicle200ResponseHeaders
+}
+
+func (response GetVehicle200JSONResponse) VisitGetVehicleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVehicle400ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetVehicle400JSONResponse struct {
+	Body    ApiError
+	Headers GetVehicle400ResponseHeaders
+}
+
+func (response GetVehicle400JSONResponse) VisitGetVehicleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVehicle404ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetVehicle404JSONResponse struct {
+	Body    ApiError
+	Headers GetVehicle404ResponseHeaders
+}
+
+func (response GetVehicle404JSONResponse) VisitGetVehicleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVehicle413ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetVehicle413JSONResponse struct {
+	Body    ApiError
+	Headers GetVehicle413ResponseHeaders
+}
+
+func (response GetVehicle413JSONResponse) VisitGetVehicleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVehicle422ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetVehicle422JSONResponse struct {
+	Body    ApiError
+	Headers GetVehicle422ResponseHeaders
+}
+
+func (response GetVehicle422JSONResponse) VisitGetVehicleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVehicle500ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetVehicle500JSONResponse struct {
+	Body    ApiError
+	Headers GetVehicle500ResponseHeaders
+}
+
+func (response GetVehicle500JSONResponse) VisitGetVehicleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetVehicle503ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetVehicle503JSONResponse struct {
+	Body    ApiError
+	Headers GetVehicle503ResponseHeaders
+}
+
+func (response GetVehicle503JSONResponse) VisitGetVehicleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetZonesRequestObject struct {
+	Params GetZonesParams
+}
+
+type GetZonesResponseObject interface {
+	VisitGetZonesResponse(w http.ResponseWriter) error
+}
+
+type GetZones200ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetZones200JSONResponse struct {
+	Body    ZoneCollection
+	Headers GetZones200ResponseHeaders
+}
+
+func (response GetZones200JSONResponse) VisitGetZonesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetZones400ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetZones400JSONResponse struct {
+	Body    ApiError
+	Headers GetZones400ResponseHeaders
+}
+
+func (response GetZones400JSONResponse) VisitGetZonesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetZones413ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetZones413JSONResponse struct {
+	Body    ApiError
+	Headers GetZones413ResponseHeaders
+}
+
+func (response GetZones413JSONResponse) VisitGetZonesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetZones422ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetZones422JSONResponse struct {
+	Body    ApiError
+	Headers GetZones422ResponseHeaders
+}
+
+func (response GetZones422JSONResponse) VisitGetZonesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetZones500ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetZones500JSONResponse struct {
+	Body    ApiError
+	Headers GetZones500ResponseHeaders
+}
+
+func (response GetZones500JSONResponse) VisitGetZonesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetZones503ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetZones503JSONResponse struct {
+	Body    ApiError
+	Headers GetZones503ResponseHeaders
+}
+
+func (response GetZones503JSONResponse) VisitGetZonesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// Login login
@@ -2473,6 +4301,18 @@ type StrictServerInterface interface {
 	// GetMe get Me
 	// (GET /api/v1/me)
 	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
+	// GetTariffs get Tariffs
+	// (GET /api/v1/tariffs)
+	GetTariffs(ctx context.Context, request GetTariffsRequestObject) (GetTariffsResponseObject, error)
+	// GetVehicles get Vehicles
+	// (GET /api/v1/vehicles)
+	GetVehicles(ctx context.Context, request GetVehiclesRequestObject) (GetVehiclesResponseObject, error)
+	// GetVehicle get Vehicle
+	// (GET /api/v1/vehicles/{id})
+	GetVehicle(ctx context.Context, request GetVehicleRequestObject) (GetVehicleResponseObject, error)
+	// GetZones get Zones
+	// (GET /api/v1/zones)
+	GetZones(ctx context.Context, request GetZonesRequestObject) (GetZonesResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -2684,81 +4524,224 @@ func (sh *strictHandler) GetMe(w http.ResponseWriter, r *http.Request, params Ge
 	}
 }
 
+// GetTariffs operation middleware
+func (sh *strictHandler) GetTariffs(w http.ResponseWriter, r *http.Request, params GetTariffsParams) {
+	var request GetTariffsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetTariffs(ctx, request.(GetTariffsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetTariffs")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetTariffsResponseObject); ok {
+		if err := validResponse.VisitGetTariffsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetVehicles operation middleware
+func (sh *strictHandler) GetVehicles(w http.ResponseWriter, r *http.Request, params GetVehiclesParams) {
+	var request GetVehiclesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetVehicles(ctx, request.(GetVehiclesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetVehicles")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetVehiclesResponseObject); ok {
+		if err := validResponse.VisitGetVehiclesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetVehicle operation middleware
+func (sh *strictHandler) GetVehicle(w http.ResponseWriter, r *http.Request, id ResourceId, params GetVehicleParams) {
+	var request GetVehicleRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetVehicle(ctx, request.(GetVehicleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetVehicle")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetVehicleResponseObject); ok {
+		if err := validResponse.VisitGetVehicleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetZones operation middleware
+func (sh *strictHandler) GetZones(w http.ResponseWriter, r *http.Request, params GetZonesParams) {
+	var request GetZonesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetZones(ctx, request.(GetZonesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetZones")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetZonesResponseObject); ok {
+		if err := validResponse.VisitGetZonesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Base64 encoded, compressed with deflate, json marshaled OpenAPI spec.
 // Stored as a slice of fixed-width chunks rather than one concatenated
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"wqAoDIrCoCgMiudtUMQa9s8yJ2az/xsA",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,
