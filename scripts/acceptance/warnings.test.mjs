@@ -146,18 +146,34 @@ describe('one warning whichever process and however many passes', () => {
   });
 
   test('reports a failing pass and keeps its schedule and the other jobs', async () => {
-    const account = await newAccount(`${ACCOUNT_PREFIX}-failing`);
-    const vehicleId = await availableVehicle();
-    const rentalId = prepareReservation({ account, vehicleId, deadlineSeconds: 30 });
-
-    sql('REVOKE SELECT, INSERT ON notifications FROM carsharing_app');
+    // The privilege is withdrawn before the reservations exist: a pass arriving in between would
+    // warn the first one, and the check would then observe a warning it did not wait for. Only the
+    // write is withdrawn, because that is the failure this check is about; the expiry of the same
+    // pass still reads its notifications and is expected to keep working.
+    sql('REVOKE INSERT ON notifications FROM carsharing_app');
+    let rentalId;
     try {
+      const account = await newAccount(`${ACCOUNT_PREFIX}-failing`);
+      rentalId = prepareReservation({ account, vehicleId: await availableVehicle(), deadlineSeconds: 30 });
+      const overdue = await newAccount(`${ACCOUNT_PREFIX}-failing-overdue`);
+      const overdueRentalId = prepareReservation({
+        account: overdue,
+        vehicleId: await availableVehicle(),
+        deadlineSeconds: -30,
+      });
+
       await delay(QUIET_MS);
+
       const logs = compose('logs', '--tail', '80', 'worker');
       assert.match(logs, /"work":"reservation deadlines"/, 'a failing deadline pass was not reported');
       assert.deepEqual(notificationsOf(rentalId), [], 'a warning was created by a pass that failed');
+      // The pass kept doing its other work: what it could not warn, it still released.
+      await until(
+        () => storedRental(overdueRentalId)[0] === 'expired',
+        'a failing warning stopped the release of the same pass',
+      );
     } finally {
-      sql('GRANT SELECT, INSERT ON notifications TO carsharing_app');
+      sql('GRANT INSERT ON notifications TO carsharing_app');
     }
 
     // The schedule kept its cadence, so the next pass warns the reservation as soon as the database

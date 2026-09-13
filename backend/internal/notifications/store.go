@@ -88,8 +88,9 @@ func (s *Store) Create(ctx context.Context, about About, at time.Time) (Notifica
 
 // Deactivate makes the notification of one rental and kind inactive and moves its version, and
 // reports the stored notification together with whether this call changed it. A rental that never
-// had a notification leaves the table as it is, and so does one whose notification is already
-// inactive: a warning that was never created does not appear after the fact.
+// had a notification leaves the table as it is — the answer is then an empty notification and false,
+// because there is none to report — and so does one whose notification is already inactive: a
+// warning that was never created does not appear after the fact.
 func (s *Store) Deactivate(ctx context.Context, rentalID string, kind Kind) (Notification, bool, error) {
 	stored, err := readNotification(ctx, s.pool, lockedNotificationOfRentalSelection, rentalID, kind)
 	if errors.Is(err, ErrNotFound) {
