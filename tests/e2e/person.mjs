@@ -6,7 +6,7 @@ import { expect } from '@playwright/test';
 import { SERVICE_ORIGIN } from '../../scripts/service.mjs';
 
 /** The password every account of these checks is registered with. */
-export const PASSWORD = 'correcthorsebattery';
+const PASSWORD = 'correcthorsebattery';
 
 /** What the booking control of a free vehicle says, before anything was asked. */
 export const BOOK_ACTION = 'Забронировать на 15 минут';
@@ -22,22 +22,17 @@ export function email(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.test`;
 }
 
-/** One vehicle the service publishes as free to take, or several of them, by the model it displays. */
-export async function availableModels(count = 1) {
-  const answer = await fetch(`${SERVICE_ORIGIN}/api/v1/vehicles`).then((response) => response.json());
-  const free = answer.items.filter((vehicle) => vehicle.status === 'available').slice(0, count);
-  if (free.length < count) throw new Error('the demonstration published too few free vehicles');
-
-  return free.map((vehicle) => vehicle.model);
-}
-
+/** One vehicle the service publishes as free to take, by the model it displays. */
 export async function availableModel() {
-  const [first] = await availableModels(1);
-  return first;
+  const answer = await fetch(`${SERVICE_ORIGIN}/api/v1/vehicles`).then((response) => response.json());
+  const [free] = answer.items.filter((vehicle) => vehicle.status === 'available');
+  if (free === undefined) throw new Error('the demonstration published no free vehicle');
+
+  return free.model;
 }
 
 /** The row one model stands in, which is where the list states what a vehicle is doing. */
-export function rowOf(page, model) {
+function rowOf(page, model) {
   return page.locator('.fleet-row', { has: page.locator('.fleet-row-model', { hasText: model }) });
 }
 
