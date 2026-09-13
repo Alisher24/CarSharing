@@ -9,7 +9,7 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/auth"
 	"github.com/Alisher24/CarSharing/backend/internal/events"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
-	"github.com/Alisher24/CarSharing/backend/internal/rentals"
+	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -98,7 +98,7 @@ func (r restorer) restoreRentals(ctx context.Context, scenario []Vehicle) ([]eve
 	zone, tariff := Zone(), Tariff()
 	var signals []events.Signal
 	for _, vehicle := range scenario {
-		if vehicle.HeldBy == rentals.NotHeld {
+		if vehicle.HeldBy == stage.NotHeld {
 			continue
 		}
 		owner, err := r.scenarioAccount(ctx, vehicle.ScenarioAccount)

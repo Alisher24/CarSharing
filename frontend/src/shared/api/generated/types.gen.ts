@@ -18,7 +18,7 @@ export type ActiveRental = {
 
 export type ApiError = {
     code: ErrorCode;
-    details?: ValidationDetails | UnavailableDetails;
+    details?: ValidationDetails | UnavailableDetails | DailyLimitDetails;
     /**
      * Safe English message; clients translate known codes.
      */
@@ -91,6 +91,7 @@ export type Credentials = {
 };
 
 export type CurrentRental = {
+    daily_limit: DailyLimitState;
     kind: 'rental';
     rental: Rental;
     server_time: Timestamp;
@@ -106,6 +107,27 @@ export type CurrentSnapshot = ({
  * Versioned Base64URL cursor signed with HMAC-SHA256 over endpoint, position, user scope and query parameters. Forward only; no TTL; rotation invalidates cursors. Any syntax, signature or scope failure returns INVALID_CURSOR.
  */
 export type Cursor = string;
+
+/**
+ * The spent allowance and the moment it is restored, for the refusal that reports it.
+ */
+export type DailyLimitDetails = {
+    daily_limit: DailyLimitState;
+};
+
+/**
+ * The daily allowance of free reservations, read whether or not a rental is current. It is derived from the stored reservations of the account, in the service timezone, rather than from the absence of a current rental.
+ */
+export type DailyLimitState = {
+    /**
+     * Whether this account may still create a free reservation in the current service-timezone day. False means the day's allowance is spent; it is not a statement about the current moment or about a live rental, each of which the server checks again when a command arrives.
+     */
+    available: boolean;
+    /**
+     * The moment the allowance returns, being the start of the next day in the service timezone. It is the moment to display and never a Retry-After: an unfinished command answers with one second, which is not when the limit comes back.
+     */
+    resets_at: Timestamp;
+};
 
 /**
  * Nonnegative canonical decimal, at most six fractional digits, no trailing fractional zeros or exponent.
@@ -130,7 +152,7 @@ export type EnergySource = {
     unit: 'wh' | 'ml' | 'g';
 };
 
-export type ErrorCode = 'MALFORMED_JSON' | 'INVALID_HEADER' | 'INVALID_CURSOR' | 'BODY_TOO_LARGE' | 'UNSUPPORTED_MEDIA_TYPE' | 'VALIDATION_FAILED' | 'METHOD_NOT_ALLOWED' | 'AUTHENTICATION_REQUIRED' | 'INVALID_CREDENTIALS' | 'EMAIL_ALREADY_REGISTERED' | 'ORIGIN_NOT_ALLOWED' | 'CSRF_INVALID' | 'INTERNAL_AUTHENTICATION_REQUIRED' | 'IDEMPOTENCY_KEY_REQUIRED' | 'IDEMPOTENCY_KEY_INVALID' | 'IDEMPOTENCY_CONFLICT' | 'IDEMPOTENCY_IN_PROGRESS' | 'RESOURCE_NOT_FOUND' | 'VEHICLE_UNAVAILABLE' | 'ACTIVE_RENTAL_EXISTS' | 'OUTSTANDING_INVOICE' | 'RESERVATION_EXPIRED' | 'RENTAL_COMPLETED' | 'INVALID_RENTAL_STATE' | 'OUTSIDE_SERVICE_ZONE' | 'TELEMETRY_STALE' | 'PAYMENT_IN_PROGRESS' | 'DELIVERY_CONFLICT' | 'RATE_LIMITED' | 'CLOCK_OUT_OF_SYNC' | 'CONCURRENCY_RETRY_EXHAUSTED' | 'SERVICE_UNAVAILABLE' | 'INTERNAL_ERROR';
+export type ErrorCode = 'MALFORMED_JSON' | 'INVALID_HEADER' | 'INVALID_CURSOR' | 'BODY_TOO_LARGE' | 'UNSUPPORTED_MEDIA_TYPE' | 'VALIDATION_FAILED' | 'METHOD_NOT_ALLOWED' | 'AUTHENTICATION_REQUIRED' | 'INVALID_CREDENTIALS' | 'EMAIL_ALREADY_REGISTERED' | 'ORIGIN_NOT_ALLOWED' | 'CSRF_INVALID' | 'INTERNAL_AUTHENTICATION_REQUIRED' | 'IDEMPOTENCY_KEY_REQUIRED' | 'IDEMPOTENCY_KEY_INVALID' | 'IDEMPOTENCY_CONFLICT' | 'IDEMPOTENCY_IN_PROGRESS' | 'RESOURCE_NOT_FOUND' | 'VEHICLE_UNAVAILABLE' | 'ACTIVE_RENTAL_EXISTS' | 'DAILY_LIMIT_REACHED' | 'OUTSTANDING_INVOICE' | 'RESERVATION_EXPIRED' | 'RENTAL_COMPLETED' | 'INVALID_RENTAL_STATE' | 'OUTSIDE_SERVICE_ZONE' | 'TELEMETRY_STALE' | 'PAYMENT_IN_PROGRESS' | 'DELIVERY_CONFLICT' | 'RATE_LIMITED' | 'CLOCK_OUT_OF_SYNC' | 'CONCURRENCY_RETRY_EXHAUSTED' | 'SERVICE_UNAVAILABLE' | 'INTERNAL_ERROR';
 
 export type EventChange = {
     id: ResourceId;
@@ -248,6 +270,7 @@ export type MultiPolygon = {
 };
 
 export type NoCurrentRental = {
+    daily_limit: DailyLimitState;
     kind: 'none';
     server_time: Timestamp;
 };
@@ -1407,7 +1430,7 @@ export type ReserveErrors = {
      */
     403: ApiError;
     /**
-     * IDEMPOTENCY_CONFLICT, IDEMPOTENCY_IN_PROGRESS, VEHICLE_UNAVAILABLE, ACTIVE_RENTAL_EXISTS, OUTSTANDING_INVOICE
+     * IDEMPOTENCY_CONFLICT, IDEMPOTENCY_IN_PROGRESS, VEHICLE_UNAVAILABLE, ACTIVE_RENTAL_EXISTS, DAILY_LIMIT_REACHED, OUTSTANDING_INVOICE
      */
     409: ApiError;
     /**

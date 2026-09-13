@@ -23,6 +23,21 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for ActiveRentalState.
+const (
+	Active ActiveRentalState = "active"
+)
+
+// Valid indicates whether the value is a known member of the ActiveRentalState enum.
+func (e ActiveRentalState) Valid() bool {
+	switch e {
+	case Active:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for AvailableVehicleStatus.
 const (
 	Available AvailableVehicleStatus = "available"
@@ -74,6 +89,66 @@ func (e BodyViolationLocation) Valid() bool {
 	}
 }
 
+// Defines values for CancelledRentalState.
+const (
+	Cancelled CancelledRentalState = "cancelled"
+)
+
+// Valid indicates whether the value is a known member of the CancelledRentalState enum.
+func (e CancelledRentalState) Valid() bool {
+	switch e {
+	case Cancelled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CompletedRentalState.
+const (
+	Completed CompletedRentalState = "completed"
+)
+
+// Valid indicates whether the value is a known member of the CompletedRentalState enum.
+func (e CompletedRentalState) Valid() bool {
+	switch e {
+	case Completed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CurrentRentalKind.
+const (
+	CurrentRentalKindRental CurrentRentalKind = "rental"
+)
+
+// Valid indicates whether the value is a known member of the CurrentRentalKind enum.
+func (e CurrentRentalKind) Valid() bool {
+	switch e {
+	case CurrentRentalKindRental:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EnergyDepletedReason.
+const (
+	EnergyDepletedReasonEnergyDepleted EnergyDepletedReason = "energy_depleted"
+)
+
+// Valid indicates whether the value is a known member of the EnergyDepletedReason enum.
+func (e EnergyDepletedReason) Valid() bool {
+	switch e {
+	case EnergyDepletedReasonEnergyDepleted:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for EnergySourceUnit.
 const (
 	G  EnergySourceUnit = "g"
@@ -103,6 +178,7 @@ const (
 	CLOCKOUTOFSYNC                 ErrorCode = "CLOCK_OUT_OF_SYNC"
 	CONCURRENCYRETRYEXHAUSTED      ErrorCode = "CONCURRENCY_RETRY_EXHAUSTED"
 	CSRFINVALID                    ErrorCode = "CSRF_INVALID"
+	DAILYLIMITREACHED              ErrorCode = "DAILY_LIMIT_REACHED"
 	DELIVERYCONFLICT               ErrorCode = "DELIVERY_CONFLICT"
 	EMAILALREADYREGISTERED         ErrorCode = "EMAIL_ALREADY_REGISTERED"
 	IDEMPOTENCYCONFLICT            ErrorCode = "IDEMPOTENCY_CONFLICT"
@@ -146,6 +222,8 @@ func (e ErrorCode) Valid() bool {
 	case CONCURRENCYRETRYEXHAUSTED:
 		return true
 	case CSRFINVALID:
+		return true
+	case DAILYLIMITREACHED:
 		return true
 	case DELIVERYCONFLICT:
 		return true
@@ -206,18 +284,33 @@ func (e ErrorCode) Valid() bool {
 	}
 }
 
+// Defines values for ExpiredRentalState.
+const (
+	Expired ExpiredRentalState = "expired"
+)
+
+// Valid indicates whether the value is a known member of the ExpiredRentalState enum.
+func (e ExpiredRentalState) Valid() bool {
+	switch e {
+	case Expired:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for InTripVehicleRideMode.
 const (
-	Driving InTripVehicleRideMode = "driving"
-	Paused  InTripVehicleRideMode = "paused"
+	InTripVehicleRideModeDriving InTripVehicleRideMode = "driving"
+	InTripVehicleRideModePaused  InTripVehicleRideMode = "paused"
 )
 
 // Valid indicates whether the value is a known member of the InTripVehicleRideMode enum.
 func (e InTripVehicleRideMode) Valid() bool {
 	switch e {
-	case Driving:
+	case InTripVehicleRideModeDriving:
 		return true
-	case Paused:
+	case InTripVehicleRideModePaused:
 		return true
 	default:
 		return false
@@ -290,6 +383,21 @@ func (e MultiPolygonType) Valid() bool {
 	}
 }
 
+// Defines values for NoCurrentRentalKind.
+const (
+	None NoCurrentRentalKind = "none"
+)
+
+// Valid indicates whether the value is a known member of the NoCurrentRentalKind enum.
+func (e NoCurrentRentalKind) Valid() bool {
+	switch e {
+	case None:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ParameterViolationLocation.
 const (
 	Header ParameterViolationLocation = "header"
@@ -305,6 +413,21 @@ func (e ParameterViolationLocation) Valid() bool {
 	case Path:
 		return true
 	case Query:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PausedRentalState.
+const (
+	PausedRentalStatePaused PausedRentalState = "paused"
+)
+
+// Valid indicates whether the value is a known member of the PausedRentalState enum.
+func (e PausedRentalState) Valid() bool {
+	switch e {
+	case PausedRentalStatePaused:
 		return true
 	default:
 		return false
@@ -428,15 +551,30 @@ func (e ReadyStatusTimezone) Valid() bool {
 	}
 }
 
+// Defines values for ReservedRentalState.
+const (
+	ReservedRentalStateReserved ReservedRentalState = "reserved"
+)
+
+// Valid indicates whether the value is a known member of the ReservedRentalState enum.
+func (e ReservedRentalState) Valid() bool {
+	switch e {
+	case ReservedRentalStateReserved:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ReservedVehicleStatus.
 const (
-	Reserved ReservedVehicleStatus = "reserved"
+	ReservedVehicleStatusReserved ReservedVehicleStatus = "reserved"
 )
 
 // Valid indicates whether the value is a known member of the ReservedVehicleStatus enum.
 func (e ReservedVehicleStatus) Valid() bool {
 	switch e {
-	case Reserved:
+	case ReservedVehicleStatusReserved:
 		return true
 	default:
 		return false
@@ -493,13 +631,13 @@ func (e SourceKind) Valid() bool {
 
 // Defines values for TariffBillingPolicy.
 const (
-	PerModeStartedMinuteV1 TariffBillingPolicy = "per_mode_started_minute_v1"
+	TariffBillingPolicyPerModeStartedMinuteV1 TariffBillingPolicy = "per_mode_started_minute_v1"
 )
 
 // Valid indicates whether the value is a known member of the TariffBillingPolicy enum.
 func (e TariffBillingPolicy) Valid() bool {
 	switch e {
-	case PerModeStartedMinuteV1:
+	case TariffBillingPolicyPerModeStartedMinuteV1:
 		return true
 	default:
 		return false
@@ -515,6 +653,36 @@ const (
 func (e TariffCurrency) Valid() bool {
 	switch e {
 	case TariffCurrencyKGS:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TariffSnapshotBillingPolicy.
+const (
+	TariffSnapshotBillingPolicyPerModeStartedMinuteV1 TariffSnapshotBillingPolicy = "per_mode_started_minute_v1"
+)
+
+// Valid indicates whether the value is a known member of the TariffSnapshotBillingPolicy enum.
+func (e TariffSnapshotBillingPolicy) Valid() bool {
+	switch e {
+	case TariffSnapshotBillingPolicyPerModeStartedMinuteV1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TariffSnapshotCurrency.
+const (
+	TariffSnapshotCurrencyKGS TariffSnapshotCurrency = "KGS"
+)
+
+// Valid indicates whether the value is a known member of the TariffSnapshotCurrency enum.
+func (e TariffSnapshotCurrency) Valid() bool {
+	switch e {
+	case TariffSnapshotCurrencyKGS:
 		return true
 	default:
 		return false
@@ -584,6 +752,60 @@ func (e UnavailableVehicleTelemetryStatus) Valid() bool {
 	}
 }
 
+// Defines values for UserFinishedReason.
+const (
+	UserFinishedReasonUserFinished UserFinishedReason = "user_finished"
+)
+
+// Valid indicates whether the value is a known member of the UserFinishedReason enum.
+func (e UserFinishedReason) Valid() bool {
+	switch e {
+	case UserFinishedReasonUserFinished:
+		return true
+	default:
+		return false
+	}
+}
+
+// ActiveRental Example: {"id":"01994342-6ba7-7000-8000-000000000001","mode_started_at":"2026-09-12T07:15:30.123456Z","progress":{"driving_duration_microseconds":"60000001","driving_started_minutes":"2","estimated_amount_tyiyn":"3000","paused_duration_microseconds":"0","paused_started_minutes":"0"},"reserved_at":"2026-09-12T07:15:30.123456Z","started_at":"2026-09-12T07:15:30.123456Z","state":"active","tariff_snapshot":{"billing_policy":"per_mode_started_minute_v1","currency":"KGS","driving_rate_tyiyn_per_started_minute":"1500","id":"01994342-6ba7-7000-8000-000000000001","paused_rate_tyiyn_per_started_minute":"500","version":"1"},"vehicle":{"energy_sources":[{"can_continue":true,"can_start":true,"capacity":"2000","kind":"battery","remaining":"1200.125","remaining_basis_points":6001,"unit":"wh"}],"id":"01994342-6ba7-7000-8000-000000000001","model":"Demo Electric","position":{"coordinates":[74.6,42.87],"type":"Point"},"powertrain_type":"electric","ride_mode":"driving","status":"in_trip","telemetry_at":"2026-09-12T07:15:30.123456Z","telemetry_status":"fresh","version":"1"},"version":"1"}
+type ActiveRental struct {
+	// Id Example: 01994342-6ba7-7000-8000-000000000001
+	Id ResourceId `json:"id"`
+
+	// ModeStartedAt UTC RFC3339, exactly six fractional digits; domain commands use database time.
+	//
+	// Example: 2026-09-12T07:15:30.123456Z
+	ModeStartedAt Timestamp `json:"mode_started_at"`
+
+	// Progress Computed at snapshot server_time. Round up total duration per mode for the whole ride, never each segment. Raw segments are internal.
+	Progress Progress `json:"progress"`
+
+	// ReservedAt UTC RFC3339, exactly six fractional digits; domain commands use database time.
+	//
+	// Example: 2026-09-12T07:15:30.123456Z
+	ReservedAt Timestamp `json:"reserved_at"`
+
+	// StartedAt UTC RFC3339, exactly six fractional digits; domain commands use database time.
+	//
+	// Example: 2026-09-12T07:15:30.123456Z
+	StartedAt Timestamp         `json:"started_at"`
+	State     ActiveRentalState `json:"state"`
+
+	// TariffSnapshot Immutable conditions captured by the server at reservation; no client-supplied tariff ID or rates.
+	TariffSnapshot TariffSnapshot `json:"tariff_snapshot"`
+
+	// Vehicle Confirmed telemetry only; never disclose renter identity, route, invoices or history. Increase version whenever the public representation changes.
+	Vehicle Vehicle `json:"vehicle"`
+
+	// Version Canonical nonnegative decimal integer in the inclusive range 0..9223372036854775807.
+	//
+	// Example: 42
+	Version ExactInteger `json:"version"`
+}
+
+// ActiveRentalState defines model for ActiveRental.State.
+type ActiveRentalState string
+
 // ApiError defines model for ApiError.
 type ApiError struct {
 	Code    ErrorCode         `json:"code"`
@@ -643,6 +865,85 @@ type BodyViolation struct {
 // BodyViolationLocation defines model for BodyViolation.Location.
 type BodyViolationLocation string
 
+// CancelledRental Example: {"cancelled_at":"2026-09-12T07:15:30.123456Z","id":"01994342-6ba7-7000-8000-000000000001","reserved_at":"2026-09-12T07:15:30.123456Z","state":"cancelled","tariff_snapshot":{"billing_policy":"per_mode_started_minute_v1","currency":"KGS","driving_rate_tyiyn_per_started_minute":"1500","id":"01994342-6ba7-7000-8000-000000000001","paused_rate_tyiyn_per_started_minute":"500","version":"1"},"vehicle":{"energy_sources":[{"can_continue":true,"can_start":true,"capacity":"2000","kind":"battery","remaining":"1200.125","remaining_basis_points":6001,"unit":"wh"}],"id":"01994342-6ba7-7000-8000-000000000001","model":"Demo Electric","position":{"coordinates":[74.6,42.87],"type":"Point"},"powertrain_type":"electric","status":"available","telemetry_at":"2026-09-12T07:15:30.123456Z","telemetry_status":"fresh","version":"1"},"version":"1"}
+type CancelledRental struct {
+	// CancelledAt UTC RFC3339, exactly six fractional digits; domain commands use database time.
+	//
+	// Example: 2026-09-12T07:15:30.123456Z
+	CancelledAt Timestamp `json:"cancelled_at"`
+
+	// Id Example: 01994342-6ba7-7000-8000-000000000001
+	Id ResourceId `json:"id"`
+
+	// ReservedAt UTC RFC3339, exactly six fractional digits; domain commands use database time.
+	//
+	// Example: 2026-09-12T07:15:30.123456Z
+	ReservedAt Timestamp            `json:"reserved_at"`
+	State      CancelledRentalState `json:"state"`
+
+	// TariffSnapshot Immutable conditions captured by the server at reservation; no client-supplied tariff ID or rates.
+	TariffSnapshot TariffSnapshot `json:"tariff_snapshot"`
+
+	// Vehicle Confirmed telemetry only; never disclose renter identity, route, invoices or history. Increase version whenever the public representation changes.
+	Vehicle Vehicle `json:"vehicle"`
+
+	// Version Canonical nonnegative decimal integer in the inclusive range 0..9223372036854775807.
+	//
+	// Example: 42
+	Version ExactInteger `json:"version"`
+}
+
+// CancelledRentalState defines model for CancelledRental.State.
+type CancelledRentalState string
+
+// CommandId Example: 11111111-1111-4111-8111-111111111111
+type CommandId = string
+
+// CompletedRental Example: {"completed_at":"2026-09-12T07:30:30.123456Z","completion":{"reason":"user_finished"},"id":"01994342-6ba7-7000-8000-000000000001","invoice_id":"01994342-6ba7-7000-8000-000000000001","reserved_at":"2026-09-12T07:15:30.123456Z","started_at":"2026-09-12T07:15:30.123456Z","state":"completed","tariff_snapshot":{"billing_policy":"per_mode_started_minute_v1","currency":"KGS","driving_rate_tyiyn_per_started_minute":"1500","id":"01994342-6ba7-7000-8000-000000000001","paused_rate_tyiyn_per_started_minute":"500","version":"1"},"vehicle":{"energy_sources":[{"can_continue":true,"can_start":true,"capacity":"2000","kind":"battery","remaining":"1200.125","remaining_basis_points":6001,"unit":"wh"}],"id":"01994342-6ba7-7000-8000-000000000001","model":"Demo Electric","position":{"coordinates":[74.6,42.87],"type":"Point"},"powertrain_type":"electric","status":"available","telemetry_at":"2026-09-12T07:15:30.123456Z","telemetry_status":"fresh","version":"1"},"version":"1"}
+type CompletedRental struct {
+	// CompletedAt UTC RFC3339, exactly six fractional digits; domain commands use database time.
+	//
+	// Example: 2026-09-12T07:15:30.123456Z
+	CompletedAt Timestamp  `json:"completed_at"`
+	Completion  Completion `json:"completion"`
+
+	// Id Example: 01994342-6ba7-7000-8000-000000000001
+	Id ResourceId `json:"id"`
+
+	// InvoiceId Example: 01994342-6ba7-7000-8000-000000000001
+	InvoiceId ResourceId `json:"invoice_id"`
+
+	// ReservedAt UTC RFC3339, exactly six fractional digits; domain commands use database time.
+	//
+	// Example: 2026-09-12T07:15:30.123456Z
+	ReservedAt Timestamp `json:"reserved_at"`
+
+	// StartedAt UTC RFC3339, exactly six fractional digits; domain commands use database time.
+	//
+	// Example: 2026-09-12T07:15:30.123456Z
+	StartedAt Timestamp            `json:"started_at"`
+	State     CompletedRentalState `json:"state"`
+
+	// TariffSnapshot Immutable conditions captured by the server at reservation; no client-supplied tariff ID or rates.
+	TariffSnapshot TariffSnapshot `json:"tariff_snapshot"`
+
+	// Vehicle Confirmed telemetry only; never disclose renter identity, route, invoices or history. Increase version whenever the public representation changes.
+	Vehicle Vehicle `json:"vehicle"`
+
+	// Version Canonical nonnegative decimal integer in the inclusive range 0..9223372036854775807.
+	//
+	// Example: 42
+	Version ExactInteger `json:"version"`
+}
+
+// CompletedRentalState defines model for CompletedRental.State.
+type CompletedRentalState string
+
+// Completion defines model for Completion.
+type Completion struct {
+	union json.RawMessage
+}
+
 // Credentials defines model for Credentials.
 type Credentials struct {
 	// Email Trim surrounding whitespace, lowercase the whole address, then validate the resulting email (at most 254 characters).
@@ -652,10 +953,55 @@ type Credentials struct {
 	Password string `json:"password"`
 }
 
+// CurrentRental defines model for CurrentRental.
+type CurrentRental struct {
+	// DailyLimit The daily allowance of free reservations, read whether or not a rental is current. It is derived from the stored reservations of the account, in the service timezone, rather than from the absence of a current rental.
+	DailyLimit DailyLimitState   `json:"daily_limit"`
+	Kind       CurrentRentalKind `json:"kind"`
+	Rental     Rental            `json:"rental"`
+
+	// ServerTime UTC RFC3339, exactly six fractional digits; domain commands use database time.
+	//
+	// Example: 2026-09-12T07:15:30.123456Z
+	ServerTime Timestamp `json:"server_time"`
+}
+
+// CurrentRentalKind defines model for CurrentRental.Kind.
+type CurrentRentalKind string
+
+// CurrentSnapshot defines model for CurrentSnapshot.
+type CurrentSnapshot struct {
+	union json.RawMessage
+}
+
+// DailyLimitDetails The spent allowance and the moment it is restored, for the refusal that reports it.
+type DailyLimitDetails struct {
+	// DailyLimit The daily allowance of free reservations, read whether or not a rental is current. It is derived from the stored reservations of the account, in the service timezone, rather than from the absence of a current rental.
+	DailyLimit DailyLimitState `json:"daily_limit"`
+}
+
+// DailyLimitState The daily allowance of free reservations, read whether or not a rental is current. It is derived from the stored reservations of the account, in the service timezone, rather than from the absence of a current rental.
+type DailyLimitState struct {
+	// Available Whether this account may still create a free reservation in the current service-timezone day. False means the day's allowance is spent; it is not a statement about the current moment or about a live rental, each of which the server checks again when a command arrives.
+	Available bool `json:"available"`
+
+	// ResetsAt The moment the allowance returns, being the start of the next day in the service timezone. It is the moment to display and never a Retry-After: an unfinished command answers with one second, which is not when the limit comes back.
+	ResetsAt Timestamp `json:"resets_at"`
+}
+
 // EnergyDecimal Nonnegative canonical decimal, at most six fractional digits, no trailing fractional zeros or exponent.
 //
 // Example: 1200.125
 type EnergyDecimal = string
+
+// EnergyDepleted defines model for EnergyDepleted.
+type EnergyDepleted struct {
+	ExhaustedSources []SourceKind         `json:"exhausted_sources"`
+	Reason           EnergyDepletedReason `json:"reason"`
+}
+
+// EnergyDepletedReason defines model for EnergyDepleted.Reason.
+type EnergyDepletedReason string
 
 // EnergySource Separate source inventories are never summed for a threshold. Capability is computed by the server from the powertrain profile; battery uses wh, liquid fuels ml and CNG g.
 type EnergySource struct {
@@ -686,6 +1032,39 @@ type ErrorCode string
 //
 // Example: 42
 type ExactInteger = string
+
+// ExpiredRental expired_at equals the original reservation deadline, never delayed worker processing time.
+//
+// Example: {"expired_at":"2026-09-12T07:30:30.123456Z","id":"01994342-6ba7-7000-8000-000000000001","reserved_at":"2026-09-12T07:15:30.123456Z","state":"expired","tariff_snapshot":{"billing_policy":"per_mode_started_minute_v1","currency":"KGS","driving_rate_tyiyn_per_started_minute":"1500","id":"01994342-6ba7-7000-8000-000000000001","paused_rate_tyiyn_per_started_minute":"500","version":"1"},"vehicle":{"energy_sources":[{"can_continue":true,"can_start":true,"capacity":"2000","kind":"battery","remaining":"1200.125","remaining_basis_points":6001,"unit":"wh"}],"id":"01994342-6ba7-7000-8000-000000000001","model":"Demo Electric","position":{"coordinates":[74.6,42.87],"type":"Point"},"powertrain_type":"electric","status":"available","telemetry_at":"2026-09-12T07:15:30.123456Z","telemetry_status":"fresh","version":"1"},"version":"1"}
+type ExpiredRental struct {
+	// ExpiredAt UTC RFC3339, exactly six fractional digits; domain commands use database time.
+	//
+	// Example: 2026-09-12T07:15:30.123456Z
+	ExpiredAt Timestamp `json:"expired_at"`
+
+	// Id Example: 01994342-6ba7-7000-8000-000000000001
+	Id ResourceId `json:"id"`
+
+	// ReservedAt UTC RFC3339, exactly six fractional digits; domain commands use database time.
+	//
+	// Example: 2026-09-12T07:15:30.123456Z
+	ReservedAt Timestamp          `json:"reserved_at"`
+	State      ExpiredRentalState `json:"state"`
+
+	// TariffSnapshot Immutable conditions captured by the server at reservation; no client-supplied tariff ID or rates.
+	TariffSnapshot TariffSnapshot `json:"tariff_snapshot"`
+
+	// Vehicle Confirmed telemetry only; never disclose renter identity, route, invoices or history. Increase version whenever the public representation changes.
+	Vehicle Vehicle `json:"vehicle"`
+
+	// Version Canonical nonnegative decimal integer in the inclusive range 0..9223372036854775807.
+	//
+	// Example: 42
+	Version ExactInteger `json:"version"`
+}
+
+// ExpiredRentalState defines model for ExpiredRental.State.
+type ExpiredRentalState string
 
 // Geometry defines model for Geometry.
 type Geometry struct {
@@ -749,6 +1128,21 @@ type MultiPolygon struct {
 // MultiPolygonType defines model for MultiPolygon.Type.
 type MultiPolygonType string
 
+// NoCurrentRental defines model for NoCurrentRental.
+type NoCurrentRental struct {
+	// DailyLimit The daily allowance of free reservations, read whether or not a rental is current. It is derived from the stored reservations of the account, in the service timezone, rather than from the absence of a current rental.
+	DailyLimit DailyLimitState     `json:"daily_limit"`
+	Kind       NoCurrentRentalKind `json:"kind"`
+
+	// ServerTime UTC RFC3339, exactly six fractional digits; domain commands use database time.
+	//
+	// Example: 2026-09-12T07:15:30.123456Z
+	ServerTime Timestamp `json:"server_time"`
+}
+
+// NoCurrentRentalKind defines model for NoCurrentRental.Kind.
+type NoCurrentRentalKind string
+
 // ParameterViolation defines model for ParameterViolation.
 type ParameterViolation struct {
 	Code      string                     `json:"code"`
@@ -759,6 +1153,45 @@ type ParameterViolation struct {
 
 // ParameterViolationLocation defines model for ParameterViolation.Location.
 type ParameterViolationLocation string
+
+// PausedRental Example: {"id":"01994342-6ba7-7000-8000-000000000001","mode_started_at":"2026-09-12T07:15:30.123456Z","progress":{"driving_duration_microseconds":"60000001","driving_started_minutes":"2","estimated_amount_tyiyn":"3000","paused_duration_microseconds":"0","paused_started_minutes":"0"},"reserved_at":"2026-09-12T07:15:30.123456Z","started_at":"2026-09-12T07:15:30.123456Z","state":"paused","tariff_snapshot":{"billing_policy":"per_mode_started_minute_v1","currency":"KGS","driving_rate_tyiyn_per_started_minute":"1500","id":"01994342-6ba7-7000-8000-000000000001","paused_rate_tyiyn_per_started_minute":"500","version":"1"},"vehicle":{"energy_sources":[{"can_continue":true,"can_start":true,"capacity":"2000","kind":"battery","remaining":"1200.125","remaining_basis_points":6001,"unit":"wh"}],"id":"01994342-6ba7-7000-8000-000000000001","model":"Demo Electric","position":{"coordinates":[74.6,42.87],"type":"Point"},"powertrain_type":"electric","ride_mode":"paused","status":"in_trip","telemetry_at":"2026-09-12T07:15:30.123456Z","telemetry_status":"fresh","version":"1"},"version":"1"}
+type PausedRental struct {
+	// Id Example: 01994342-6ba7-7000-8000-000000000001
+	Id ResourceId `json:"id"`
+
+	// ModeStartedAt UTC RFC3339, exactly six fractional digits; domain commands use database time.
+	//
+	// Example: 2026-09-12T07:15:30.123456Z
+	ModeStartedAt Timestamp `json:"mode_started_at"`
+
+	// Progress Computed at snapshot server_time. Round up total duration per mode for the whole ride, never each segment. Raw segments are internal.
+	Progress Progress `json:"progress"`
+
+	// ReservedAt UTC RFC3339, exactly six fractional digits; domain commands use database time.
+	//
+	// Example: 2026-09-12T07:15:30.123456Z
+	ReservedAt Timestamp `json:"reserved_at"`
+
+	// StartedAt UTC RFC3339, exactly six fractional digits; domain commands use database time.
+	//
+	// Example: 2026-09-12T07:15:30.123456Z
+	StartedAt Timestamp         `json:"started_at"`
+	State     PausedRentalState `json:"state"`
+
+	// TariffSnapshot Immutable conditions captured by the server at reservation; no client-supplied tariff ID or rates.
+	TariffSnapshot TariffSnapshot `json:"tariff_snapshot"`
+
+	// Vehicle Confirmed telemetry only; never disclose renter identity, route, invoices or history. Increase version whenever the public representation changes.
+	Vehicle Vehicle `json:"vehicle"`
+
+	// Version Canonical nonnegative decimal integer in the inclusive range 0..9223372036854775807.
+	//
+	// Example: 42
+	Version ExactInteger `json:"version"`
+}
+
+// PausedRentalState defines model for PausedRental.State.
+type PausedRentalState string
 
 // Point defines model for Point.
 type Point struct {
@@ -785,6 +1218,34 @@ type Position = []float64
 // PowertrainType defines model for PowertrainType.
 type PowertrainType string
 
+// Progress Computed at snapshot server_time. Round up total duration per mode for the whole ride, never each segment. Raw segments are internal.
+type Progress struct {
+	// DrivingDurationMicroseconds Canonical nonnegative decimal integer in the inclusive range 0..9223372036854775807.
+	//
+	// Example: 42
+	DrivingDurationMicroseconds ExactInteger `json:"driving_duration_microseconds"`
+
+	// DrivingStartedMinutes Canonical nonnegative decimal integer in the inclusive range 0..9223372036854775807.
+	//
+	// Example: 42
+	DrivingStartedMinutes ExactInteger `json:"driving_started_minutes"`
+
+	// EstimatedAmountTyiyn Canonical nonnegative decimal integer in the inclusive range 0..9223372036854775807.
+	//
+	// Example: 42
+	EstimatedAmountTyiyn ExactInteger `json:"estimated_amount_tyiyn"`
+
+	// PausedDurationMicroseconds Canonical nonnegative decimal integer in the inclusive range 0..9223372036854775807.
+	//
+	// Example: 42
+	PausedDurationMicroseconds ExactInteger `json:"paused_duration_microseconds"`
+
+	// PausedStartedMinutes Canonical nonnegative decimal integer in the inclusive range 0..9223372036854775807.
+	//
+	// Example: 42
+	PausedStartedMinutes ExactInteger `json:"paused_started_minutes"`
+}
+
 // ReadyStatus defines model for ReadyStatus.
 type ReadyStatus struct {
 	City     ReadyStatusCity     `json:"city"`
@@ -810,8 +1271,71 @@ type ReadyStatusStatus string
 // ReadyStatusTimezone defines model for ReadyStatus.Timezone.
 type ReadyStatusTimezone string
 
+// Rental defines model for Rental.
+type Rental struct {
+	union json.RawMessage
+}
+
+// RentalCommandResult defines model for RentalCommandResult.
+type RentalCommandResult struct {
+	Rental Rental `json:"rental"`
+
+	// ServerTime UTC RFC3339, exactly six fractional digits; domain commands use database time.
+	//
+	// Example: 2026-09-12T07:15:30.123456Z
+	ServerTime Timestamp `json:"server_time"`
+}
+
 // RequestId Example: example-request-1
 type RequestId = string
+
+// ReserveRequest defines model for ReserveRequest.
+type ReserveRequest struct {
+	// VehicleId Example: 01994342-6ba7-7000-8000-000000000001
+	VehicleId ResourceId `json:"vehicle_id"`
+}
+
+// ReserveResult defines model for ReserveResult.
+type ReserveResult struct {
+	// Rental Example: {"expires_at":"2026-09-12T07:30:30.123456Z","id":"01994342-6ba7-7000-8000-000000000001","reserved_at":"2026-09-12T07:15:30.123456Z","state":"reserved","tariff_snapshot":{"billing_policy":"per_mode_started_minute_v1","currency":"KGS","driving_rate_tyiyn_per_started_minute":"1500","id":"01994342-6ba7-7000-8000-000000000001","paused_rate_tyiyn_per_started_minute":"500","version":"1"},"vehicle":{"energy_sources":[{"can_continue":true,"can_start":true,"capacity":"2000","kind":"battery","remaining":"1200.125","remaining_basis_points":6001,"unit":"wh"}],"id":"01994342-6ba7-7000-8000-000000000001","model":"Demo Electric","position":{"coordinates":[74.6,42.87],"type":"Point"},"powertrain_type":"electric","status":"reserved","telemetry_at":"2026-09-12T07:15:30.123456Z","telemetry_status":"fresh","version":"1"},"version":"1"}
+	Rental ReservedRental `json:"rental"`
+
+	// ServerTime UTC RFC3339, exactly six fractional digits; domain commands use database time.
+	//
+	// Example: 2026-09-12T07:15:30.123456Z
+	ServerTime Timestamp `json:"server_time"`
+}
+
+// ReservedRental Example: {"expires_at":"2026-09-12T07:30:30.123456Z","id":"01994342-6ba7-7000-8000-000000000001","reserved_at":"2026-09-12T07:15:30.123456Z","state":"reserved","tariff_snapshot":{"billing_policy":"per_mode_started_minute_v1","currency":"KGS","driving_rate_tyiyn_per_started_minute":"1500","id":"01994342-6ba7-7000-8000-000000000001","paused_rate_tyiyn_per_started_minute":"500","version":"1"},"vehicle":{"energy_sources":[{"can_continue":true,"can_start":true,"capacity":"2000","kind":"battery","remaining":"1200.125","remaining_basis_points":6001,"unit":"wh"}],"id":"01994342-6ba7-7000-8000-000000000001","model":"Demo Electric","position":{"coordinates":[74.6,42.87],"type":"Point"},"powertrain_type":"electric","status":"reserved","telemetry_at":"2026-09-12T07:15:30.123456Z","telemetry_status":"fresh","version":"1"},"version":"1"}
+type ReservedRental struct {
+	// ExpiresAt UTC RFC3339, exactly six fractional digits; domain commands use database time.
+	//
+	// Example: 2026-09-12T07:15:30.123456Z
+	ExpiresAt Timestamp `json:"expires_at"`
+
+	// Id Example: 01994342-6ba7-7000-8000-000000000001
+	Id ResourceId `json:"id"`
+
+	// ReservedAt UTC RFC3339, exactly six fractional digits; domain commands use database time.
+	//
+	// Example: 2026-09-12T07:15:30.123456Z
+	ReservedAt Timestamp           `json:"reserved_at"`
+	State      ReservedRentalState `json:"state"`
+
+	// TariffSnapshot Immutable conditions captured by the server at reservation; no client-supplied tariff ID or rates.
+	TariffSnapshot TariffSnapshot `json:"tariff_snapshot"`
+
+	// Vehicle Confirmed telemetry only; never disclose renter identity, route, invoices or history. Increase version whenever the public representation changes.
+	Vehicle Vehicle `json:"vehicle"`
+
+	// Version Canonical nonnegative decimal integer in the inclusive range 0..9223372036854775807.
+	//
+	// Example: 42
+	Version ExactInteger `json:"version"`
+}
+
+// ReservedRentalState defines model for ReservedRental.State.
+type ReservedRentalState string
 
 // ReservedVehicle Example: {"energy_sources":[{"can_continue":true,"can_start":true,"capacity":"2000","kind":"battery","remaining":"1200.125","remaining_basis_points":6001,"unit":"wh"}],"id":"01994342-6ba7-7000-8000-000000000001","model":"Demo Electric","position":{"coordinates":[74.6,42.87],"type":"Point"},"powertrain_type":"electric","status":"reserved","telemetry_at":"2026-09-12T07:15:30.123456Z","telemetry_status":"fresh","version":"1"}
 type ReservedVehicle struct {
@@ -899,6 +1423,36 @@ type TariffCollection struct {
 	Items []Tariff `json:"items"`
 }
 
+// TariffSnapshot Immutable conditions captured by the server at reservation; no client-supplied tariff ID or rates.
+type TariffSnapshot struct {
+	BillingPolicy TariffSnapshotBillingPolicy `json:"billing_policy"`
+	Currency      TariffSnapshotCurrency      `json:"currency"`
+
+	// DrivingRateTyiynPerStartedMinute Canonical nonnegative decimal integer in the inclusive range 0..9223372036854775807.
+	//
+	// Example: 42
+	DrivingRateTyiynPerStartedMinute ExactInteger `json:"driving_rate_tyiyn_per_started_minute"`
+
+	// Id Example: 01994342-6ba7-7000-8000-000000000001
+	Id ResourceId `json:"id"`
+
+	// PausedRateTyiynPerStartedMinute Canonical nonnegative decimal integer in the inclusive range 0..9223372036854775807.
+	//
+	// Example: 42
+	PausedRateTyiynPerStartedMinute ExactInteger `json:"paused_rate_tyiyn_per_started_minute"`
+
+	// Version Canonical nonnegative decimal integer in the inclusive range 0..9223372036854775807.
+	//
+	// Example: 42
+	Version ExactInteger `json:"version"`
+}
+
+// TariffSnapshotBillingPolicy defines model for TariffSnapshot.BillingPolicy.
+type TariffSnapshotBillingPolicy string
+
+// TariffSnapshotCurrency defines model for TariffSnapshot.Currency.
+type TariffSnapshotCurrency string
+
 // Timestamp UTC RFC3339, exactly six fractional digits; domain commands use database time.
 //
 // Example: 2026-09-12T07:15:30.123456Z
@@ -955,6 +1509,14 @@ type User struct {
 	// Id Example: 01994342-6ba7-7000-8000-000000000001
 	Id ResourceId `json:"id"`
 }
+
+// UserFinished defines model for UserFinished.
+type UserFinished struct {
+	Reason UserFinishedReason `json:"reason"`
+}
+
+// UserFinishedReason defines model for UserFinished.Reason.
+type UserFinishedReason string
 
 // ValidationDetails defines model for ValidationDetails.
 type ValidationDetails struct {
@@ -1047,9 +1609,42 @@ type GetMeParams struct {
 	XRequestID *RequestId `json:"X-Request-ID,omitempty"`
 }
 
+// GetCurrentRentalParams defines parameters for GetCurrentRental.
+type GetCurrentRentalParams struct {
+	XRequestID *RequestId `json:"X-Request-ID,omitempty"`
+}
+
 // GetPrivateEventsParams defines parameters for GetPrivateEvents.
 type GetPrivateEventsParams struct {
 	XRequestID *RequestId `json:"X-Request-ID,omitempty"`
+}
+
+// ReserveParams defines parameters for Reserve.
+type ReserveParams struct {
+	XRequestID *RequestId `json:"X-Request-ID,omitempty"`
+
+	// Origin Must match an allowed browser origin. Rejection is 403 ORIGIN_NOT_ALLOWED.
+	Origin string `json:"Origin"`
+
+	// XCSRFToken Bound to the session; expires no later than the session. Rejection is 403 CSRF_INVALID.
+	XCSRFToken string `json:"X-CSRF-Token"`
+
+	// IdempotencyKey Canonical unquoted UUID v4, scoped to the current user. Missing/invalid is 400.
+	IdempotencyKey CommandId `json:"Idempotency-Key"`
+}
+
+// CancelRentalParams defines parameters for CancelRental.
+type CancelRentalParams struct {
+	XRequestID *RequestId `json:"X-Request-ID,omitempty"`
+
+	// Origin Must match an allowed browser origin. Rejection is 403 ORIGIN_NOT_ALLOWED.
+	Origin string `json:"Origin"`
+
+	// XCSRFToken Bound to the session; expires no later than the session. Rejection is 403 CSRF_INVALID.
+	XCSRFToken string `json:"X-CSRF-Token"`
+
+	// IdempotencyKey Canonical unquoted UUID v4, scoped to the current user. Missing/invalid is 400.
+	IdempotencyKey CommandId `json:"Idempotency-Key"`
 }
 
 // GetTariffsParams defines parameters for GetTariffs.
@@ -1077,6 +1672,9 @@ type LoginJSONRequestBody = Credentials
 
 // RegisterJSONRequestBody defines body for Register for application/json ContentType.
 type RegisterJSONRequestBody = Credentials
+
+// ReserveJSONRequestBody defines body for Reserve for application/json ContentType.
+type ReserveJSONRequestBody = ReserveRequest
 
 // AsValidationDetails returns the union data inside the ApiError_Details as a ValidationDetails
 func (t ApiError_Details) AsValidationDetails() (ValidationDetails, error) {
@@ -1130,12 +1728,240 @@ func (t *ApiError_Details) MergeUnavailableDetails(v UnavailableDetails) error {
 	return err
 }
 
+// AsDailyLimitDetails returns the union data inside the ApiError_Details as a DailyLimitDetails
+func (t ApiError_Details) AsDailyLimitDetails() (DailyLimitDetails, error) {
+	var body DailyLimitDetails
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromDailyLimitDetails overwrites any union data inside the ApiError_Details as the provided DailyLimitDetails
+func (t *ApiError_Details) FromDailyLimitDetails(v DailyLimitDetails) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeDailyLimitDetails performs a merge with any union data inside the ApiError_Details, using the provided DailyLimitDetails
+func (t *ApiError_Details) MergeDailyLimitDetails(v DailyLimitDetails) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
 func (t ApiError_Details) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	return b, err
 }
 
 func (t *ApiError_Details) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsUserFinished returns the union data inside the Completion as a UserFinished
+func (t Completion) AsUserFinished() (UserFinished, error) {
+	var body UserFinished
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromUserFinished overwrites any union data inside the Completion as the provided UserFinished
+func (t *Completion) FromUserFinished(v UserFinished) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"reason":"user_finished"}`))
+	t.union = b
+	return err
+}
+
+// MergeUserFinished performs a merge with any union data inside the Completion, using the provided UserFinished
+func (t *Completion) MergeUserFinished(v UserFinished) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"reason":"user_finished"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsEnergyDepleted returns the union data inside the Completion as a EnergyDepleted
+func (t Completion) AsEnergyDepleted() (EnergyDepleted, error) {
+	var body EnergyDepleted
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromEnergyDepleted overwrites any union data inside the Completion as the provided EnergyDepleted
+func (t *Completion) FromEnergyDepleted(v EnergyDepleted) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"reason":"energy_depleted"}`))
+	t.union = b
+	return err
+}
+
+// MergeEnergyDepleted performs a merge with any union data inside the Completion, using the provided EnergyDepleted
+func (t *Completion) MergeEnergyDepleted(v EnergyDepleted) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"reason":"energy_depleted"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t Completion) Discriminator() (string, error) {
+	var discriminator struct {
+		Discriminator string `json:"reason"`
+	}
+	err := json.Unmarshal(t.union, &discriminator)
+	return discriminator.Discriminator, err
+}
+
+func (t Completion) ValueByDiscriminator() (interface{}, error) {
+	discriminator, err := t.Discriminator()
+	if err != nil {
+		return nil, err
+	}
+	switch discriminator {
+	case "energy_depleted":
+		return t.AsEnergyDepleted()
+	case "user_finished":
+		return t.AsUserFinished()
+	default:
+		return nil, errors.New("unknown discriminator value: " + discriminator)
+	}
+}
+
+func (t Completion) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *Completion) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsNoCurrentRental returns the union data inside the CurrentSnapshot as a NoCurrentRental
+func (t CurrentSnapshot) AsNoCurrentRental() (NoCurrentRental, error) {
+	var body NoCurrentRental
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromNoCurrentRental overwrites any union data inside the CurrentSnapshot as the provided NoCurrentRental
+func (t *CurrentSnapshot) FromNoCurrentRental(v NoCurrentRental) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"kind":"none"}`))
+	t.union = b
+	return err
+}
+
+// MergeNoCurrentRental performs a merge with any union data inside the CurrentSnapshot, using the provided NoCurrentRental
+func (t *CurrentSnapshot) MergeNoCurrentRental(v NoCurrentRental) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"kind":"none"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsCurrentRental returns the union data inside the CurrentSnapshot as a CurrentRental
+func (t CurrentSnapshot) AsCurrentRental() (CurrentRental, error) {
+	var body CurrentRental
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromCurrentRental overwrites any union data inside the CurrentSnapshot as the provided CurrentRental
+func (t *CurrentSnapshot) FromCurrentRental(v CurrentRental) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"kind":"rental"}`))
+	t.union = b
+	return err
+}
+
+// MergeCurrentRental performs a merge with any union data inside the CurrentSnapshot, using the provided CurrentRental
+func (t *CurrentSnapshot) MergeCurrentRental(v CurrentRental) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"kind":"rental"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t CurrentSnapshot) Discriminator() (string, error) {
+	var discriminator struct {
+		Discriminator string `json:"kind"`
+	}
+	err := json.Unmarshal(t.union, &discriminator)
+	return discriminator.Discriminator, err
+}
+
+func (t CurrentSnapshot) ValueByDiscriminator() (interface{}, error) {
+	discriminator, err := t.Discriminator()
+	if err != nil {
+		return nil, err
+	}
+	switch discriminator {
+	case "none":
+		return t.AsNoCurrentRental()
+	case "rental":
+		return t.AsCurrentRental()
+	default:
+		return nil, errors.New("unknown discriminator value: " + discriminator)
+	}
+}
+
+func (t CurrentSnapshot) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *CurrentSnapshot) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
@@ -1237,6 +2063,251 @@ func (t Geometry) MarshalJSON() ([]byte, error) {
 }
 
 func (t *Geometry) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsReservedRental returns the union data inside the Rental as a ReservedRental
+func (t Rental) AsReservedRental() (ReservedRental, error) {
+	var body ReservedRental
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromReservedRental overwrites any union data inside the Rental as the provided ReservedRental
+func (t *Rental) FromReservedRental(v ReservedRental) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"state":"reserved"}`))
+	t.union = b
+	return err
+}
+
+// MergeReservedRental performs a merge with any union data inside the Rental, using the provided ReservedRental
+func (t *Rental) MergeReservedRental(v ReservedRental) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"state":"reserved"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsActiveRental returns the union data inside the Rental as a ActiveRental
+func (t Rental) AsActiveRental() (ActiveRental, error) {
+	var body ActiveRental
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromActiveRental overwrites any union data inside the Rental as the provided ActiveRental
+func (t *Rental) FromActiveRental(v ActiveRental) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"state":"active"}`))
+	t.union = b
+	return err
+}
+
+// MergeActiveRental performs a merge with any union data inside the Rental, using the provided ActiveRental
+func (t *Rental) MergeActiveRental(v ActiveRental) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"state":"active"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsPausedRental returns the union data inside the Rental as a PausedRental
+func (t Rental) AsPausedRental() (PausedRental, error) {
+	var body PausedRental
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromPausedRental overwrites any union data inside the Rental as the provided PausedRental
+func (t *Rental) FromPausedRental(v PausedRental) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"state":"paused"}`))
+	t.union = b
+	return err
+}
+
+// MergePausedRental performs a merge with any union data inside the Rental, using the provided PausedRental
+func (t *Rental) MergePausedRental(v PausedRental) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"state":"paused"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsCancelledRental returns the union data inside the Rental as a CancelledRental
+func (t Rental) AsCancelledRental() (CancelledRental, error) {
+	var body CancelledRental
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromCancelledRental overwrites any union data inside the Rental as the provided CancelledRental
+func (t *Rental) FromCancelledRental(v CancelledRental) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"state":"cancelled"}`))
+	t.union = b
+	return err
+}
+
+// MergeCancelledRental performs a merge with any union data inside the Rental, using the provided CancelledRental
+func (t *Rental) MergeCancelledRental(v CancelledRental) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"state":"cancelled"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsExpiredRental returns the union data inside the Rental as a ExpiredRental
+func (t Rental) AsExpiredRental() (ExpiredRental, error) {
+	var body ExpiredRental
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromExpiredRental overwrites any union data inside the Rental as the provided ExpiredRental
+func (t *Rental) FromExpiredRental(v ExpiredRental) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"state":"expired"}`))
+	t.union = b
+	return err
+}
+
+// MergeExpiredRental performs a merge with any union data inside the Rental, using the provided ExpiredRental
+func (t *Rental) MergeExpiredRental(v ExpiredRental) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"state":"expired"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsCompletedRental returns the union data inside the Rental as a CompletedRental
+func (t Rental) AsCompletedRental() (CompletedRental, error) {
+	var body CompletedRental
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromCompletedRental overwrites any union data inside the Rental as the provided CompletedRental
+func (t *Rental) FromCompletedRental(v CompletedRental) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"state":"completed"}`))
+	t.union = b
+	return err
+}
+
+// MergeCompletedRental performs a merge with any union data inside the Rental, using the provided CompletedRental
+func (t *Rental) MergeCompletedRental(v CompletedRental) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"state":"completed"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t Rental) Discriminator() (string, error) {
+	var discriminator struct {
+		Discriminator string `json:"state"`
+	}
+	err := json.Unmarshal(t.union, &discriminator)
+	return discriminator.Discriminator, err
+}
+
+func (t Rental) ValueByDiscriminator() (interface{}, error) {
+	discriminator, err := t.Discriminator()
+	if err != nil {
+		return nil, err
+	}
+	switch discriminator {
+	case "active":
+		return t.AsActiveRental()
+	case "cancelled":
+		return t.AsCancelledRental()
+	case "completed":
+		return t.AsCompletedRental()
+	case "expired":
+		return t.AsExpiredRental()
+	case "paused":
+		return t.AsPausedRental()
+	case "reserved":
+		return t.AsReservedRental()
+	default:
+		return nil, errors.New("unknown discriminator value: " + discriminator)
+	}
+}
+
+func (t Rental) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *Rental) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
@@ -1499,9 +2570,18 @@ type ServerInterface interface {
 	// GetMe get Me
 	// (GET /api/v1/me)
 	GetMe(w http.ResponseWriter, r *http.Request, params GetMeParams)
+	// GetCurrentRental get Current Rental
+	// (GET /api/v1/me/current)
+	GetCurrentRental(w http.ResponseWriter, r *http.Request, params GetCurrentRentalParams)
 	// GetPrivateEvents get Private Events
 	// (GET /api/v1/me/events)
 	GetPrivateEvents(w http.ResponseWriter, r *http.Request, params GetPrivateEventsParams)
+	// Reserve reserve
+	// (POST /api/v1/reservations)
+	Reserve(w http.ResponseWriter, r *http.Request, params ReserveParams)
+	// CancelRental cancel Rental
+	// (POST /api/v1/reservations/{id}/cancel)
+	CancelRental(w http.ResponseWriter, r *http.Request, id ResourceId, params CancelRentalParams)
 	// GetTariffs get Tariffs
 	// (GET /api/v1/tariffs)
 	GetTariffs(w http.ResponseWriter, r *http.Request, params GetTariffsParams)
@@ -1562,9 +2642,27 @@ func (_ Unimplemented) GetMe(w http.ResponseWriter, r *http.Request, params GetM
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// GetCurrentRental get Current Rental
+// (GET /api/v1/me/current)
+func (_ Unimplemented) GetCurrentRental(w http.ResponseWriter, r *http.Request, params GetCurrentRentalParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // GetPrivateEvents get Private Events
 // (GET /api/v1/me/events)
 func (_ Unimplemented) GetPrivateEvents(w http.ResponseWriter, r *http.Request, params GetPrivateEventsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Reserve reserve
+// (POST /api/v1/reservations)
+func (_ Unimplemented) Reserve(w http.ResponseWriter, r *http.Request, params ReserveParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CancelRental cancel Rental
+// (POST /api/v1/reservations/{id}/cancel)
+func (_ Unimplemented) CancelRental(w http.ResponseWriter, r *http.Request, id ResourceId, params CancelRentalParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1976,6 +3074,47 @@ func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request)
 	handler.ServeHTTP(w, r)
 }
 
+// GetCurrentRental operation middleware
+func (siw *ServerInterfaceWrapper) GetCurrentRental(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetCurrentRentalParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID RequestId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Request-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Request-ID", Err: err})
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCurrentRental(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetPrivateEvents operation middleware
 func (siw *ServerInterfaceWrapper) GetPrivateEvents(w http.ResponseWriter, r *http.Request) {
 
@@ -2008,6 +3147,235 @@ func (siw *ServerInterfaceWrapper) GetPrivateEvents(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetPrivateEvents(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// Reserve operation middleware
+func (siw *ServerInterfaceWrapper) Reserve(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ReserveParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID RequestId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Request-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Request-ID", Err: err})
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Required header parameter "Origin" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Origin")]; found {
+		var Origin string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Origin", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Origin", valueList[0], &Origin, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: "uri"})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Origin", Err: err})
+			return
+		}
+
+		params.Origin = Origin
+
+	} else {
+		err := fmt.Errorf("Header parameter Origin is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Origin", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey CommandId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: "uuid"})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.Reserve(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CancelRental operation middleware
+func (siw *ServerInterfaceWrapper) CancelRental(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CancelRentalParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID RequestId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Request-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Request-ID", Err: err})
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
+	// ------------- Required header parameter "Origin" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Origin")]; found {
+		var Origin string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Origin", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Origin", valueList[0], &Origin, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: "uri"})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Origin", Err: err})
+			return
+		}
+
+		params.Origin = Origin
+
+	} else {
+		err := fmt.Errorf("Header parameter Origin is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Origin", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey CommandId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: "uuid"})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CancelRental(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2325,7 +3693,16 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/api/v1/me", wrapper.GetMe)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/me/current", wrapper.GetCurrentRental)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/me/events", wrapper.GetPrivateEvents)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/reservations", wrapper.Reserve)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/reservations/{id}/cancel", wrapper.CancelRental)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/tariffs", wrapper.GetTariffs)
@@ -3868,6 +5245,210 @@ func (response GetMe503JSONResponse) VisitGetMeResponse(w http.ResponseWriter) e
 	return err
 }
 
+type GetCurrentRentalRequestObject struct {
+	Params GetCurrentRentalParams
+}
+
+type GetCurrentRentalResponseObject interface {
+	VisitGetCurrentRentalResponse(w http.ResponseWriter) error
+}
+
+type GetCurrentRental200ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetCurrentRental200JSONResponse struct {
+	Body    CurrentSnapshot
+	Headers GetCurrentRental200ResponseHeaders
+}
+
+func (response GetCurrentRental200JSONResponse) VisitGetCurrentRentalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCurrentRental400ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetCurrentRental400JSONResponse struct {
+	Body    ApiError
+	Headers GetCurrentRental400ResponseHeaders
+}
+
+func (response GetCurrentRental400JSONResponse) VisitGetCurrentRentalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCurrentRental401ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetCurrentRental401JSONResponse struct {
+	Body    ApiError
+	Headers GetCurrentRental401ResponseHeaders
+}
+
+func (response GetCurrentRental401JSONResponse) VisitGetCurrentRentalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCurrentRental413ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetCurrentRental413JSONResponse struct {
+	Body    ApiError
+	Headers GetCurrentRental413ResponseHeaders
+}
+
+func (response GetCurrentRental413JSONResponse) VisitGetCurrentRentalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCurrentRental422ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetCurrentRental422JSONResponse struct {
+	Body    ApiError
+	Headers GetCurrentRental422ResponseHeaders
+}
+
+func (response GetCurrentRental422JSONResponse) VisitGetCurrentRentalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCurrentRental500ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetCurrentRental500JSONResponse struct {
+	Body    ApiError
+	Headers GetCurrentRental500ResponseHeaders
+}
+
+func (response GetCurrentRental500JSONResponse) VisitGetCurrentRentalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCurrentRental503ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type GetCurrentRental503JSONResponse struct {
+	Body    ApiError
+	Headers GetCurrentRental503ResponseHeaders
+}
+
+func (response GetCurrentRental503JSONResponse) VisitGetCurrentRentalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetPrivateEventsRequestObject struct {
 	Params GetPrivateEventsParams
 }
@@ -4082,6 +5663,608 @@ type GetPrivateEvents503JSONResponse struct {
 }
 
 func (response GetPrivateEvents503JSONResponse) VisitGetPrivateEventsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReserveRequestObject struct {
+	Params ReserveParams
+	Body   *ReserveJSONRequestBody
+}
+
+type ReserveResponseObject interface {
+	VisitReserveResponse(w http.ResponseWriter) error
+}
+
+type Reserve201ResponseHeaders struct {
+	CacheControl        *string
+	IdempotencyReplayed *bool
+	XRequestID          *RequestId
+}
+
+type Reserve201JSONResponse struct {
+	Body    ReserveResult
+	Headers Reserve201ResponseHeaders
+}
+
+func (response Reserve201JSONResponse) VisitReserveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.IdempotencyReplayed != nil {
+		w.Header().Set("Idempotency-Replayed", fmt.Sprint(*response.Headers.IdempotencyReplayed))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type Reserve400ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type Reserve400JSONResponse struct {
+	Body    ApiError
+	Headers Reserve400ResponseHeaders
+}
+
+func (response Reserve400JSONResponse) VisitReserveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type Reserve401ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type Reserve401JSONResponse struct {
+	Body    ApiError
+	Headers Reserve401ResponseHeaders
+}
+
+func (response Reserve401JSONResponse) VisitReserveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type Reserve403ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type Reserve403JSONResponse struct {
+	Body    ApiError
+	Headers Reserve403ResponseHeaders
+}
+
+func (response Reserve403JSONResponse) VisitReserveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type Reserve409ResponseHeaders struct {
+	CacheControl        *string
+	IdempotencyReplayed *bool
+	RetryAfter          *int
+	XRequestID          *RequestId
+}
+
+type Reserve409JSONResponse struct {
+	Body    ApiError
+	Headers Reserve409ResponseHeaders
+}
+
+func (response Reserve409JSONResponse) VisitReserveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.IdempotencyReplayed != nil {
+		w.Header().Set("Idempotency-Replayed", fmt.Sprint(*response.Headers.IdempotencyReplayed))
+	}
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type Reserve413ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type Reserve413JSONResponse struct {
+	Body    ApiError
+	Headers Reserve413ResponseHeaders
+}
+
+func (response Reserve413JSONResponse) VisitReserveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type Reserve415ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type Reserve415JSONResponse struct {
+	Body    ApiError
+	Headers Reserve415ResponseHeaders
+}
+
+func (response Reserve415JSONResponse) VisitReserveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(415)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type Reserve422ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type Reserve422JSONResponse struct {
+	Body    ApiError
+	Headers Reserve422ResponseHeaders
+}
+
+func (response Reserve422JSONResponse) VisitReserveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type Reserve500ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type Reserve500JSONResponse struct {
+	Body    ApiError
+	Headers Reserve500ResponseHeaders
+}
+
+func (response Reserve500JSONResponse) VisitReserveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type Reserve503ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type Reserve503JSONResponse struct {
+	Body    ApiError
+	Headers Reserve503ResponseHeaders
+}
+
+func (response Reserve503JSONResponse) VisitReserveResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelRentalRequestObject struct {
+	Id     ResourceId `json:"id"`
+	Params CancelRentalParams
+}
+
+type CancelRentalResponseObject interface {
+	VisitCancelRentalResponse(w http.ResponseWriter) error
+}
+
+type CancelRental200ResponseHeaders struct {
+	CacheControl        *string
+	IdempotencyReplayed *bool
+	XRequestID          *RequestId
+}
+
+type CancelRental200JSONResponse struct {
+	Body    RentalCommandResult
+	Headers CancelRental200ResponseHeaders
+}
+
+func (response CancelRental200JSONResponse) VisitCancelRentalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.IdempotencyReplayed != nil {
+		w.Header().Set("Idempotency-Replayed", fmt.Sprint(*response.Headers.IdempotencyReplayed))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelRental400ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type CancelRental400JSONResponse struct {
+	Body    ApiError
+	Headers CancelRental400ResponseHeaders
+}
+
+func (response CancelRental400JSONResponse) VisitCancelRentalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelRental401ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type CancelRental401JSONResponse struct {
+	Body    ApiError
+	Headers CancelRental401ResponseHeaders
+}
+
+func (response CancelRental401JSONResponse) VisitCancelRentalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelRental403ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type CancelRental403JSONResponse struct {
+	Body    ApiError
+	Headers CancelRental403ResponseHeaders
+}
+
+func (response CancelRental403JSONResponse) VisitCancelRentalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelRental404ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type CancelRental404JSONResponse struct {
+	Body    ApiError
+	Headers CancelRental404ResponseHeaders
+}
+
+func (response CancelRental404JSONResponse) VisitCancelRentalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelRental409ResponseHeaders struct {
+	CacheControl        *string
+	IdempotencyReplayed *bool
+	RetryAfter          *int
+	XRequestID          *RequestId
+}
+
+type CancelRental409JSONResponse struct {
+	Body    ApiError
+	Headers CancelRental409ResponseHeaders
+}
+
+func (response CancelRental409JSONResponse) VisitCancelRentalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.IdempotencyReplayed != nil {
+		w.Header().Set("Idempotency-Replayed", fmt.Sprint(*response.Headers.IdempotencyReplayed))
+	}
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelRental413ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type CancelRental413JSONResponse struct {
+	Body    ApiError
+	Headers CancelRental413ResponseHeaders
+}
+
+func (response CancelRental413JSONResponse) VisitCancelRentalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelRental422ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type CancelRental422JSONResponse struct {
+	Body    ApiError
+	Headers CancelRental422ResponseHeaders
+}
+
+func (response CancelRental422JSONResponse) VisitCancelRentalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelRental500ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type CancelRental500JSONResponse struct {
+	Body    ApiError
+	Headers CancelRental500ResponseHeaders
+}
+
+func (response CancelRental500JSONResponse) VisitCancelRentalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	if response.Headers.XRequestID != nil {
+		w.Header().Set("X-Request-ID", fmt.Sprint(*response.Headers.XRequestID))
+	}
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CancelRental503ResponseHeaders struct {
+	CacheControl *string
+	XRequestID   *RequestId
+}
+
+type CancelRental503JSONResponse struct {
+	Body    ApiError
+	Headers CancelRental503ResponseHeaders
+}
+
+func (response CancelRental503JSONResponse) VisitCancelRentalResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -4855,9 +7038,18 @@ type StrictServerInterface interface {
 	// GetMe get Me
 	// (GET /api/v1/me)
 	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
+	// GetCurrentRental get Current Rental
+	// (GET /api/v1/me/current)
+	GetCurrentRental(ctx context.Context, request GetCurrentRentalRequestObject) (GetCurrentRentalResponseObject, error)
 	// GetPrivateEvents get Private Events
 	// (GET /api/v1/me/events)
 	GetPrivateEvents(ctx context.Context, request GetPrivateEventsRequestObject) (GetPrivateEventsResponseObject, error)
+	// Reserve reserve
+	// (POST /api/v1/reservations)
+	Reserve(ctx context.Context, request ReserveRequestObject) (ReserveResponseObject, error)
+	// CancelRental cancel Rental
+	// (POST /api/v1/reservations/{id}/cancel)
+	CancelRental(ctx context.Context, request CancelRentalRequestObject) (CancelRentalResponseObject, error)
 	// GetTariffs get Tariffs
 	// (GET /api/v1/tariffs)
 	GetTariffs(ctx context.Context, request GetTariffsRequestObject) (GetTariffsResponseObject, error)
@@ -5107,6 +7299,32 @@ func (sh *strictHandler) GetMe(w http.ResponseWriter, r *http.Request, params Ge
 	}
 }
 
+// GetCurrentRental operation middleware
+func (sh *strictHandler) GetCurrentRental(w http.ResponseWriter, r *http.Request, params GetCurrentRentalParams) {
+	var request GetCurrentRentalRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCurrentRental(ctx, request.(GetCurrentRentalRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCurrentRental")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCurrentRentalResponseObject); ok {
+		if err := validResponse.VisitGetCurrentRentalResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetPrivateEvents operation middleware
 func (sh *strictHandler) GetPrivateEvents(w http.ResponseWriter, r *http.Request, params GetPrivateEventsParams) {
 	var request GetPrivateEventsRequestObject
@@ -5126,6 +7344,66 @@ func (sh *strictHandler) GetPrivateEvents(w http.ResponseWriter, r *http.Request
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetPrivateEventsResponseObject); ok {
 		if err := validResponse.VisitGetPrivateEventsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// Reserve operation middleware
+func (sh *strictHandler) Reserve(w http.ResponseWriter, r *http.Request, params ReserveParams) {
+	var request ReserveRequestObject
+
+	request.Params = params
+
+	var body ReserveJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.Reserve(ctx, request.(ReserveRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "Reserve")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReserveResponseObject); ok {
+		if err := validResponse.VisitReserveResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CancelRental operation middleware
+func (sh *strictHandler) CancelRental(w http.ResponseWriter, r *http.Request, id ResourceId, params CancelRentalParams) {
+	var request CancelRentalRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CancelRental(ctx, request.(CancelRentalRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CancelRental")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CancelRentalResponseObject); ok {
+		if err := validResponse.VisitCancelRentalResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -5243,136 +7521,200 @@ func (sh *strictHandler) GetZones(w http.ResponseWriter, r *http.Request, params
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"4u7RLZZI4Y+EmSzOE0HkjEWJcf4WulPiGjcKqRBVSGCdz1nNMEs+Q3c+97XTQ5pwOPJ/0FmcFdenjEGJ",
-	"cbQIPOyQTJ5lQRxCb/IplKc6JEHYOqQJCzeuT7WnDby/KNDtDCuTaXkWjYk9BJO24+TOWiUDZ5ak62R0",
-	"7U8znpvzT+pFFQIZsEpyIuc8fR5dCXwfc8nL0wIJI2I6H0V+HvqTg9kIuqIsJOZJR1t/i3T/+EOAo1QC",
-	"jZpWxD5SBugYY6WIMJYZH1MGckjTqjdqcIW9n/08GmNJ5UiLKNJqHtRqddsKGaxX63ZmwSy30RpBdfV0",
-	"yJ3PUQfUOkEdLQJJahYrYIgLVy9SmOrhXvXA3mtUjw6vkzc4zwEa2MrSNTqKikjaZ7JvZOMJFYEtRIn5",
-	"JsE3aeWkL71mVzTabSKHNj4hIoYt1d9S/S3V31L9LdXfUv0t1d9S/S3V35et/mb0kEfWf+OrzWIl+Gsp",
-	"VE+lT9lRxwFWs7Rb6j74hv/DnRuF6nG0tVJHe9462pZaV6lrlbrWV3OU3tv2cdbOoHfRb3f0S+uvexdn",
-	"xU+0rtZ6jg+1FkH5DAlXAGepKJeKcqkol4pyqSiXinKpKD+Vovx4erJ+CXetm6qu9Ts4qf6ooXt5l5NT",
-	"wrX+taoWXoJiuK8Vw2sbfh8u/z6+tjN1rrPaozefch21u43qGqFHa65Axy93PQVqlDdvpTZY3ryVCkWp",
-	"UJQKRalQlApFqVC8bIUilrB/kzqxWPzLAA==",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

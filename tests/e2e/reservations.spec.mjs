@@ -1,0 +1,212 @@
+// What a person does with a reservation in a real browser: two independent contexts see one vehicle
+// taken and given back, the panel above the map survives everything that may be closed around it,
+// and the day's allowance is stated rather than guessed at.
+//
+// The periodic reconciliation is switched off where a check measures delivery, so what is measured is
+// the signal and not a poll that would have found the change anyway. The shipped interval is left
+// alone everywhere else.
+import { expect, test } from '@playwright/test';
+import { SERVICE_ORIGIN, sql } from '../../scripts/service.mjs';
+import { restoreScenario, vehicleIdOf } from './scenario.mjs';
+
+/** The bound a committed change must reach a connected client within. */
+const DELIVERY_BOUND_MS = 2000;
+
+/** The address that switches the periodic reconciliation off, which only a test asks for. */
+const WITHOUT_RECONCILIATION = '/?reconcile=off';
+
+/** How long a change may take to appear through reconciliation alone. */
+const RECONCILIATION_PATIENCE_MS = 20_000;
+
+const BOOK_ACTION = 'Забронировать на 15 минут';
+const CONFIRM_ACTION = 'Использовать бесплатную бронь';
+const CANCEL_ACTION = 'Отменить бронь';
+const LIMIT_SPENT = 'Бесплатная бронь использована';
+const NOTHING_CURRENT = 'Текущей брони нет';
+
+const password = 'correcthorsebattery';
+
+test.beforeEach(() => {
+  endPreviousReservations();
+  restoreScenario();
+  // Every check registers its own account, and the checks share one address. Clearing the counters
+  // is the harness standing in for the passage of time, which is also how access returns in
+  // production.
+  sql('DELETE FROM rate_limit_counters');
+});
+
+// A check ends the reservation it made: the demonstration refuses to be put back while a rental of a
+// person's stands on one of its vehicles, and the checks after it start from the prepared scenario.
+test.afterEach(() => {
+  endPreviousReservations();
+});
+
+/** Removes what the accounts of these checks hold, so the prepared demonstration can be put back. */
+function endPreviousReservations() {
+  const mine = "(SELECT id FROM users WHERE email LIKE 'reservation-%@example.test')";
+  sql(`DELETE FROM outbox WHERE resource_id IN (SELECT id FROM rentals WHERE user_id IN ${mine})`);
+  sql(`DELETE FROM idempotency_requests WHERE user_id IN ${mine}`);
+  sql(`DELETE FROM rentals WHERE user_id IN ${mine}`);
+}
+
+test('one client books a vehicle and the other sees it taken and free again', async ({ browser }) => {
+  const model = await availableModel();
+  const vehicleId = vehicleIdOf(model);
+
+  const booking = await browser.newContext();
+  const watching = await browser.newContext();
+  const person = await booking.newPage();
+  const visitor = await watching.newPage();
+
+  try {
+    await person.goto('/');
+    await visitor.goto(WITHOUT_RECONCILIATION);
+
+    await signUp(person, email());
+    await expect(statusOf(visitor, model)).toHaveAttribute('data-status', 'available');
+
+    await openVehicle(person, model);
+    await person.getByRole('button', { name: BOOK_ACTION }).click();
+    // The conditions are read before anything is sent, and the panel appears only after the server
+    // answered: what a person sees is the reservation the service holds.
+    await person.getByRole('button', { name: CONFIRM_ACTION }).click();
+    await expect(person.locator('.reservation-panel-time')).toContainText('Осталось', {
+      timeout: RECONCILIATION_PATIENCE_MS,
+    });
+
+    // The panel of the person who booked is read back from the server, so the reservation is
+    // committed; the other client runs no reconciliation, so what reaches it within the bound is the
+    // delivered signal rather than a poll that would have found the change anyway.
+    const committedAt = Date.now();
+    await expect(statusOf(visitor, model)).toHaveAttribute('data-status', 'reserved', {
+      timeout: RECONCILIATION_PATIENCE_MS,
+    });
+    const arrivedIn = Date.now() - committedAt;
+    expect(arrivedIn, `the change reached the second client ${arrivedIn} ms after the commit`).toBeLessThan(
+      DELIVERY_BOUND_MS,
+    );
+
+    // The rates the panel shows are the ones the reservation stores, and they are on the panel that
+    // stays above the map.
+    await expect(person.locator('.reservation-panel-rates')).toContainText('сома');
+
+    await person.getByRole('button', { name: CANCEL_ACTION }).click();
+    await person.getByRole('button', { name: CANCEL_ACTION }).last().click();
+    await expect(person.locator('.reservation-panel-empty')).toHaveText(NOTHING_CURRENT, {
+      timeout: RECONCILIATION_PATIENCE_MS,
+    });
+    await expect(statusOf(visitor, model)).toHaveAttribute('data-status', 'available', {
+      timeout: RECONCILIATION_PATIENCE_MS,
+    });
+  } finally {
+    await booking.close();
+    await watching.close();
+  }
+});
+
+test('the panel comes back after a reload and outlives every panel around it', async ({ browser }) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  const model = await availableModel();
+
+  try {
+    await page.goto('/');
+    await signUp(page, email());
+    await book(page, model);
+    await expect(page.locator('.reservation-panel-time')).toContainText('Осталось');
+
+    // A reload restores the reservation through the current read, not through anything the browser
+    // remembered about the command.
+    await page.reload();
+    await expect(page.locator('.reservation-panel-time')).toContainText('Осталось', {
+      timeout: RECONCILIATION_PATIENCE_MS,
+    });
+
+    // Closing the card and opening the account panel are not reasons to lose sight of a reservation
+    // that is running.
+    await openVehicle(page, model);
+    await page.locator('.vehicle-card-close').click();
+    await expect(page.locator('.vehicle-card')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Вход' }).click();
+    await expect(page.locator('.account')).toBeVisible();
+    await expect(page.locator('.reservation-panel-time')).toContainText('Осталось');
+  } finally {
+    await context.close();
+  }
+});
+
+test('the spent allowance is stated and stops the booking control', async ({ browser }) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+
+  try {
+    await page.goto('/');
+    await signUp(page, email());
+    await book(page, await availableModel());
+    await expect(page.locator('.reservation-panel-time')).toContainText('Осталось');
+
+    // The allowance is published whether or not a rental is current, and the next free reservation
+    // is named in the timezone the service keeps its days in.
+    await expect(page.locator('.reservation-panel-limit')).toContainText(LIMIT_SPENT);
+
+    // Another free vehicle is still offered, and its control states the spent day rather than
+    // pretending that booking is possible.
+    await page.locator('.vehicle-card-close').click();
+    await openVehicle(page, await availableModel());
+    await expect(page.locator('.vehicle-card-booking button').first()).toBeDisabled();
+    await expect(page.locator('.vehicle-card-limit')).toContainText(LIMIT_SPENT);
+  } finally {
+    await context.close();
+  }
+});
+
+/** One vehicle the service publishes as free to take. */
+async function availableModel() {
+  const [first] = await availableModels(1);
+  return first;
+}
+
+async function availableModels(count) {
+  const answer = await fetch(`${SERVICE_ORIGIN}/api/v1/vehicles`).then((response) => response.json());
+  const free = answer.items.filter((vehicle) => vehicle.status === 'available').slice(0, count);
+  if (free.length < count) throw new Error('the demonstration published too few free vehicles');
+
+  return free.map((vehicle) => vehicle.model);
+}
+
+function rowOf(page, model) {
+  return page.locator('.fleet-row', { has: page.locator('.fleet-row-model', { hasText: model }) });
+}
+
+/** The state one row publishes, which is where the list states what the vehicle is doing. */
+function statusOf(page, model) {
+  return rowOf(page, model).locator('.fleet-row-status');
+}
+
+/** Opens one vehicle's card from the list, which is how a person reaches the booking control. */
+async function openVehicle(page, model) {
+  await rowOf(page, model).click();
+  await expect(page.locator('.vehicle-card-model')).toHaveText(model);
+}
+
+/** Books one free vehicle through the confirmation the interface asks for. */
+async function book(page, model) {
+  await openVehicle(page, model);
+  await page.getByRole('button', { name: BOOK_ACTION }).click();
+  await page.getByRole('button', { name: CONFIRM_ACTION }).click();
+}
+
+/** Registers a fresh account through the account panel, as a person would. */
+async function signUp(page, address) {
+  await page.getByRole('button', { name: 'Вход' }).click();
+  await page.locator('#account-email-field').fill(address);
+  await page.locator('#account-password-field').fill(password);
+  await page.getByRole('button', { name: 'Зарегистрироваться' }).click();
+  await expect(page.locator('[data-testid="account-email"]')).toHaveText(address);
+  await page.getByRole('button', { name: 'Вход' }).click();
+}
+
+/** A fresh address, so no check depends on what another one left behind. */
+function email() {
+  return `reservation-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.test`;
+}

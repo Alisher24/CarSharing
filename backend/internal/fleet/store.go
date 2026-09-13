@@ -41,7 +41,13 @@ SELECT
     telemetry.confirmed_at,
     ST_X(telemetry.position),
     ST_Y(telemetry.position),
-    EXISTS (SELECT 1 FROM service_zones zone WHERE ST_Covers(zone.area, telemetry.position)),
+    coalesce((
+        SELECT zone.id::text
+        FROM service_zones zone
+        WHERE ST_Covers(zone.area, telemetry.position)
+        ORDER BY zone.id
+        LIMIT 1
+    ), ''),
     coalesce(live_rental.stage, ''),
     coalesce(inventory.sources, '[]'::jsonb)
 FROM vehicles vehicle
@@ -80,6 +86,24 @@ func (s *Store) Snapshot(ctx context.Context) (Snapshot, error) {
 
 // Vehicle reads one published vehicle together with the instant it was read at.
 func (s *Store) Vehicle(ctx context.Context, id string) (Snapshot, error) {
+	return s.one(ctx, id)
+}
+
+// VehicleAt reads one published vehicle judged against an instant its caller fixed. A command that
+// is about to change a vehicle reads it this way: the moment the command decided on is the one its
+// answer states, and a second reading of the clock here would let the two disagree.
+func (s *Store) VehicleAt(ctx context.Context, id string, observedAt time.Time) (Vehicle, error) {
+	vehicles, err := s.vehicles(ctx, onePublishedVehicle, id)
+	if err != nil {
+		return Vehicle{}, err
+	}
+	if len(vehicles) == 0 {
+		return Vehicle{}, ErrVehicleNotFound
+	}
+	return vehicles[0], nil
+}
+
+func (s *Store) one(ctx context.Context, id string) (Snapshot, error) {
 	found, err := s.read(ctx, onePublishedVehicle, id)
 	if err != nil {
 		return Snapshot{}, err
@@ -97,20 +121,24 @@ func (s *Store) Vehicle(ctx context.Context, id string) (Snapshot, error) {
 // reads would otherwise give the answer a vehicle whose position was confirmed later than the
 // answer itself claims to have been taken, which is a state no reader should have to make sense of.
 func (s *Store) read(ctx context.Context, selection string, arguments ...any) (Snapshot, error) {
-	querier := database.QuerierFrom(ctx, s.pool)
-	rows, err := querier.Query(ctx, selection, append([]any{AmountScale}, arguments...)...)
-	if err != nil {
-		return Snapshot{}, err
-	}
-	vehicles, err := collectVehicles(rows)
+	vehicles, err := s.vehicles(ctx, selection, arguments...)
 	if err != nil {
 		return Snapshot{}, err
 	}
 	var observedAt time.Time
-	if err = querier.QueryRow(ctx, observedAtQuery).Scan(&observedAt); err != nil {
+	if err = database.QuerierFrom(ctx, s.pool).QueryRow(ctx, observedAtQuery).Scan(&observedAt); err != nil {
 		return Snapshot{}, err
 	}
 	return Snapshot{ObservedAt: observedAt, Vehicles: vehicles}, nil
+}
+
+func (s *Store) vehicles(ctx context.Context, selection string, arguments ...any) ([]Vehicle, error) {
+	rows, err := database.QuerierFrom(ctx, s.pool).Query(ctx, selection,
+		append([]any{AmountScale}, arguments...)...)
+	if err != nil {
+		return nil, err
+	}
+	return collectVehicles(rows)
 }
 
 // storedSource is one row of the JSON inventory the query aggregates.
@@ -145,7 +173,7 @@ func scanVehicle(rows pgx.Rows) (Vehicle, error) {
 		&vehicle.Telemetry.ConfirmedAt,
 		&vehicle.Telemetry.Position.Longitude,
 		&vehicle.Telemetry.Position.Latitude,
-		&vehicle.InsideServiceZone,
+		&vehicle.ServiceZoneID,
 		&vehicle.HeldBy,
 		&inventory,
 	)

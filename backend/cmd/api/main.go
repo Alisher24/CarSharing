@@ -21,6 +21,7 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/platform/httpapi"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/periodic"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/sessions"
+	"github.com/Alisher24/CarSharing/backend/internal/rentals"
 	"github.com/Alisher24/CarSharing/backend/internal/tariffs"
 	"github.com/Alisher24/CarSharing/backend/internal/zones"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -64,6 +65,11 @@ func application(cfg config.Config, pool *pgxpool.Pool, hub *events.Hub) (httpap
 	if err != nil {
 		return httpapi.Dependencies{}, err
 	}
+	vehicles := fleet.NewStore(pool)
+	reservations, err := rentals.NewService(pool, vehicles, tariffs.NewStore(pool))
+	if err != nil {
+		return httpapi.Dependencies{}, err
+	}
 	return httpapi.Dependencies{
 		Probe:          httpapi.DatabaseProbe(pool),
 		AllowedOrigins: cfg.AllowedOrigins,
@@ -73,8 +79,9 @@ func application(cfg config.Config, pool *pgxpool.Pool, hub *events.Hub) (httpap
 		Users:          users,
 		Throttle:       auth.NewThrottle(pool, cfg.RateLimits),
 		Events:         hub,
+		Reservations:   reservations,
 		Catalog: httpapi.Catalog{
-			Vehicles: fleet.NewStore(pool),
+			Vehicles: vehicles,
 			Zones:    zones.NewStore(pool),
 			Tariffs:  tariffs.NewStore(pool),
 		},

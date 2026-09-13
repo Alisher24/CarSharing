@@ -12,16 +12,19 @@ import { FleetStatus } from '../features/fleet/FleetStatus';
 import { NO_FILTERS, selectVehicles, type FleetFilters } from '../features/fleet/filters';
 import { catalogVehicles, foundTariff, foundZones, useCatalog } from '../features/fleet/useCatalog';
 import { useSelectedVehicle } from '../features/fleet/useSelectedVehicle';
-import { VehicleCard } from '../features/fleet/VehicleCard';
+import { VehicleCard, type VehicleBooking } from '../features/fleet/VehicleCard';
 import { VehicleList } from '../features/fleet/VehicleList';
 import { FleetMap } from '../features/map/FleetMap';
+import { ReservationPanel } from '../features/reservation/ReservationPanel';
+import { commandNotice, limitAllowsBooking, limitText, SIGN_IN_TO_BOOK } from '../features/reservation/reservationCopy';
+import { useCurrentRental } from '../features/reservation/useCurrentRental';
+import { useReservations } from '../features/reservation/useReservations';
+import { loadedValue } from '../shared/api/Resource';
+import type { CurrentSnapshot } from '../shared/api/current';
+import type { Reservations } from '../features/reservation/useReservations';
 
 /** What a narrow screen is showing, where the map and the list cannot both fit. */
 type NarrowView = 'map' | 'list';
-
-// Nothing private is read yet: the private resources this stream signals arrive with their own REST
-// endpoints, and until then a signal about them is remembered by no one.
-const ignorePrivateChange = () => undefined;
 
 export function App() {
   const connection = useConnection();
@@ -32,8 +35,16 @@ export function App() {
   // The private stream is opened by the session and lives above every panel that shows it, so
   // closing that panel changes nothing about it. A subscription that has ended asks who the caller
   // is now: an answer that nobody is signed in clears the session, and with it this stream.
-  usePrivateEvents(account.state === 'signed-in', ignorePrivateChange, recheck);
+  const session = account.state === 'signed-in' ? account.snapshot.user.id : undefined;
+  const privateEvents = usePrivateEvents(session, recheck);
   useSessionCheckOnRecovery(events.connection, recheck);
+
+  // What the person is doing now, and the commands that change it, are read and held here rather
+  // than by a panel: the panel above the map and the card that books a vehicle are two views of one
+  // reservation, and the private stream keeps both of them current.
+  const current = useCurrentRental(account, privateEvents);
+  const reservations = useReservations(account, current);
+  const currentSnapshot = loadedValue(current.resource);
 
   const [filters, setFilters] = useState<FleetFilters>(NO_FILTERS);
   const [selectedId, setSelectedId] = useState<string>();
@@ -46,6 +57,8 @@ export function App() {
 
   const select = useCallback((vehicleId: string) => setSelectedId(vehicleId), []);
 
+  const booking = bookingOf(account.state === 'signed-in', currentSnapshot, reservations);
+
   return (
     <div className="page">
       <AppHeader
@@ -55,6 +68,8 @@ export function App() {
         onToggleAccount={() => setAccountOpen((open) => !open)}
       />
       {accountOpen && <AccountPanel account={account} submission={submission} onSubmit={submit} onLeave={leave} />}
+
+      <ReservationPanel resource={current.resource} reservations={reservations} onShowVehicle={select} />
 
       <div className="fleet-bar">
         <FleetStatus resource={catalog.fleet.resource} onRetry={catalog.fleet.retry} />
@@ -84,10 +99,31 @@ export function App() {
           onRetryTariff={catalog.tariffs.retry}
           withinFilters={shown.some((vehicle) => vehicle.id === selected.id)}
           onClose={() => setSelectedId(undefined)}
+          booking={booking}
         />
       )}
     </div>
   );
+}
+
+/**
+ * What the card offers about booking. The day's allowance is read from the private answer rather
+ * than guessed at: an allowance that has not been read yet is never presented as permission to book,
+ * and the server decides every command again whatever the control looked like.
+ */
+function bookingOf(
+  signedIn: boolean,
+  snapshot: CurrentSnapshot | undefined,
+  reservations: Reservations,
+): VehicleBooking {
+  return {
+    signedIn,
+    limit: signedIn ? limitText(snapshot) : SIGN_IN_TO_BOOK,
+    limitAllows: limitAllowsBooking(snapshot),
+    awaitingRepeat: reservations.repeatable !== undefined,
+    notice: commandNotice(reservations.phase),
+    book: reservations.book,
+  };
 }
 
 /**

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { createReadCoordinator, DOCUMENT_KINDS, type ReadCoordinator } from './coordinator.ts';
+import { createReadCoordinator, PUBLIC_DOCUMENT_KINDS, type ReadCoordinator } from './coordinator.ts';
 import type { AnswerHandlers, DocumentKind } from './readCycle.ts';
 import type { ObservedVersions } from './changes.ts';
 
@@ -17,6 +17,7 @@ function coordinator(session = 'session-1'): ReadCoordinator {
     vehicles: plainHandlers(),
     zones: plainHandlers(),
     tariffs: plainHandlers(),
+    current: plainHandlers(),
   } satisfies Record<DocumentKind, AnswerHandlers>;
 
   return createReadCoordinator(session, handlers);
@@ -78,9 +79,9 @@ describe('deciding whether there is anything to read', () => {
 
   test('a ready frame asks every resource to be read again', () => {
     const read = coordinator();
-    read.request(DOCUMENT_KINDS);
+    read.request(PUBLIC_DOCUMENT_KINDS);
 
-    for (const document of DOCUMENT_KINDS) {
+    for (const document of PUBLIC_DOCUMENT_KINDS) {
       assert.equal(read.due(document), true);
       firstRead(read, document);
     }
@@ -221,7 +222,7 @@ describe('waking the reader of a document', () => {
     assert.equal(woken, 1);
     assert.equal(read.asked('vehicles'), 1);
 
-    read.request(DOCUMENT_KINDS);
+    read.request(PUBLIC_DOCUMENT_KINDS);
     assert.equal(woken, 2, 'a request of every document wakes each of their readers');
     assert.equal(read.asked('vehicles'), 2);
     assert.equal(read.asked('zones'), 1);

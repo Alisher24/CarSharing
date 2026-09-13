@@ -1,7 +1,11 @@
 import type { ObservedVersions } from './changes.ts';
 
-/** One public resource the catalog reads, which is what a change signal and a ready frame address. */
-export type DocumentKind = 'vehicles' | 'zones' | 'tariffs';
+/**
+ * One resource a reader keeps up to date, which is what a change signal and a ready frame address.
+ * The catalog reads the public ones; the account's own reservation is read by the reader of the
+ * private stream, and neither coordinator serves a document that belongs to the other.
+ */
+export type DocumentKind = 'vehicles' | 'zones' | 'tariffs' | 'current';
 
 /**
  * What one resource does with a REST answer. The handlers are asked twice about one answer: once

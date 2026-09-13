@@ -1677,11 +1677,18 @@ paths:
     get:
       operationId: getCurrentRental
       summary: get Current Rental
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-body-limit: 65536
       description: >-
-        Always 200. Absence is explicit; otherwise contains the authoritative current rental and full current
-        vehicle at server_time. No request body is permitted, including an empty JSON object.
+        Always 200. Returns a live rental only: reserved, active or paused. A cancelled, expired or completed
+        rental is never current, and with none of the three the answer states kind none. Both shapes carry
+        server_time, the full current vehicle of the rental when there is one, and the daily-limit state with
+        the moment it is restored, so a client displays the limit without inferring it from kind none. The
+        read is not a pure projection: when it discovers a reservation past its deadline it records the
+        expiry, releases the vehicle and writes the tasks of both changes before answering the fresh
+        snapshot, with no worker running. An ordinary read with no due transition writes nothing. A failure
+        to record the expiry is reported as a failure rather than as a confirmed absence of a rental. No
+        request body is permitted, including an empty JSON object.
       parameters:
         - name: X-Request-ID
           in: header
@@ -1700,9 +1707,55 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CurrentSnapshot'
-              example:
-                kind: none
-                server_time: '2026-09-12T07:15:30.123456Z'
+              examples:
+                none:
+                  value:
+                    kind: none
+                    server_time: '2026-09-12T07:15:30.123456Z'
+                    daily_limit:
+                      available: false
+                      resets_at: '2026-09-12T18:00:00.000000Z'
+                rental:
+                  value:
+                    kind: rental
+                    server_time: '2026-09-12T07:15:30.123456Z'
+                    daily_limit:
+                      available: false
+                      resets_at: '2026-09-12T18:00:00.000000Z'
+                    rental:
+                      id: 01994342-6ba7-7000-8000-000000000001
+                      vehicle:
+                        id: 01994342-6ba7-7000-8000-000000000001
+                        model: Demo Electric
+                        powertrain_type: electric
+                        position:
+                          type: Point
+                          coordinates:
+                            - 74.6
+                            - 42.87
+                        telemetry_at: '2026-09-12T07:15:30.123456Z'
+                        telemetry_status: fresh
+                        energy_sources:
+                          - kind: battery
+                            remaining: '1200.125'
+                            capacity: '2000'
+                            unit: wh
+                            remaining_basis_points: 6001
+                            can_start: true
+                            can_continue: true
+                        version: '1'
+                        status: reserved
+                      version: '1'
+                      reserved_at: '2026-09-12T07:15:30.123456Z'
+                      tariff_snapshot:
+                        id: 01994342-6ba7-7000-8000-000000000001
+                        currency: KGS
+                        billing_policy: per_mode_started_minute_v1
+                        driving_rate_tyiyn_per_started_minute: '1500'
+                        paused_rate_tyiyn_per_started_minute: '500'
+                        version: '1'
+                      state: reserved
+                      expires_at: '2026-09-12T07:30:30.123456Z'
         '400':
           description: INVALID_HEADER
           x-error-codes:
@@ -1829,16 +1882,23 @@ paths:
     post:
       operationId: reserve
       summary: reserve
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-body-limit: 65536
       description: >-
-        Reserve for 15 free minutes. Server chooses immutable tariff conditions. Reject all client-supplied
-        time, owner, state, rates, energy and amount. Idempotency scope is the current user; fingerprint is
-        method, normalized path including resource ID and canonical body. Missing key: 400
-        IDEMPOTENCY_KEY_REQUIRED; invalid UUID v4: 400 IDEMPOTENCY_KEY_INVALID. Same key with a different
-        fingerprint: 409 IDEMPOTENCY_CONFLICT. Concurrent request: 409 IDEMPOTENCY_IN_PROGRESS and Retry-After
-        1. Replay returns original status/body, server_time and body request_id with Idempotency-Replayed true
-        and a new X-Request-ID for this attempt. Retain successes and checked domain failures for at least 24
+        Reserve one vehicle for 15 free minutes, measured between the stored reserved moment and the stored
+        deadline. Server chooses immutable tariff conditions and the moment; reject all client-supplied time,
+        owner, state, rates, energy and amount. One free reservation per account per service-timezone
+        calendar day, across the whole fleet, all sessions and all devices, spent when the reservation is
+        committed and never returned by a cancellation, an expiry or a later ride; an exhausted allowance is
+        409 DAILY_LIMIT_REACHED with the typed moment it is restored. A vehicle the person or the vehicle
+        already holds a live rental for is 409 ACTIVE_RENTAL_EXISTS or 409 VEHICLE_UNAVAILABLE, and a vehicle
+        that fails the catalog rules is 409 VEHICLE_UNAVAILABLE with the reasons. Idempotency scope is the
+        current user; fingerprint is method, normalized path including resource ID and canonical body.
+        Missing key: 400 IDEMPOTENCY_KEY_REQUIRED; invalid UUID v4: 400 IDEMPOTENCY_KEY_INVALID. Same key
+        with a different fingerprint: 409 IDEMPOTENCY_CONFLICT. Concurrent request: 409
+        IDEMPOTENCY_IN_PROGRESS and Retry-After 1, which is not the moment the daily limit returns. Replay
+        returns original status/body, server_time and body request_id with Idempotency-Replayed true and a
+        new X-Request-ID for this attempt. Retain successes and checked domain failures for at least 24
         hours; exclude auth, validation, in-flight and technical rollbacks. Cleanup cannot remove
         invoice/payment uniqueness. Request body is required.
       parameters:
@@ -2002,12 +2062,13 @@ paths:
         '409':
           description: >-
             IDEMPOTENCY_CONFLICT, IDEMPOTENCY_IN_PROGRESS, VEHICLE_UNAVAILABLE, ACTIVE_RENTAL_EXISTS,
-            OUTSTANDING_INVOICE
+            DAILY_LIMIT_REACHED, OUTSTANDING_INVOICE
           x-error-codes:
             - IDEMPOTENCY_CONFLICT
             - IDEMPOTENCY_IN_PROGRESS
             - VEHICLE_UNAVAILABLE
             - ACTIVE_RENTAL_EXISTS
+            - DAILY_LIMIT_REACHED
             - OUTSTANDING_INVOICE
           headers:
             X-Request-ID:
@@ -2047,6 +2108,15 @@ paths:
                     code: ACTIVE_RENTAL_EXISTS
                     message: Request could not be completed
                     request_id: example-request-1
+                DAILY_LIMIT_REACHED:
+                  value:
+                    code: DAILY_LIMIT_REACHED
+                    message: Request could not be completed
+                    request_id: example-request-1
+                    details:
+                      daily_limit:
+                        available: false
+                        resets_at: '2026-09-12T18:00:00.000000Z'
                 OUTSTANDING_INVOICE:
                   value:
                     code: OUTSTANDING_INVOICE
@@ -2167,16 +2237,22 @@ paths:
     post:
       operationId: cancelRental
       summary: cancel Rental
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-body-limit: 65536
       description: >-
-        Reconcile with server time before transition; persist expiry or depletion even if the command
-        conflicts. On 409 reread the authoritative current snapshot. Idempotency scope is the current user;
-        fingerprint is method, normalized path including resource ID and canonical body. Missing key: 400
-        IDEMPOTENCY_KEY_REQUIRED; invalid UUID v4: 400 IDEMPOTENCY_KEY_INVALID. Same key with a different
-        fingerprint: 409 IDEMPOTENCY_CONFLICT. Concurrent request: 409 IDEMPOTENCY_IN_PROGRESS and Retry-After
-        1. Replay returns original status/body, server_time and body request_id with Idempotency-Replayed true
-        and a new X-Request-ID for this attempt. Retain successes and checked domain failures for at least 24
+        Give a reservation back before its deadline, free of charge and with no billable interval and no
+        invoice. The owner comes from the session: an unknown identifier and another account's identifier are
+        both 404 RESOURCE_NOT_FOUND. The deadline is compared with the authoritative moment the transaction
+        fixed after its waits: before it the reservation becomes cancelled, and at or after it the expiry
+        transition is recorded first and 409 RESERVATION_EXPIRED answers after that record is committed, so a
+        domain refusal never rolls back a transition that had already become due. A cancellation does not
+        return the daily limit. On 409 reread the authoritative current snapshot. Idempotency scope is the
+        current user; fingerprint is method, normalized path including resource ID and canonical body.
+        Missing key: 400 IDEMPOTENCY_KEY_REQUIRED; invalid UUID v4: 400 IDEMPOTENCY_KEY_INVALID. Same key
+        with a different fingerprint: 409 IDEMPOTENCY_CONFLICT. Concurrent request: 409
+        IDEMPOTENCY_IN_PROGRESS and Retry-After 1, which is not the moment the daily limit returns. Replay
+        returns original status/body, server_time and body request_id with Idempotency-Replayed true and a
+        new X-Request-ID for this attempt. Retain successes and checked domain failures for at least 24
         hours; exclude auth, validation, in-flight and technical rollbacks. Cleanup cannot remove
         invoice/payment uniqueness. No request body is permitted, including an empty JSON object.
       parameters:
@@ -6664,6 +6740,7 @@ components:
       required:
         - kind
         - server_time
+        - daily_limit
       properties:
         kind:
           type: string
@@ -6671,6 +6748,8 @@ components:
             - none
         server_time:
           $ref: ./components/common.yaml#/components/schemas/Timestamp
+        daily_limit:
+          $ref: ./components/errors.yaml#/components/schemas/DailyLimitState
     CurrentRental:
       type: object
       additionalProperties: false
@@ -6678,6 +6757,7 @@ components:
         - kind
         - server_time
         - rental
+        - daily_limit
       properties:
         kind:
           type: string
@@ -6687,6 +6767,8 @@ components:
           $ref: ./components/common.yaml#/components/schemas/Timestamp
         rental:
           $ref: '#/components/schemas/Rental'
+        daily_limit:
+          $ref: ./components/errors.yaml#/components/schemas/DailyLimitState
     CurrentSnapshot:
       oneOf:
         - $ref: '#/components/schemas/NoCurrentRental'

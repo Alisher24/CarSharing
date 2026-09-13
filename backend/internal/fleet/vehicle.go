@@ -3,7 +3,7 @@ package fleet
 import (
 	"time"
 
-	"github.com/Alisher24/CarSharing/backend/internal/rentals"
+	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 )
 
 // Vehicle is one vehicle as the public catalog sees it. It carries no renter, route, invoice or
@@ -20,23 +20,27 @@ type Vehicle struct {
 
 	Telemetry Telemetry
 
-	// InsideServiceZone is whether the last confirmed position is covered by a service zone,
-	// boundary included.
-	InsideServiceZone bool
+	// ServiceZoneID is the service area whose boundary covers the last confirmed position, boundary
+	// included, or the empty string when no area does. It is the identifier a rental stores as the
+	// area it was made in, so one judgement of the position serves both the catalog and the rental.
+	ServiceZoneID string
 
 	Sources []EnergySource
 
-	// HeldBy is the stage of the rental that currently holds the vehicle, or rentals.NotHeld when
+	// HeldBy is the stage of the rental that currently holds the vehicle, or stage.NotHeld when
 	// no rental does.
-	HeldBy rentals.Stage
+	HeldBy stage.Stage
 }
+
+// InsideServiceZone reports whether the last confirmed position is covered by a service area.
+func (v Vehicle) InsideServiceZone() bool { return v.ServiceZoneID != "" }
 
 // heldStates is what the catalog publishes for a vehicle a rental holds. A vehicle in one of these
 // stages is occupied whatever its energy, telemetry or technical condition says.
-var heldStates = map[rentals.Stage]State{
-	rentals.Reserved: {Status: Reserved},
-	rentals.Active:   {Status: InTrip, RideMode: Driving},
-	rentals.Paused:   {Status: InTrip, RideMode: Paused},
+var heldStates = map[stage.Stage]State{
+	stage.Reserved: {Status: Reserved},
+	stage.Active:   {Status: InTrip, RideMode: Driving},
+	stage.Paused:   {Status: InTrip, RideMode: Paused},
 }
 
 // StateAt derives what a reader is shown at an instant. It is computed on every read from the
@@ -108,7 +112,7 @@ var unavailabilityChecks = []unavailabilityCheck{
 	},
 	{
 		reason:  OutsideServiceZone,
-		applies: func(vehicle Vehicle, _ time.Time) bool { return !vehicle.InsideServiceZone },
+		applies: func(vehicle Vehicle, _ time.Time) bool { return !vehicle.InsideServiceZone() },
 	},
 }
 

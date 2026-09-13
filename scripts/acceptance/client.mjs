@@ -42,15 +42,25 @@ export function newEmail(prefix) {
 /**
  * call makes one request and returns everything a suite asserts about: the status, the parsed
  * body and the Set-Cookie headers. Origin is attached by default because the contract requires it
- * on a mutation; a suite testing the origin rule overrides or omits it.
+ * on a mutation; a suite testing the origin rule overrides or omits it. Headers a contract declares
+ * for one operation — a command key, above all — are passed in by the suite that sends them.
  */
 export async function call(path, options = {}) {
-  const { method = 'GET', body, cookie, csrfToken, origin = allowedOrigin, omitOrigin = false } = options;
+  const {
+    method = 'GET',
+    body,
+    cookie,
+    csrfToken,
+    origin = allowedOrigin,
+    omitOrigin = false,
+    headers: declared = {},
+  } = options;
   const headers = {};
   if (!omitOrigin) headers.Origin = origin;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (cookie) headers.Cookie = cookie;
   if (csrfToken !== undefined) headers['X-CSRF-Token'] = csrfToken;
+  Object.assign(headers, declared);
   const response = await fetch(serviceOrigin + path, {
     method,
     headers,

@@ -37,15 +37,20 @@ func NewHandler(dependencies Dependencies) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	reservations, err := newReservationHandlers(dependencies.Reservations)
+	if err != nil {
+		return nil, err
+	}
 	streaming, err := newStreams(dependencies.Events, dependencies.Sessions)
 	if err != nil {
 		return nil, err
 	}
 	served := server{
-		health:          health{probe: dependencies.Probe},
-		accounts:        accounts,
-		catalogHandlers: handlers,
-		streams:         streaming,
+		health:              health{probe: dependencies.Probe},
+		accounts:            accounts,
+		catalogHandlers:     handlers,
+		reservationHandlers: reservations,
+		streams:             streaming,
 	}
 	strict := servedapi.NewStrictHandlerWithOptions(served, nil, strictErrorHandlers())
 	policy := transport{

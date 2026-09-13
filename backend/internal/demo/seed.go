@@ -6,7 +6,7 @@ import (
 
 	"github.com/Alisher24/CarSharing/backend/internal/auth"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
-	"github.com/Alisher24/CarSharing/backend/internal/rentals"
+	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -97,7 +97,7 @@ func (i installer) installRentals(
 	ctx context.Context, identities map[string]uuid.UUID, zoneID, tariffID string,
 ) error {
 	for _, vehicle := range i.vehicles {
-		if vehicle.HeldBy == rentals.NotHeld {
+		if vehicle.HeldBy == stage.NotHeld {
 			continue
 		}
 		owner := identities[vehicle.ScenarioAccount]
