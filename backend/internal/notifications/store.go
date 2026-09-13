@@ -23,54 +23,72 @@ type Store struct{ pool *pgxpool.Pool }
 
 func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 
-// notificationFields is the shape every read and every write of a notification returns. One
-// declaration keeps a row read by identifier, by rental or by owner from drifting apart.
+// notificationFields is the shape every read of a notification answers with: the row together with
+// the deadline of the rental it is about. That deadline is the rental's rather than the
+// notification's, because a warning publishes the deadline it warns about: storing a second copy of
+// it would be a value that can disagree with the rental.
 const notificationFields = `
-    id,
-    user_id,
-    rental_id,
-    kind,
-    created_at,
-    read_at,
-    active,
-    version`
+    note.id,
+    note.user_id,
+    note.rental_id,
+    note.kind,
+    note.created_at,
+    note.read_at,
+    note.active,
+    note.version,
+    rental.expires_at`
 
+// notificationColumns reads the notification together with the rental it is about, because a
+// notification cannot exist without one: the foreign key and the read agree, so no join here can
+// drop a row.
 const notificationColumns = `
 SELECT` + notificationFields + `
-FROM notifications`
+FROM notifications note
+JOIN rentals rental ON rental.id = note.rental_id`
 
 // The selections this store reads with. The transitions decide in Go whether a change is a change,
 // so the read that precedes one takes the row for update: two of them then wait for each other
 // instead of both reading the same version and writing it back.
 const (
 	notificationOfRentalSelection = notificationColumns + `
-WHERE rental_id = $1 AND kind = $2`
+WHERE note.rental_id = $1 AND note.kind = $2`
 
 	lockedNotificationOfRentalSelection = notificationOfRentalSelection + `
-FOR UPDATE`
+FOR UPDATE OF note`
 
 	notificationByIDForSelection = notificationColumns + `
-WHERE id = $1 AND user_id = $2`
+WHERE note.id = $1 AND note.user_id = $2`
 
 	lockedNotificationByIDForSelection = notificationByIDForSelection + `
-FOR UPDATE`
+FOR UPDATE OF note`
 
-	newestOfOwnerSelection = notificationColumns + `
-WHERE user_id = $1
-ORDER BY created_at DESC, id DESC
-LIMIT $2`
+	// ownerPageSelection walks one owner's collection from a position, newest first. The position is
+	// the pair the collection is ordered by, so the page after it continues exactly after the record
+	// the cursor was taken from. A page that starts at the newest record states no position at all,
+	// and every notification of the owner is then ahead of the one that holds the oldest identifier
+	// of that moment: an identifier this table never assigns, which is what makes the first page the
+	// whole collection rather than a comparison against a null.
+	ownerPageSelection = notificationColumns + `
+WHERE note.user_id = $1
+  AND (note.created_at, note.id) <
+      (COALESCE($2::timestamptz, 'infinity'::timestamptz),
+       COALESCE($3::uuid, '00000000-0000-0000-0000-000000000000'::uuid))
+ORDER BY note.created_at DESC, note.id DESC
+LIMIT $4`
 )
 
 // Create stores the notification of one rental and kind at the moment the transaction fixed, and
 // reports whether this call stored it. A notification that already exists for that rental and kind
 // is answered as it stands: the unique key makes the repeated attempt write nothing, so the moment
 // the first one stored is never replaced and no signal is recorded for a change that did not happen.
-func (s *Store) Create(ctx context.Context, about About, at time.Time) (Notification, bool, error) {
+func (s *Store) Create(
+	ctx context.Context, about About, at time.Time,
+) (Notification, bool, error) {
 	created, err := Created(about, at)
 	if err != nil {
 		return Notification{}, false, err
 	}
-	stored, written, err := s.insert(ctx, created)
+	written, err := s.insert(ctx, created)
 	if err != nil {
 		return Notification{}, false, err
 	}
@@ -78,6 +96,10 @@ func (s *Store) Create(ctx context.Context, about About, at time.Time) (Notifica
 		existing, err := readNotification(ctx, s.pool,
 			notificationOfRentalSelection, about.RentalID, about.Kind)
 		return existing, false, err
+	}
+	stored, err := s.ByID(ctx, created.UserID, created.ID)
+	if err != nil {
+		return Notification{}, false, err
 	}
 	announced, err := s.announce(ctx, stored)
 	if err != nil {
@@ -131,90 +153,141 @@ func (s *Store) ByID(ctx context.Context, owner uuid.UUID, id string) (Notificat
 	return readNotification(ctx, s.pool, notificationByIDForSelection, id, owner)
 }
 
-// Newest reads the newest notifications of one account, in the order the collection publishes them:
-// newest first, with the identifier as the tie-break. Only this account's records are read, so
-// another account's notification neither appears in the answer nor takes a place in it.
-func (s *Store) Newest(ctx context.Context, owner uuid.UUID, limit int) ([]Notification, error) {
-	rows, err := database.QuerierFrom(ctx, s.pool).Query(ctx, newestOfOwnerSelection, owner, limit)
+// PageSize is how many notifications one page of the collection carries when the client states no
+// limit. It is the contract's declared default, stated here so the package that pages the collection
+// and the operation that serves it cannot disagree about it.
+const PageSize = 20
+
+// Position is where a page of a collection starts: the sort key of the notification the previous
+// page ended with. It is the pair the collection is ordered by, so a page read after it continues
+// exactly after that notification rather than at one the client guessed.
+type Position struct {
+	CreatedAt time.Time
+	ID        string
+}
+
+// Page is one page of an owner's notifications: the records it holds, and the position the page
+// after it starts from. The position is absent on the last and on the empty page, which is the
+// `next_cursor: null` the contract declares.
+type Page struct {
+	Notifications []Notification
+	Next          *Position
+}
+
+// ReadPage reads one page of an owner's notifications after a position, in the order the collection
+// publishes them: newest first, with the identifier as the tie-break. A page is read with one record
+// more than it publishes, so whether anything follows is decided by the database rather than by the
+// page being shorter than the limit.
+func (s *Store) ReadPage(
+	ctx context.Context, owner uuid.UUID, after *Position, limit int,
+) (Page, error) {
+	rows, err := database.QuerierFrom(ctx, s.pool).Query(ctx, ownerPageSelection,
+		owner, positionMoment(after), positionIdentifier(after), limit+1)
 	if err != nil {
-		return nil, err
+		return Page{}, err
 	}
 	defer rows.Close()
 
-	newest := make([]Notification, 0, limit)
+	records := make([]Notification, 0, limit+1)
 	for rows.Next() {
 		var found Notification
 		if err = scanNotification(rows, &found); err != nil {
-			return nil, err
+			return Page{}, err
 		}
-		newest = append(newest, found)
+		records = append(records, found)
 	}
-	return newest, rows.Err()
+	if err = rows.Err(); err != nil {
+		return Page{}, err
+	}
+	if len(records) <= limit {
+		return Page{Notifications: records}, nil
+	}
+
+	records = records[:limit]
+	last := records[len(records)-1]
+	return Page{
+		Notifications: records,
+		Next:          &Position{CreatedAt: last.CreatedAt, ID: last.ID},
+	}, nil
+}
+
+// positionMoment and positionIdentifier read the two parts of an optional position. A page that
+// starts at the newest record has none, and each part of the search key becomes a null the
+// selection reads as "before everything".
+func positionMoment(after *Position) *time.Time {
+	if after == nil {
+		return nil
+	}
+	moment := after.CreatedAt
+	return &moment
+}
+
+func positionIdentifier(after *Position) *string {
+	if after == nil {
+		return nil
+	}
+	identifier := after.ID
+	return &identifier
 }
 
 // insert writes one notification unless the rental already has one of its kind. The conflict is the
-// rule rather than a failure, so the statement reports whether it wrote and the caller answers the
-// stored record.
+// rule rather than a failure, so the statement reports whether it wrote; the caller reads the record
+// back through the selection every reader of this store uses rather than through a second shape.
 const insertNotificationStatement = `
 INSERT INTO notifications (id, user_id, rental_id, kind, created_at, read_at, active, version)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (rental_id, kind) DO NOTHING
-RETURNING` + notificationFields
+RETURNING id`
 
-func (s *Store) insert(
-	ctx context.Context, about Notification,
-) (Notification, bool, error) {
+func (s *Store) insert(ctx context.Context, about Notification) (bool, error) {
 	rows, err := database.QuerierFrom(ctx, s.pool).Query(ctx, insertNotificationStatement,
 		about.ID, about.UserID, about.RentalID, about.Kind, about.CreatedAt, about.ReadAt,
 		about.Active, about.Version)
 	if err != nil {
-		return Notification{}, false, err
+		return false, err
 	}
 	defer rows.Close()
 
 	if !rows.Next() {
-		if err = rows.Err(); err != nil {
-			return Notification{}, false, err
-		}
-		return Notification{}, false, nil
+		return false, rows.Err()
 	}
-	var stored Notification
-	if err = scanNotification(rows, &stored); err != nil {
-		return Notification{}, false, err
+	var written string
+	if err = rows.Scan(&written); err != nil {
+		return false, err
 	}
-	return stored, true, rows.Err()
+	return true, rows.Err()
 }
 
 const updateNotificationStatement = `
 UPDATE notifications
 SET read_at = $2, active = $3, version = $4
 WHERE id = $1
-RETURNING` + notificationFields
+RETURNING id`
 
-func (s *Store) update(ctx context.Context, changed Notification) (Notification, error) {
+func (s *Store) update(ctx context.Context, changed Notification) error {
 	rows, err := database.QuerierFrom(ctx, s.pool).Query(ctx, updateNotificationStatement,
 		changed.ID, changed.ReadAt, changed.Active, changed.Version)
 	if err != nil {
-		return Notification{}, err
+		return err
 	}
 	defer rows.Close()
 
 	if !rows.Next() {
 		if err = rows.Err(); err != nil {
-			return Notification{}, err
+			return err
 		}
-		return Notification{}, ErrNotFound
+		return ErrNotFound
 	}
-	var stored Notification
-	if err = scanNotification(rows, &stored); err != nil {
-		return Notification{}, err
-	}
-	return stored, rows.Err()
+	return rows.Err()
 }
 
-// change writes a representation that replaced a stored one and reports it as changed.
+// change writes a representation that replaced a stored one, reads it back and reports it as
+// changed.
 func (s *Store) change(ctx context.Context, next Notification) (Notification, bool, error) {
-	stored, err := s.update(ctx, next)
+	if err := s.update(ctx, next); err != nil {
+		return Notification{}, false, err
+	}
+	stored, err := s.ByID(ctx, next.UserID, next.ID)
 	if err != nil {
 		return Notification{}, false, err
 	}
@@ -278,5 +351,6 @@ func scanNotification(rows pgx.Rows, found *Notification) error {
 		&found.ReadAt,
 		&found.Active,
 		&found.Version,
+		&found.ExpiresAt,
 	)
 }

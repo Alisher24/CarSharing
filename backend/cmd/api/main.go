@@ -16,7 +16,9 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/demo"
 	"github.com/Alisher24/CarSharing/backend/internal/events"
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
+	"github.com/Alisher24/CarSharing/backend/internal/notifications"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/config"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/cursor"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/httpapi"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/periodic"
@@ -24,6 +26,7 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/rentals"
 	"github.com/Alisher24/CarSharing/backend/internal/tariffs"
 	"github.com/Alisher24/CarSharing/backend/internal/zones"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -56,8 +59,8 @@ func main() {
 }
 
 // application assembles what the HTTP layer serves: the readiness probe, the session store, the
-// account rules and the fan-out of the change signals, all over the one pool so that a request can
-// commit a user and its session together.
+// account rules, the rental module and the fan-out of the change signals, all over the one pool so
+// that a request can commit a user and its session together.
 func application(cfg config.Config, pool *pgxpool.Pool, hub *events.Hub) (httpapi.Dependencies, error) {
 	users := auth.NewUserStore(pool)
 	hasher := auth.NewPasswordHasher(cfg.Argon2)
@@ -67,6 +70,14 @@ func application(cfg config.Config, pool *pgxpool.Pool, hub *events.Hub) (httpap
 	}
 	vehicles := fleet.NewStore(pool)
 	reservations, err := rentals.NewService(pool, vehicles, tariffs.NewStore(pool))
+	if err != nil {
+		return httpapi.Dependencies{}, err
+	}
+	notifications, err := notifications.NewService(pool)
+	if err != nil {
+		return httpapi.Dependencies{}, err
+	}
+	cursors, err := cursor.NewSigner(cfg.CursorSigningKey)
 	if err != nil {
 		return httpapi.Dependencies{}, err
 	}
@@ -80,12 +91,36 @@ func application(cfg config.Config, pool *pgxpool.Pool, hub *events.Hub) (httpap
 		Throttle:       auth.NewThrottle(pool, cfg.RateLimits),
 		Events:         hub,
 		Reservations:   reservations,
+		Notifications:  notificationOperations{reservations: reservations, reads: notifications},
+		Cursors:        cursors,
 		Catalog: httpapi.Catalog{
 			Vehicles: vehicles,
 			Zones:    zones.NewStore(pool),
 			Tariffs:  tariffs.NewStore(pool),
 		},
 	}, nil
+}
+
+// notificationOperations is the two halves of the notification surface as one dependency: the
+// collection belongs to the rentals module, because reading it fixes a warning that has become due
+// for the reservation the reader holds, and the read of one notification belongs to the
+// notifications module. The composition root is where the two are joined; neither module learns
+// about the other's records.
+type notificationOperations struct {
+	reservations *rentals.Service
+	reads        *notifications.Service
+}
+
+func (o notificationOperations) Collection(
+	ctx context.Context, caller uuid.UUID, after *notifications.Position, limit int,
+) (rentals.NotificationPage, error) {
+	return o.reservations.Collection(ctx, caller, after, limit)
+}
+
+func (o notificationOperations) MarkRead(
+	ctx context.Context, owner uuid.UUID, id string,
+) (notifications.Result, error) {
+	return o.reads.MarkRead(ctx, owner, id)
 }
 
 // startBackgroundWork starts the recurring work this process owns. Listening for published signals

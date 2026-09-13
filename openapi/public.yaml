@@ -4599,7 +4599,7 @@ paths:
     get:
       operationId: getNotifications
       summary: get Notifications
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-body-limit: 65536
       description: >-
         Forward-only live keyset pagination ordered by (created_at DESC, id DESC). Cursor binds endpoint,
@@ -4976,7 +4976,7 @@ paths:
     post:
       operationId: readNotification
       summary: read Notification
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-body-limit: 65536
       description: >-
         Repeated reads return the same final notification; no Idempotency-Key required. No request body is

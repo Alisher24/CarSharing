@@ -33,6 +33,11 @@ type Notification struct {
 	CreatedAt time.Time
 	ReadAt    *time.Time
 
+	// ExpiresAt is the deadline of the rental the notification is about. It is read from the rental
+	// rather than stored here, because a warning publishes the deadline it warns about and a second
+	// copy of it could disagree with the rental.
+	ExpiresAt time.Time
+
 	// Active is whether what the notification tells about is still in force. Marking a notification
 	// read does not change it: having acknowledged a warning is a different fact from the warning
 	// having stopped being true.

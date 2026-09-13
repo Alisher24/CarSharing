@@ -37,16 +37,21 @@ var (
 // produced by a build that spelled its position differently and is refused rather than guessed at.
 const version = 1
 
-// The separators of the token: one between the operation and the parameters of a scope, one between
-// the encoded payload and its signature.
+// The pieces of a token and the limits a scope is held to. A token is one segment of the alphabet
+// the contract declares for a cursor, so the signature cannot be told from the payload by a client
+// and neither can be edited piecewise.
 const (
 	scopeSeparator  = "\x00"
-	tokenSeparator  = "."
 	maxIdentifier   = 128
 	maxOperation    = 64
 	maxParameterKey = 64
 	maxParameterVal = 256
 )
+
+// signatureLength is how many characters a signature occupies in the token's alphabet: SHA-256
+// without padding, which is 43 for a 32-byte hash. It is stated rather than derived, because the
+// length of a token is what says where its signature ends.
+var signatureLength = base64.RawURLEncoding.EncodedLen(sha256.Size)
 
 // Position is where a page starts: the sort key of its last item. Both parts are read from the stored
 // record rather than from the answer, so the page after a cursor continues exactly after the item
@@ -100,7 +105,9 @@ func NewSigner(key []byte) (*Signer, error) {
 	return &Signer{key: append([]byte(nil), key...)}, nil
 }
 
-// Issue returns the token that reads the page after a position within one scope.
+// Issue returns the token that reads the page after a position within one scope. The token is its
+// signature followed by the payload it covers, in one segment of the alphabet the contract declares
+// for a cursor: the two cannot be told apart by a client, and neither can be edited piecewise.
 func (s *Signer) Issue(position Position, scope Scope) (string, error) {
 	if s == nil {
 		return "", errors.New("a cursor was issued without a signer")
@@ -110,7 +117,7 @@ func (s *Signer) Issue(position Position, scope Scope) (string, error) {
 		return "", err
 	}
 	encoded := base64.RawURLEncoding.EncodeToString(payload)
-	return encoded + tokenSeparator + s.signature(encoded), nil
+	return s.signature(encoded) + encoded, nil
 }
 
 // Read returns the position a token carries, having checked that it was issued for exactly the scope
@@ -122,8 +129,8 @@ func (s *Signer) Read(token string, expected Scope) (Position, error) {
 	if s == nil {
 		return Position{}, ErrMalformed
 	}
-	encoded, presented, found := strings.Cut(token, tokenSeparator)
-	if !found || encoded == "" || presented == "" {
+	presented, encoded, ok := splitToken(token)
+	if !ok {
 		return Position{}, ErrMalformed
 	}
 	payload, err := base64.RawURLEncoding.Strict().DecodeString(encoded)
@@ -143,6 +150,21 @@ func (s *Signer) Read(token string, expected Scope) (Position, error) {
 		return Position{}, ErrScope
 	}
 	return position, nil
+}
+
+// splitToken reports the signature and the payload of a token, and whether the value is a token this
+// package wrote at all. A token carries no separator: the signature is the first signatureLength
+// characters, and a value too short to hold one, or one whose signature is not the alphabet, is not
+// a cursor.
+func splitToken(token string) (signature, encoded string, ok bool) {
+	if len(token) <= signatureLength {
+		return "", "", false
+	}
+	signature = token[:signatureLength]
+	if _, err := base64.RawURLEncoding.Strict().DecodeString(signature); err != nil {
+		return "", "", false
+	}
+	return signature, token[signatureLength:], true
 }
 
 // payload spells the position and the scope a token carries. The creation moment is rendered in the

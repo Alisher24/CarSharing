@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/Alisher24/CarSharing/backend/internal/auth"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/cursor"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/sessions"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -36,6 +37,15 @@ type Dependencies struct {
 	// answers what is current. Only the full application serves those operations.
 	Reservations Reservations
 
+	// Notifications is the account's own notifications: the collection and the read that marks one
+	// of them.
+	Notifications Notifications
+
+	// Cursors signs the position a paginated operation hands back for its next page. It is required
+	// by every operation that publishes one, so an application that serves such an operation cannot
+	// be assembled without the key it signs with.
+	Cursors *cursor.Signer
+
 	// Catalog is what the operations that need no account read. Both routers are given it,
 	// because the anonymous one serves those operations too.
 	Catalog Catalog
@@ -54,5 +64,6 @@ type server struct {
 	accounts
 	catalogHandlers
 	reservationHandlers
+	notificationHandlers
 	streams
 }

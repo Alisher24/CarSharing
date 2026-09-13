@@ -53,7 +53,7 @@ const CursorHMACKeyFileVariable = "CURSOR_HMAC_KEY_FILE"
 
 // CursorSigningKey reads the key signed cursors are issued under. A file that cannot be read stops
 // the process; a process that was given no file receives nil and no key, which is how a process that
-// signs no cursor says so.
+// issues no cursor says so.
 func CursorSigningKey() ([]byte, error) {
 	key, err := secretFromFile(CursorHMACKeyFileVariable)
 	if err != nil {
@@ -130,6 +130,11 @@ type Config struct {
 	// It is empty in a process that was not given the file, and the command that needs it refuses
 	// to run rather than invent one.
 	DemoUserPassword string
+
+	// CursorSigningKey is the key the signed pagination cursors of this process are issued under. It
+	// is empty in a process that was given no key, and the process that issues cursors refuses to
+	// start rather than signing with one every installation would share.
+	CursorSigningKey []byte
 }
 
 func Load() (Config, error) {
@@ -155,6 +160,10 @@ func Load() (Config, error) {
 		return cfg, errors.New(minPasswordLengthMessage)
 	}
 	cfg.DemoUserPassword, err = secretFromFile(DemoUserPasswordFileVariable)
+	if err != nil {
+		return cfg, err
+	}
+	cfg.CursorSigningKey, err = CursorSigningKey()
 	if err != nil {
 		return cfg, err
 	}

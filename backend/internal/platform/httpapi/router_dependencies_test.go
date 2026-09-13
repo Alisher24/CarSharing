@@ -8,7 +8,11 @@ import (
 
 	"github.com/Alisher24/CarSharing/backend/internal/auth"
 	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
+	"github.com/Alisher24/CarSharing/backend/internal/notifications"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/cursor"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/sessions"
+	"github.com/Alisher24/CarSharing/backend/internal/rentals"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -31,6 +35,10 @@ func TestIncompleteApplicationIsRefusedAtConstruction(t *testing.T) {
 		{"vehicle catalog", func(d *Dependencies) { d.Catalog.Vehicles = fixedCatalog{} }},
 		{"service zones", func(d *Dependencies) { d.Catalog.Zones = zoneReader{} }},
 		{"tariffs", func(d *Dependencies) { d.Catalog.Tariffs = tariffReader{} }},
+		{"reservation commands", func(d *Dependencies) { d.Reservations = fixedReservations{} }},
+		{"notification operations", func(d *Dependencies) { d.Notifications = fixedNotifications{} }},
+		{"cursor signer", func(d *Dependencies) { d.Cursors = mustTestSigner(t) }},
+		{"event streams", func(d *Dependencies) { d.Events = fixedStreams{} }},
 	}
 
 	for _, step := range steps {
@@ -48,4 +56,48 @@ func TestIncompleteApplicationIsRefusedAtConstruction(t *testing.T) {
 		})
 		step.supply(&dependencies)
 	}
+}
+
+// fixedReservations and fixedNotifications fill the two feature dependencies for a test that is
+// about what the handler is missing rather than about what it answers: no case here reaches a
+// method of either.
+type fixedReservations struct{}
+
+func (fixedReservations) Reserve(
+	context.Context, rentals.ReserveCommand,
+) (rentals.Answered, error) {
+	return rentals.Answered{}, nil
+}
+
+func (fixedReservations) Cancel(context.Context, rentals.CancelCommand) (rentals.Answered, error) {
+	return rentals.Answered{}, nil
+}
+
+func (fixedReservations) Current(context.Context, uuid.UUID) (rentals.Current, error) {
+	return rentals.Current{}, nil
+}
+
+type fixedNotifications struct{}
+
+func (fixedNotifications) Collection(
+	context.Context, uuid.UUID, *notifications.Position, int,
+) (rentals.NotificationPage, error) {
+	return rentals.NotificationPage{}, nil
+}
+
+func (fixedNotifications) MarkRead(
+	context.Context, uuid.UUID, string,
+) (notifications.Result, error) {
+	return notifications.Result{}, nil
+}
+
+// mustTestSigner is a signer holding a key long enough to sign, which the dependency test only
+// needs present: the cursors it would issue are never read.
+func mustTestSigner(t *testing.T) *cursor.Signer {
+	t.Helper()
+	signer, err := cursor.NewSigner([]byte(strings.Repeat("k", cursor.MinKeyLength)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return signer
 }

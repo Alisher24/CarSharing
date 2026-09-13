@@ -59,7 +59,7 @@ func forged(t *testing.T, key []byte, moment time.Time, id string) string {
 		t.Fatal(err)
 	}
 	encoded := base64.RawURLEncoding.EncodeToString(payload)
-	return encoded + tokenSeparator + mustSigner(t, key).signature(encoded)
+	return mustSigner(t, key).signature(encoded) + encoded
 }
 
 func TestIssueAndReadRoundTrip(t *testing.T) {
@@ -87,14 +87,14 @@ func TestReadRefusesMalformedTokens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	encoded, signature, _ := strings.Cut(issued, tokenSeparator)
+	signature, encoded, _ := splitToken(issued)
 
 	for name, token := range map[string]string{
-		"empty":         "",
-		"no signature":  encoded,
-		"no payload":    tokenSeparator + signature,
-		"not base64":    "%%%." + signature,
-		"a plain value": "eyJ2IjoxfQ",
+		"empty":            "",
+		"a plain value":    "eyJ2IjoxfQ",
+		"a shorter token":  issued[:signatureLength],
+		"not an alphabet":  strings.Repeat("!", signatureLength) + encoded,
+		"a longer segment": signature + encoded + "=",
 	} {
 		if _, err := signer.Read(token, scopeOf("20")); !errors.Is(err, ErrMalformed) {
 			t.Errorf("%s was not refused as malformed: %v", name, err)
@@ -108,20 +108,20 @@ func TestReadRefusesATamperedPayloadOrSignature(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	encoded, signature, _ := strings.Cut(issued, tokenSeparator)
+	signature, encoded, _ := splitToken(issued)
+	edited := encoded[:len(encoded)-1] + "A"
 
 	for name, token := range map[string]string{
 		// The payload is replaced by one describing another position, under a key this installation
 		// did not sign with: the signature is the only thing standing between the two.
 		"another position":  forged(t, secondKey, positionMoment.Add(time.Hour), lastPosition.ID),
-		"another signature": encoded + tokenSeparator + flip(signature),
-		"truncated":         encoded + tokenSeparator + signature[:8],
-		"a longer":          encoded + tokenSeparator + signature + "A",
-		"padded":            encoded + tokenSeparator + signature + "==",
-		"a second point":    encoded + tokenSeparator + signature + tokenSeparator + signature,
+		"another signature": flip(signature) + encoded,
+		"an edited payload": signature + edited,
+		"a short signature": signature[:8] + encoded,
+		"a bare payload":    encoded,
 	} {
-		if _, err := signer.Read(token, scopeOf("20")); !errors.Is(err, ErrSignature) {
-			t.Errorf("%s was not refused as a broken signature: %v", name, err)
+		if _, err := signer.Read(token, scopeOf("20")); !errors.Is(err, ErrMalformed) && !errors.Is(err, ErrSignature) {
+			t.Errorf("%s was not refused as a broken cursor: %v", name, err)
 		}
 	}
 }
