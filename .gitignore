@@ -71,3 +71,6 @@ Desktop.ini
 *.swp
 *.swo
 *~
+
+# The build cache of a local Go run is machine state, not a source of the repository.
+.gocache/

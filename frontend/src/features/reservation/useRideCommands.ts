@@ -1,7 +1,8 @@
 import type { Account } from '../account/useAccount.ts';
 import type { CurrentRental } from './useCurrentRental.ts';
-import { pauseRide, resumeRide, startRide } from '../../shared/api/rides.ts';
+import { finishRide, pauseRide, resumeRide, startRide } from '../../shared/api/rides.ts';
 import { useCommandSender, type CommandAnswer } from './commandSender.ts';
+import { storeCompletedRide } from './completedRide.ts';
 import type { UnfinishedCommand } from './unfinishedCommand.ts';
 import type { CommandPhase } from './commandPhase.ts';
 
@@ -22,6 +23,9 @@ export type RideCommands = {
   /** Carries the ride on after a pause. */
   carryOn: (rentalId: string) => void;
 
+  /** Ends the ride and issues the invoice for it. */
+  finish: (rentalId: string) => void;
+
   /** Sends the stored command again with the key it was first sent with. */
   repeat: () => void;
 
@@ -30,9 +34,13 @@ export type RideCommands = {
 };
 
 /**
- * useRideCommands sends the three commands that move a rental through its ride. It is the sender the
+ * useRideCommands sends the commands that move a rental through its ride. It is the sender the
  * reservation uses, told a different set of commands: the same key is kept before the request, the
  * same key is presented by a repeat, and the current rental is read again after every answer.
+ *
+ * A ride that is ended is no longer current, so the answer to that one command is also what the panel
+ * shows about it afterwards: the ending is written down by the handler that received it, because a
+ * render that React discards must not be what a person's finished ride was remembered by.
  *
  * Closing the tab changes nothing here. The ride lives in the database, and a client that comes back
  * reads it rather than sending a command about it.
@@ -45,7 +53,7 @@ export function useRideCommands(account: Account, current: CurrentRental): RideC
     owner,
     csrfToken,
     refresh: current.retry,
-    send: rideCommand,
+    send: (command, credentials) => rideCommand(command, credentials, owner),
   });
 
   return {
@@ -54,15 +62,17 @@ export function useRideCommands(account: Account, current: CurrentRental): RideC
     begin: (rentalId) => void start('start', { rentalId }),
     hold: (rentalId) => void start('pause', { rentalId }),
     carryOn: (rentalId) => void start('resume', { rentalId }),
+    finish: (rentalId) => void start('finish', { rentalId }),
     repeat,
     settle,
   };
 }
 
 /** One ride command, which names the ride it moves and asks for the transition it makes. */
-function rideCommand(
+async function rideCommand(
   command: UnfinishedCommand,
   credentials: { csrfToken: string; key: string },
+  owner: string | undefined,
 ): Promise<CommandAnswer> {
   const rentalId = command.parameters.rentalId ?? '';
   switch (command.action) {
@@ -72,7 +82,27 @@ function rideCommand(
       return pauseRide(rentalId, credentials);
     case 'resume':
       return resumeRide(rentalId, credentials);
+    case 'finish':
+      return finishedRide(rentalId, credentials, owner);
     default:
-      return Promise.resolve({ outcome: 'unknown' });
+      return { outcome: 'unknown' };
   }
+}
+
+/**
+ * finishedRide ends the ride and keeps the answer when the service confirmed it. The record is written
+ * here, where the answer arrived, rather than by the render that shows it: what a person sees after a
+ * reload has to be something a handler wrote down.
+ */
+async function finishedRide(
+  rentalId: string,
+  credentials: { csrfToken: string; key: string },
+  owner: string | undefined,
+): Promise<CommandAnswer> {
+  const answer = await finishRide(rentalId, credentials);
+  if (answer.outcome === 'done' && owner !== undefined) {
+    storeCompletedRide(owner, answer.answer, Date.now());
+  }
+
+  return answer;
 }

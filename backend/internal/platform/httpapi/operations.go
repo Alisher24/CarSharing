@@ -69,6 +69,21 @@ var (
 			http.StatusServiceUnavailable: shapeOf(declaredBody[servedapi.ApiError](), resumeUnavailable),
 		},
 	}
+
+	// A finish answers a different shape from the three commands that move a ride: the ride it ended
+	// together with the invoice of it. Its statuses are the ones the contract declares for it, which
+	// are the same set the ride commands state.
+	finishRentalOperation = commandOperation{
+		name:    "finish",
+		path:    finishRentalPath,
+		refused: http.StatusConflict,
+		answers: map[int]answerShape{
+			http.StatusOK:                 shapeOf(declaredBody[servedapi.FinishResult](), finishSucceeded),
+			http.StatusNotFound:           shapeOf(declaredBody[servedapi.ApiError](), finishNotFound),
+			http.StatusConflict:           shapeOf(declaredBody[servedapi.ApiError](), finishConflict),
+			http.StatusServiceUnavailable: shapeOf(declaredBody[servedapi.ApiError](), finishUnavailable),
+		},
+	}
 )
 
 // reserveCreated spells the answer of a reservation that was made.
@@ -189,6 +204,32 @@ func resumeUnavailable(body servedapi.ApiError, _ bool) any {
 	return servedapi.ResumeRental503JSONResponse{Body: body}
 }
 
+// finishSucceeded spells the answer of a ride that ended, which carries the invoice of it.
+func finishSucceeded(body servedapi.FinishResult, _ bool) any {
+	return servedapi.FinishRental200JSONResponse{
+		Body:    body,
+		Headers: servedapi.FinishRental200ResponseHeaders{},
+	}
+}
+
+// finishNotFound spells a rental this account does not hold.
+func finishNotFound(body servedapi.ApiError, _ bool) any {
+	return servedapi.FinishRental404JSONResponse{Body: body}
+}
+
+// finishConflict spells a finish that was refused where the ride stands or how its position reads.
+func finishConflict(body servedapi.ApiError, _ bool) any {
+	return servedapi.FinishRental409JSONResponse{
+		Body:    body,
+		Headers: servedapi.FinishRental409ResponseHeaders{RetryAfter: retryAfterOf(body)},
+	}
+}
+
+// finishUnavailable spells a finish that could not be decided at all.
+func finishUnavailable(body servedapi.ApiError, _ bool) any {
+	return servedapi.FinishRental503JSONResponse{Body: body}
+}
+
 // markReplayed marks an answer an earlier attempt already gave. It is a header on the response object
 // rather than a status, and every command operation declares it for every status it answers.
 func markReplayed(spelled any) any {
@@ -223,6 +264,12 @@ func markReplayed(spelled any) any {
 	case servedapi.ResumeRental409JSONResponse:
 		answer.Headers.IdempotencyReplayed = replayedHeader(true)
 		return answer
+	case servedapi.FinishRental200JSONResponse:
+		answer.Headers.IdempotencyReplayed = replayedHeader(true)
+		return answer
+	case servedapi.FinishRental409JSONResponse:
+		answer.Headers.IdempotencyReplayed = replayedHeader(true)
+		return answer
 	default:
 		return spelled
 	}
@@ -248,6 +295,9 @@ func attachRetryAfter(spelled any, retryAfter *int) any {
 		answer.Headers.RetryAfter = retryAfter
 		return answer
 	case servedapi.ResumeRental409JSONResponse:
+		answer.Headers.RetryAfter = retryAfter
+		return answer
+	case servedapi.FinishRental409JSONResponse:
 		answer.Headers.RetryAfter = retryAfter
 		return answer
 	default:

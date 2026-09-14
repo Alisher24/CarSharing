@@ -6,10 +6,10 @@
  */
 
 /** The action a stored command asked for. */
-export type CommandAction = 'reserve' | 'cancel' | 'start' | 'pause' | 'resume';
+export type CommandAction = 'reserve' | 'cancel' | 'start' | 'pause' | 'resume' | 'finish';
 
 /** The actions a stored record may name, which is what makes a record readable at all. */
-const COMMAND_ACTIONS: readonly CommandAction[] = ['reserve', 'cancel', 'start', 'pause', 'resume'];
+const COMMAND_ACTIONS: readonly CommandAction[] = ['reserve', 'cancel', 'start', 'pause', 'resume', 'finish'];
 
 /**
  * One command whose outcome the browser does not know. It is written before the request is sent, so

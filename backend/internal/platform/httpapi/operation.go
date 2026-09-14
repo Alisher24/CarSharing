@@ -89,7 +89,8 @@ func (operation commandOperation) spell(status int, encoded []byte, replayed boo
 }
 
 // rideRender spells what a ride command decided: the rental as it now stands on a move, and the refusal
-// it decided on instead. A command that decided nothing is the answer a refusal-only render would give
+// it decided on instead — spelled as the operation that was asked, because each of the three declares
+// the statuses it answers. A command that decided nothing is the answer a refusal-only render would give
 // for a success as well, so the branch is here rather than left to every caller.
 func rideRender(ctx context.Context, operation commandOperation) rentals.Render {
 	return func(outcome rentals.Outcome) (rentals.Response, error) {
@@ -107,11 +108,11 @@ func rideRender(ctx context.Context, operation commandOperation) rentals.Render 
 	}
 }
 
-// attempt describes one attempt at this command: the key a repeat answers with, the fingerprint of what
-// it asked for, which is the method, the path with the rental it names and the body it does not take,
+// attemptOf describes one attempt at this command: the key a repeat answers with, the fingerprint of
+// what it asked for — the method, the path with the rental it names and the body it does not take —
 // and the way its answer is spelled.
-func (operation commandOperation) attempt(
-	ctx context.Context, rentalID string, key idempotency.Key,
+func (operation commandOperation) attemptOf(
+	rentalID string, key idempotency.Key, render rentals.Render,
 ) (rentals.Attempt, error) {
 	fingerprint, err := commandFingerprintOf(http.MethodPost, operation.route(rentalID), absentBody)
 	if err != nil {
@@ -120,8 +121,15 @@ func (operation commandOperation) attempt(
 	return rentals.Attempt{
 		Key:         key,
 		Fingerprint: fingerprint,
-		Render:      rideRender(ctx, operation),
+		Render:      render,
 	}, nil
+}
+
+// attempt describes one attempt at a ride command, which every one of them spells as itself.
+func (operation commandOperation) attempt(
+	ctx context.Context, rentalID string, key idempotency.Key,
+) (rentals.Attempt, error) {
+	return operation.attemptOf(rentalID, key, rideRender(ctx, operation))
 }
 
 // route names the resource this command acts on, which is the path its fingerprint covers.

@@ -105,12 +105,14 @@ type Reservations interface {
 	Cancel(ctx context.Context, command rentals.CancelCommand) (rentals.Answered, error)
 	Current(ctx context.Context, caller uuid.UUID) (rentals.Current, error)
 
-	// The ride commands move a rental between a reservation, a driving ride and a paused one. They
-	// belong to the same module and the same surface, so they are asked of the same dependency rather
-	// than of a second one naming one implementation twice.
+	// The ride commands move a rental between a reservation, a driving ride and a paused one, and the
+	// finish ends it and issues the invoice. They belong to the same module and the same surface, so
+	// they are asked of the same dependency rather than of a second one naming one implementation
+	// twice.
 	StartRide(ctx context.Context, command rentals.StartRideCommand) (rentals.Answered, error)
 	PauseRide(ctx context.Context, command rentals.PauseRideCommand) (rentals.Answered, error)
 	ResumeRide(ctx context.Context, command rentals.ResumeRideCommand) (rentals.Answered, error)
+	FinishRide(ctx context.Context, command rentals.FinishCommand) (rentals.Answered, error)
 }
 
 // reservationHandlers answers the operations that belong to one signed-in person's own reservation.

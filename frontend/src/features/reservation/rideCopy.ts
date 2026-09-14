@@ -1,10 +1,11 @@
-import type { Progress } from '../../shared/api/current.ts';
+import type { FinishResult, Progress } from '../../shared/api/current.ts';
 import { somText } from '../fleet/money.ts';
 import type { RideMode } from './ridePace.ts';
 
 /**
- * The Russian wording of a ride in force. A ride is a state a person watches rather than a step they
- * take, so what it says is the mode it is in and what the ride has cost so far.
+ * The Russian wording of a ride in force and of the ending of one. A ride is a state a person watches
+ * rather than a step they take, so what it says is the mode it is in and what the ride has cost so
+ * far; the ending is a decision, so it is asked and then reported.
  */
 
 /** What each mode of a ride is called. */
@@ -37,6 +38,39 @@ export const PAUSE_ACTION = 'Пауза';
 /** What the control of a held ride offers. */
 export const RESUME_ACTION = 'Продолжить';
 
+/** What the control that ends the ride offers. */
+export const FINISH_ACTION = 'Завершить поездку';
+
+/** What ending a ride asks before it is sent, because an ending is not undone by asking again. */
+export const FINISH_QUESTION = 'Завершить поездку?';
+
+/** What the question warns about: the invoice is issued for what the ride has taken so far. */
+export const FINISH_WARNING = 'Счёт будет выставлен за время поездки и не изменится после завершения';
+
+/** What the control that keeps the ride going offers, instead of ending it. */
+export const KEEP_RIDING_ACTION = 'Продолжить поездку';
+
+/** What the panel says once the server confirmed that the ride is over. */
+export const RIDE_FINISHED = 'Поездка завершена';
+
+/** What is written before the total of the invoice a finished ride produced. */
+export const INVOICE_TOTAL = 'Итог счёта';
+
+/** What is written before why the ride ended. */
+export const COMPLETION_REASON = 'Причина';
+
+/** What is written before the moment the ride ended. */
+export const FINISHED_AT = 'Завершена';
+
+/** What each completion reason is called, in the words a person reads. */
+export const COMPLETION_TEXT: Record<string, string> = {
+  user_finished: 'поездку завершил пользователь',
+  energy_depleted: 'закончился запас энергии или топлива',
+};
+
+/** What a completion reason the interface does not know is written as. */
+export const COMPLETION_UNKNOWN = 'причина не указана';
+
 /**
  * What the ride has cost so far, as the service stated it. The estimate is the one the service
  * computed from the rental's own rates, so the interface divides it exactly rather than estimating
@@ -44,4 +78,18 @@ export const RESUME_ACTION = 'Продолжить';
  */
 export function amountText(progress: Progress): string {
   return somText(progress.estimated_amount_tyiyn) ?? UNREADABLE_VALUE;
+}
+
+/**
+ * What a finished ride cost, as the invoice the service issued states it. The total is the one the
+ * invoice publishes rather than the sum of its lines computed here: an interface that added them up
+ * itself could disagree with the amount a person is charged.
+ */
+export function invoiceTotalText(finished: FinishResult): string {
+  return somText(finished.invoice.invoice.total_amount_tyiyn) ?? UNREADABLE_VALUE;
+}
+
+/** Why a ride ended, in the words the interface shows for the reason the contract carries. */
+export function completionText(finished: FinishResult): string {
+  return COMPLETION_TEXT[finished.rental.completion.reason] ?? COMPLETION_UNKNOWN;
 }

@@ -65,6 +65,11 @@ func (s *Service) ResumeRide(ctx context.Context, command ResumeRideCommand) (An
 	})
 }
 
+// FinishRide ends the ride of one rental and issues the invoice for it.
+func (s *Service) FinishRide(ctx context.Context, command FinishCommand) (Answered, error) {
+	return s.Finish(ctx, command)
+}
+
 // startRideStatement moves one reservation into a ride that is driving. The ride begins at the moment
 // the transaction fixed, which becomes both the moment the ride started and the moment its first mode
 // began: they are one instant, so they are one value.

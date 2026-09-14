@@ -3,6 +3,7 @@ package notifications
 import (
 	"time"
 
+	"github.com/Alisher24/CarSharing/backend/internal/completion"
 	"github.com/google/uuid"
 )
 
@@ -37,6 +38,11 @@ type Notification struct {
 	// rather than stored here, because a warning publishes the deadline it warns about and a second
 	// copy of it could disagree with the rental.
 	ExpiresAt time.Time
+
+	// InvoiceID and CompletionReason are what the report of a finished ride tells about: the invoice
+	// the ride produced and why it ended. A warning about a reservation states neither.
+	InvoiceID        string
+	CompletionReason completion.Reason
 
 	// Active is whether what the notification tells about is still in force. Marking a notification
 	// read does not change it: having acknowledged a warning is a different fact from the warning

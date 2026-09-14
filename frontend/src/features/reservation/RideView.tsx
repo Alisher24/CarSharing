@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { LiveRental } from '../../shared/api/current.ts';
 import type { ServerClock } from './countdown.ts';
 import { commandText, type CommandPhase } from './commandPhase.ts';
@@ -6,7 +7,11 @@ import {
   amountText,
   DRIVING_TOTAL,
   ESTIMATED_AMOUNT,
+  FINISH_ACTION,
+  FINISH_QUESTION,
+  FINISH_WARNING,
   IN_MODE,
+  KEEP_RIDING_ACTION,
   PAUSE_ACTION,
   PAUSED_TOTAL,
   RESUME_ACTION,
@@ -39,15 +44,16 @@ type RideViewProps = {
 
 /**
  * RideView is what a person reads about the ride they are on: the vehicle, the mode it is in and how
- * long it has been in it, what the ride has cost so far at the rates of its own snapshot, and the one
- * control that holds the ride or carries it on. A rental that has not started a ride has nothing to
- * show here, and says so by showing nothing.
+ * long it has been in it, what the ride has cost so far at the rates of its own snapshot, and the
+ * controls that hold the ride, carry it on and end it. A rental that has not started a ride has
+ * nothing to show here, and says so by showing nothing.
  *
  * Nothing here remembers the ride. The mode and the durations come from the answer the server gave,
  * the running value is measured against the server's own moment, and a client that comes back to a
  * closed tab therefore shows the ride as the database holds it rather than as it was left.
  */
 export function RideView({ rental, ride, clock, onShowVehicle }: RideViewProps) {
+  const [ending, setEnding] = useState(false);
   const now = useClockTick();
   if (!hasStarted(rental)) return null;
 
@@ -94,7 +100,35 @@ export function RideView({ rental, ride, clock, onShowVehicle }: RideViewProps) 
             {RESUME_ACTION}
           </button>
         )}
+        <button
+          className="action-button"
+          type="button"
+          disabled={running(ride.phase, 'finish')}
+          onClick={() => setEnding(true)}
+        >
+          {FINISH_ACTION}
+        </button>
       </div>
+
+      {ending && (
+        <div className="reservation-panel-confirm" role="group" aria-label={FINISH_QUESTION}>
+          <p className="reservation-panel-question">{FINISH_QUESTION}</p>
+          <p className="reservation-panel-warning">{FINISH_WARNING}</p>
+          <button
+            className="action-button"
+            type="button"
+            onClick={() => {
+              setEnding(false);
+              ride.finish(rental.id);
+            }}
+          >
+            {FINISH_ACTION}
+          </button>
+          <button className="action-button" type="button" onClick={() => setEnding(false)}>
+            {KEEP_RIDING_ACTION}
+          </button>
+        </div>
+      )}
 
       {notice !== undefined && <p className="reservation-panel-notice">{notice}</p>}
     </div>

@@ -2,7 +2,16 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import type { Progress } from '../../shared/api/current.ts';
 import { commandText, type CommandPhase } from './commandPhase.ts';
-import { amountText, PAUSE_ACTION, RESUME_ACTION, START_ACTION } from './rideCopy.ts';
+import {
+  amountText,
+  FINISH_ACTION,
+  FINISH_QUESTION,
+  FINISH_WARNING,
+  KEEP_RIDING_ACTION,
+  PAUSE_ACTION,
+  RESUME_ACTION,
+  START_ACTION,
+} from './rideCopy.ts';
 
 /** One progress statement, with the amount a test is about. */
 function progress(estimatedAmountTyiyn: string): Progress {
@@ -40,6 +49,28 @@ describe('the controls of a ride', () => {
     assert.equal(START_ACTION, 'Начать поездку');
     assert.equal(PAUSE_ACTION, 'Пауза');
     assert.equal(RESUME_ACTION, 'Продолжить');
+    assert.equal(FINISH_ACTION, 'Завершить поездку');
+    assert.equal(KEEP_RIDING_ACTION, 'Продолжить поездку');
+  });
+
+  test('ask before a ride is ended, because an ending is not undone by asking again', () => {
+    assert.match(FINISH_QUESTION, /Завершить поездку\?/);
+    assert.match(FINISH_WARNING, /Счёт/);
+  });
+});
+
+describe('what an ending is reported as', () => {
+  test('is named while the ending is on its way', () => {
+    assert.equal(commandText({ state: 'sending', action: 'finish' }), 'Завершаем поездку…');
+  });
+
+  test('explains the two refusals an ending can meet where the ride stands', () => {
+    const outside = commandText({ state: 'refused', action: 'finish', code: 'OUTSIDE_SERVICE_ZONE' });
+    const stale = commandText({ state: 'refused', action: 'finish', code: 'TELEMETRY_STALE' });
+
+    assert.match(outside ?? '', /вне зоны/);
+    assert.match(stale ?? '', /подтверждалось/);
+    assert.notEqual(outside, stale);
   });
 });
 

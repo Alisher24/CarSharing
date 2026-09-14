@@ -3561,7 +3561,7 @@ paths:
     post:
       operationId: finishRental
       summary: finish Rental
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-body-limit: 65536
       description: >-
         Use confirmed server telemetry, never a client finish coordinate. Reconcile first: energy depletion
