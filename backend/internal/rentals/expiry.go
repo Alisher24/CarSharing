@@ -7,20 +7,19 @@ import (
 
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// ExpirySweepInterval is how often reservations are checked against their deadlines. A reservation
-// is therefore released within a second of running out, which is close enough for a person watching
-// the map to see the vehicle free itself.
-const ExpirySweepInterval = time.Second
+// DeadlineSweepInterval is how often reservations are checked against their deadlines. A reservation
+// is therefore released, and its warning created, within a second of the moment that decides it,
+// which is close enough for a person watching the map to see the vehicle free itself.
+const DeadlineSweepInterval = time.Second
 
-// Expiry ends reservations whose deadline has passed. It is the rentals module's own transition: the
+// expiry ends reservations whose deadline has passed. It is the rentals module's own transition: the
 // catalog reads the result rather than depicting a release the database has not made.
-type Expiry struct{ pool *pgxpool.Pool }
+type expiry struct{ pool *pgxpool.Pool }
 
-func NewExpiry(pool *pgxpool.Pool) *Expiry { return &Expiry{pool: pool} }
+func newExpiry(pool *pgxpool.Pool) *expiry { return &expiry{pool: pool} }
 
 // dueReservations finds the reservations that have run out. The selection takes no lock: a
 // reservation an equally timed sweep or a command has already ended since is left alone by the
@@ -49,13 +48,13 @@ func dueReservations(ctx context.Context, pool *pgxpool.Pool) ([]string, error) 
 	return due, rows.Err()
 }
 
-// ExpireDue ends every reservation already past its deadline and reports how many it ended.
+// expireDue ends every reservation already past its deadline and reports how many it ended.
 //
 // Each reservation is ended in its own transaction under the shared lock order, so a sweep and a
 // command arriving at the same moment wait for each other rather than taking the accounts and
 // vehicles of the fleet in two different orders. A reservation another transaction ended first is
 // counted as not ended by this sweep: the transition happened once.
-func (e *Expiry) ExpireDue(ctx context.Context) (int64, error) {
+func (e *expiry) expireDue(ctx context.Context) (int64, error) {
 	due, err := dueReservations(ctx, e.pool)
 	if err != nil {
 		return 0, err
@@ -76,9 +75,9 @@ func (e *Expiry) ExpireDue(ctx context.Context) (int64, error) {
 // expire ends one reservation that was due when the sweep read it. The deadline is compared again
 // after the locks with the moment the transaction fixed, because the wait for those locks may have
 // been long: a reservation that is not due at that moment is left for a later sweep.
-func (e *Expiry) expire(ctx context.Context, id string) (bool, error) {
+func (e *expiry) expire(ctx context.Context, id string) (bool, error) {
 	var ended bool
-	err := transact(ctx, e.pool, expiryParticipants(e.pool, id),
+	err := transact(ctx, e.pool, rentalParticipants(e.pool, id),
 		func(txCtx context.Context, moment time.Time) error {
 			due, err := rentalByID(txCtx, e.pool, id)
 			if errors.Is(err, ErrRentalNotFound) {
@@ -87,7 +86,7 @@ func (e *Expiry) expire(ctx context.Context, id string) (bool, error) {
 			if err != nil {
 				return err
 			}
-			if due.Stage != stage.Reserved || !due.Overdue(moment) {
+			if !due.Overdue(moment) {
 				return nil
 			}
 			ended, err = endReservation(txCtx, e.pool, due)
@@ -96,21 +95,25 @@ func (e *Expiry) expire(ctx context.Context, id string) (bool, error) {
 	return ended, err
 }
 
-// expiryParticipants is the rows ending one reservation touches: the account that holds it, its
-// vehicle, and the rental itself.
-func expiryParticipants(pool *pgxpool.Pool, id string) func(context.Context) (participants, error) {
-	return func(ctx context.Context) (participants, error) {
-		due, err := rentalByID(ctx, pool, id)
-		if errors.Is(err, ErrRentalNotFound) {
-			return participants{}, nil
-		}
-		if err != nil {
-			return participants{}, err
-		}
-		return participants{
-			users:    []uuid.UUID{due.UserID},
-			vehicles: []string{due.VehicleID},
-			rentals:  []string{due.ID},
-		}, nil
+// liveRentalAt reads the rental that currently holds one account or one vehicle at the moment the
+// transaction fixed, ending it first when its deadline has been reached.
+//
+// An overdue reservation is not live for any path: whoever meets one — a command, the read of what
+// is current — releases it here and decides its own subject afterwards, in the same transaction. The
+// release is therefore committed with that decision, and a domain refusal does not undo it, which is
+// what lets another account take a vehicle the fleet has not swept yet.
+func liveRentalAt(
+	ctx context.Context, pool *pgxpool.Pool, moment time.Time, selection string, identifier any,
+) (*Rental, error) {
+	held, err := liveRentalOf(ctx, pool, selection, identifier)
+	if err != nil || held == nil {
+		return nil, err
 	}
+	if !held.Overdue(moment) {
+		return held, nil
+	}
+	if _, err = endReservation(ctx, pool, *held); err != nil {
+		return nil, err
+	}
+	return nil, nil
 }

@@ -16,6 +16,13 @@ export type Deadline = {
   receivedAt: Date;
 };
 
+/**
+ * How often a countdown on screen is recomputed. It is a redraw rather than a count: the value comes
+ * from the deadline, the moment the server computed its answer at and the moment that answer arrived,
+ * so a tick that never happened costs a late redraw and nothing else.
+ */
+export const COUNTDOWN_TICK_MILLISECONDS = 1_000;
+
 /** What the remaining time of a reservation is, and how it is written. */
 export type Countdown =
   { state: 'left'; milliseconds: number; text: string } | { state: 'due' } | { state: 'unreadable' };

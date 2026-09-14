@@ -12,8 +12,9 @@ export type CatalogSession = {
 /**
  * catalogAnswers builds the answers of the catalog's coordinator. Each one states which session it
  * belongs to and what storing it means; how many answers may still arrive is the coordinator's
- * business. The private resource is answered by nobody here: the catalog reads what a visitor reads,
- * and the account's own reservation has its own reader.
+ * business. The private documents are answered by nobody here: the catalog reads what a visitor
+ * reads, and the reservation of the signed-in person and the notifications addressed to them have
+ * their own readers.
  */
 export function catalogAnswers(catalog: CatalogSession): Record<DocumentKind, AnswerHandlers> {
   return {
@@ -21,6 +22,7 @@ export function catalogAnswers(catalog: CatalogSession): Record<DocumentKind, An
     zones: listAnswers<Zone>(catalog.session),
     tariffs: listAnswers<Tariff>(catalog.session),
     current: notReadHere,
+    notifications: notReadHere,
   };
 }
 

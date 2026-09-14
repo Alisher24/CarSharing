@@ -74,9 +74,10 @@ function readsOf(coordinator: ReadCoordinator): Record<DocumentKind, ResourceRea
     vehicles: { coordinator, document: 'vehicles', session: ANONYMOUS_SESSION },
     zones: { coordinator, document: 'zones', session: ANONYMOUS_SESSION },
     tariffs: { coordinator, document: 'tariffs', session: ANONYMOUS_SESSION },
-    // The private resource is read by the reader of the account's own reservation; this coordinator
-    // answers nothing for it, and nothing here ever asks for it.
+    // The private documents are read by the readers of the account's own reservation and of its
+    // notifications; this coordinator answers nothing for them, and nothing here ever asks for one.
     current: { coordinator, document: 'current', session: ANONYMOUS_SESSION },
+    notifications: { coordinator, document: 'notifications', session: ANONYMOUS_SESSION },
   };
 }
 

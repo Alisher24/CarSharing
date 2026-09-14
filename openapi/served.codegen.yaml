@@ -20,6 +20,8 @@ output-options:
     - getCurrentRental
     - reserve
     - cancelRental
+    - getNotifications
+    - readNotification
     # The two streams are served here too: the boundary validates them against the contract, and the
     # generated streaming response writes the frames as they are produced.
     - getPublicEvents

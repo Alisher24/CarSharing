@@ -109,9 +109,22 @@ func reserveParticipants(pool *pgxpool.Pool, command ReserveCommand) func(contex
 func (s *Service) reservationWithin(
 	ctx context.Context, moment time.Time, command ReserveCommand,
 ) (Outcome, error) {
-	// The day's allowance is judged first, because it is what a person must be told about: their own
-	// live rental is a consequence of having spent it, and a client told only about the rental would
-	// offer the command again as soon as that rental ended.
+	// An overdue reservation is not live for any path, so the two this command meets are released
+	// before anything is judged: the one holding the caller and the one holding the chosen vehicle.
+	// Both releases happen in this transaction, which is what lets a vehicle the fleet has not swept
+	// yet be taken here and now — and why the refusals below do not undo them, because the answer is
+	// committed with the transitions it describes.
+	held, err := liveRentalAt(ctx, s.pool, moment, userLiveRentalSelection, command.Caller)
+	if err != nil {
+		return Outcome{}, err
+	}
+	if _, err = liveRentalAt(ctx, s.pool, moment, vehicleLiveRentalSelection, command.VehicleID); err != nil {
+		return Outcome{}, err
+	}
+
+	// The day's allowance is judged first of what remains, because it is what a person must be told
+	// about: their own live rental is a consequence of having spent it, and a client told only about
+	// the rental would offer the command again as soon as that rental ended.
 	limit, err := readDailyLimit(ctx, s.pool, command.Caller, moment)
 	if err != nil {
 		return Outcome{}, err
@@ -120,10 +133,6 @@ func (s *Service) reservationWithin(
 		return refused(moment, Refusal{Kind: DailyLimitReached, Limit: limit}), nil
 	}
 
-	held, err := liveRentalOf(ctx, s.pool, userLiveRentalSelection, command.Caller)
-	if err != nil {
-		return Outcome{}, err
-	}
 	if held != nil {
 		return refused(moment, Refusal{Kind: ActiveRentalExists}), nil
 	}

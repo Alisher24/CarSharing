@@ -41,16 +41,21 @@ func NewHandler(dependencies Dependencies) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	notifications, err := newNotificationHandlers(dependencies.Notifications, dependencies.Cursors)
+	if err != nil {
+		return nil, err
+	}
 	streaming, err := newStreams(dependencies.Events, dependencies.Sessions)
 	if err != nil {
 		return nil, err
 	}
 	served := server{
-		health:              health{probe: dependencies.Probe},
-		accounts:            accounts,
-		catalogHandlers:     handlers,
-		reservationHandlers: reservations,
-		streams:             streaming,
+		health:               health{probe: dependencies.Probe},
+		accounts:             accounts,
+		catalogHandlers:      handlers,
+		reservationHandlers:  reservations,
+		notificationHandlers: notifications,
+		streams:              streaming,
 	}
 	strict := servedapi.NewStrictHandlerWithOptions(served, nil, strictErrorHandlers())
 	policy := transport{

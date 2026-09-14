@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { CurrentSnapshot, Rental } from '../../shared/api/current.ts';
 import type { Resource } from '../../shared/api/Resource.ts';
 import { loadedValue } from '../../shared/api/Resource.ts';
-import { countdownAt, type Countdown, type Deadline } from './countdown.ts';
+import type { Countdown, Deadline } from './countdown.ts';
 import {
   CANCEL_ACTION,
   CANCEL_CONFIRMED,
@@ -26,14 +26,8 @@ import {
   vehicleName,
 } from './reservationCopy.ts';
 import { withinRepeatWindow } from './unfinishedCommand.ts';
+import { useCountdown } from './useCountdown.ts';
 import type { Reservations } from './useReservations.ts';
-
-/**
- * How often the remaining time is recomputed. It is a redraw rather than a count: the value comes
- * from the deadline, the moment the server computed its answer at and the moment that answer
- * arrived, so a tick that never happened costs a late redraw and nothing else.
- */
-const TICK_MILLISECONDS = 1_000;
 
 type ReservationPanelProps = {
   /** What the private read answered. */
@@ -176,17 +170,6 @@ function UnknownCommand({ reservations }: { reservations: Reservations }) {
       )}
     </div>
   );
-}
-
-function useCountdown(deadline: Deadline | undefined): Countdown | undefined {
-  const [now, setNow] = useState(() => new Date());
-
-  useEffect(() => {
-    const repeat = window.setInterval(() => setNow(new Date()), TICK_MILLISECONDS);
-    return () => window.clearInterval(repeat);
-  }, []);
-
-  return deadline === undefined ? undefined : countdownAt(deadline, now);
 }
 
 /**

@@ -178,7 +178,7 @@ export const getNotifications = <ThrowOnError extends boolean = false>(options?:
 /**
  * read Notification
  *
- * Repeated reads return the same final notification; no Idempotency-Key required. No request body is permitted, including an empty JSON object.
+ * Repeated reads return the same final notification; no Idempotency-Key required. The version moves once, at the first read, and reading does not deactivate: active follows the reservation, so a warning read during the last minute stays active until the reservation leaves reserved. No request body is permitted, including an empty JSON object.
  */
 export const readNotification = <ThrowOnError extends boolean = false>(options: Options<ReadNotificationData, ThrowOnError>): RequestResult<ReadNotificationResponses, ReadNotificationErrors, ThrowOnError> => (options.client ?? client).post<ReadNotificationResponses, ReadNotificationErrors, ThrowOnError>({
     security: [{

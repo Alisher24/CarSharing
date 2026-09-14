@@ -16,6 +16,7 @@ describe('reading what a frame says', () => {
       ['zone.changed', 'zones'],
       ['tariff.changed', 'tariffs'],
       ['rental.changed', 'current'],
+      ['notification.changed', 'notifications'],
     ] as const;
 
     for (const [name, resource] of changes) {

@@ -1,6 +1,7 @@
 import type { ApiError, CurrentSnapshot, Rental, TariffSnapshot } from '../../shared/api/current.ts';
 import { SERVICE_TIME_ZONE } from '../../shared/locale.ts';
 import { somText } from '../fleet/money.ts';
+import type { Countdown } from './countdown.ts';
 import type { CommandPhase } from './useReservations.ts';
 
 /**
@@ -51,6 +52,24 @@ export const RIDE_RUNNING = 'Аренда начата: поездка идёт'
 
 /** The countdown at zero, while the server has not yet confirmed what happened. */
 export const EXPIRY_PENDING = 'Срок брони истёк, проверяем состояние';
+
+/** What is written before the time a reservation still has, wherever it is shown. */
+export const TIME_LEFT = 'Осталось';
+
+/** The heading of the warning that a reservation is running out. */
+export const WARNING_HEADING = 'Бронь заканчивается';
+
+/** What the warning says before the moment the reservation runs to. */
+export const WARNING_ENDS_AT = 'Бронь закончится';
+
+/** The one action of the warning, which marks it read on the server. */
+export const READ_ACTION = 'Прочитано';
+
+/** What the warning says while its read is on its way to the server. */
+export const READ_PENDING = 'Отмечаем прочитанным…';
+
+/** What the warning says when its read did not reach the server, so the person can ask again. */
+export const READ_FAILED = 'Не удалось отметить прочитанным. Попробуйте ещё раз';
 
 /** What the panel says when nothing is current and no reason was confirmed. */
 export const NOTHING_CURRENT = 'Текущей брони нет';
@@ -167,6 +186,31 @@ export function currentRental(snapshot: CurrentSnapshot | undefined): Rental | u
 /** The model of the vehicle a rental holds, which is what a person recognises it by. */
 export function vehicleName(rental: Rental): string {
   return rental.vehicle.model;
+}
+
+/** Everything the warning about a reservation that is running out says. */
+export type WarningText = { vehicle: string; deadline: string; remaining: string };
+
+/**
+ * warningText writes the warning about one reservation: which vehicle is held, when the reservation
+ * ends and how long is left. A countdown that is not there, that cannot be read or that has reached
+ * the deadline is not a warning any more — the last minute is over — so nothing is written and
+ * nothing is shown.
+ */
+export function warningText(
+  warning: { vehicle: string; expiresAt: string },
+  countdown: Countdown | undefined,
+): WarningText | undefined {
+  if (countdown === undefined || countdown.state !== 'left') return undefined;
+
+  const endsAt = bishkekMoment(warning.expiresAt);
+  if (endsAt === undefined) return undefined;
+
+  return {
+    vehicle: warning.vehicle,
+    deadline: `${WARNING_ENDS_AT} ${endsAt}`,
+    remaining: `${TIME_LEFT} ${countdown.text}`,
+  };
 }
 
 /**

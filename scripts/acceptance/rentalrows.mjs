@@ -20,14 +20,13 @@ const FROZEN_COLUMNS = `
         tariff_paused_rate_tyiyn_per_started_minute,
         tariff_version`;
 
-/** One rental to write, with the moments stated as SQL expressions. */
 /**
- * insertRental writes one rental: its identifier, the address of the account it belongs to, the
- * vehicle, the stage, and the moments stated as SQL expressions. The conditions come from the price
- * list in force, so the row says what the operator charged at that moment rather than what a later
- * reader would charge.
+ * The statement that writes one rental: its identifier, the address of the account it belongs to,
+ * the vehicle, the stage, and the moments stated as SQL expressions. The conditions come from the
+ * price list in force, so the row says what the operator charged at that moment rather than what a
+ * later reader would charge.
  */
-export function insertRental(row) {
+function rentalStatement(row) {
   const version = row.version ?? 1;
   return `
     INSERT INTO rentals (
@@ -48,7 +47,24 @@ export function insertRental(row) {
         ${version},${FROZEN_CONDITIONS}
     FROM tariffs price
     ORDER BY price.id
-    LIMIT 1;`;
+    LIMIT 1`;
+}
+
+/**
+ * insertRental writes one rental and answers nothing. A caller that needs a value back — the
+ * identifier of a row it let the database draw — uses insertRentalReturning instead.
+ */
+export function insertRental(row) {
+  return `${rentalStatement(row)};`;
+}
+
+/**
+ * insertRentalReturning writes one rental and answers the stated column. The write is carried by a
+ * query rather than by a command of its own, because the shared database helper reports what a
+ * command printed: a statement that only selects answers the value and nothing else.
+ */
+export function insertRentalReturning(row, column) {
+  return `WITH written AS (${rentalStatement(row)} RETURNING ${column}) SELECT ${column} FROM written;`;
 }
 
 /**
