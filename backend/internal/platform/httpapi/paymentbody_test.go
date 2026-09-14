@@ -16,6 +16,7 @@ import (
 // fact nobody wrote.
 func TestEachPaymentStateIsPublishedWithItsOwnMoments(t *testing.T) {
 	moment := rideMoment()
+	declined := invoices.Declined
 	for _, asked := range []struct {
 		name    string
 		payment invoices.Invoice
@@ -39,7 +40,7 @@ func TestEachPaymentStateIsPublishedWithItsOwnMoments(t *testing.T) {
 				PaymentVersion:   2,
 				PaymentUpdatedAt: moment,
 				FailedAt:         &moment,
-				FailureCode:      invoices.Declined,
+				FailureCode:      &declined,
 			},
 			status: "failed",
 			fields: []string{"status", "failed_at", "failure_code"},
@@ -89,6 +90,7 @@ func TestEachPaymentStateIsPublishedWithItsOwnMoments(t *testing.T) {
 // settlement without the moment it happened would date a payment nobody made.
 func TestAPaymentThisBuildCannotPublishIsReported(t *testing.T) {
 	moment := rideMoment()
+	declined := invoices.Declined
 	for _, refused := range []struct {
 		name    string
 		payment invoices.Invoice
@@ -97,10 +99,14 @@ func TestAPaymentThisBuildCannotPublishIsReported(t *testing.T) {
 			Payment: invoices.PaymentStatus("refunded"), PaymentUpdatedAt: moment,
 		}},
 		{name: "a refusal without a moment", payment: invoices.Invoice{
-			Payment: invoices.FailedPayment, PaymentUpdatedAt: moment, FailureCode: invoices.Declined,
+			Payment: invoices.FailedPayment, PaymentUpdatedAt: moment, FailureCode: &declined,
 		}},
 		{name: "a refusal without a reason", payment: invoices.Invoice{
 			Payment: invoices.FailedPayment, PaymentUpdatedAt: moment, FailedAt: &moment,
+		}},
+		{name: "a refusal with a reason nobody publishes", payment: invoices.Invoice{
+			Payment: invoices.FailedPayment, PaymentUpdatedAt: moment, FailedAt: &moment,
+			FailureCode: failureCode("expired"),
 		}},
 		{name: "a settlement without a moment", payment: invoices.Invoice{
 			Payment: invoices.PaidPayment, PaymentUpdatedAt: moment,
@@ -112,6 +118,12 @@ func TestAPaymentThisBuildCannotPublishIsReported(t *testing.T) {
 			}
 		})
 	}
+}
+
+// failureCode names a reason the contract does not declare, so a check can present one.
+func failureCode(code string) *invoices.FailureCode {
+	reason := invoices.FailureCode(code)
+	return &reason
 }
 
 // The payment operation answers its own shape at every status it states, so a replayed refusal comes

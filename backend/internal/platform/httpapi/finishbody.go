@@ -156,7 +156,7 @@ func paymentBody(issued invoices.Invoice) (servedapi.Payment, error) {
 		})
 		return body, err
 	case invoices.FailedPayment:
-		if issued.FailedAt == nil || !issued.FailureCode.Known() {
+		if issued.FailedAt == nil || issued.FailureCode == nil || !issued.FailureCode.Known() {
 			return servedapi.Payment{}, fmt.Errorf(
 				"a refused payment of %s carries no moment or no reason", issued.ID)
 		}

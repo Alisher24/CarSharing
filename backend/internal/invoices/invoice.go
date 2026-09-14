@@ -64,12 +64,16 @@ type Invoice struct {
 	PaymentUpdatedAt time.Time
 
 	// PaidAt is the moment the invoice was settled and FailedAt the moment an attempt at it was
-	// refused, with the code that refusal is published under. A payment that has not reached a state
-	// carries no moment of it, and one absence is what says so: a moment that is not there is absent
-	// rather than held as the zero instant, which is a moment of the year one and not a missing one.
+	// refused, with FailureCode the reason that refusal is published under. A payment that has not
+	// reached a state carries no moment and no reason of it, and one absence is what says so: what is
+	// not there is absent rather than held as the zero instant, which is a moment of the year one and
+	// not a missing one.
+	//
+	// Each of the three is a pointer for the same reason: the columns admit null, and a value type
+	// cannot hold the absence the row states.
 	PaidAt      *time.Time
 	FailedAt    *time.Time
-	FailureCode FailureCode
+	FailureCode *FailureCode
 }
 
 // Lines is the two lines of an invoice in the order the contract publishes them.

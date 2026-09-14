@@ -6,10 +6,10 @@
  */
 
 /** The action a stored command asked for. */
-export type CommandAction = 'reserve' | 'cancel' | 'start' | 'pause' | 'resume' | 'finish';
+export type CommandAction = 'reserve' | 'cancel' | 'start' | 'pause' | 'resume' | 'finish' | 'pay';
 
 /** The actions a stored record may name, which is what makes a record readable at all. */
-const COMMAND_ACTIONS: readonly CommandAction[] = ['reserve', 'cancel', 'start', 'pause', 'resume', 'finish'];
+const COMMAND_ACTIONS: readonly CommandAction[] = ['reserve', 'cancel', 'start', 'pause', 'resume', 'finish', 'pay'];
 
 /**
  * One command whose outcome the browser does not know. It is written before the request is sent, so
@@ -21,8 +21,8 @@ export type UnfinishedCommand = {
 
   action: CommandAction;
 
-  /** What the command named: the vehicle it asked for, or the rental it acted on. */
-  parameters: { vehicleId?: string; rentalId?: string };
+  /** What the command named: the vehicle it asked for, the rental or the invoice it acted on. */
+  parameters: { vehicleId?: string; rentalId?: string; invoiceId?: string };
 
   /** The key of the original attempt, which is the only key a repeat may present. */
   key: string;
