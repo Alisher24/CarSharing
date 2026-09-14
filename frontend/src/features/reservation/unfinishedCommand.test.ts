@@ -65,6 +65,17 @@ describe('the command a browser remembers', () => {
     assert.equal(repeatableCommand('owner-2', sentAt + 1_000, storage), undefined);
   });
 
+  test('names each ride command with the rental it moves', () => {
+    for (const action of ['start', 'pause', 'resume'] as const) {
+      const storage = memoryStorage();
+      storeUnfinished(command({ action, parameters: { rentalId: 'rental-1' } }), storage);
+
+      const held = repeatableCommand('owner-1', sentAt + 1_000, storage);
+      assert.equal(held?.action, action);
+      assert.deepEqual(held?.parameters, { rentalId: 'rental-1' });
+    }
+  });
+
   test('is forgotten once its outcome is known', () => {
     const storage = memoryStorage();
     storeUnfinished(command(), storage);
@@ -80,6 +91,12 @@ describe('the command a browser remembers', () => {
       repeatableCommand('owner-1', sentAt, memoryStorage('{"owner":"owner-1","key":"k","sentAt":"now"}')),
       undefined,
     );
+  });
+
+  test('is refused when the record names an action this browser does not send', () => {
+    const stored = '{"owner":"owner-1","action":"finish","key":"k","sentAt":1}';
+
+    assert.equal(repeatableCommand('owner-1', sentAt, memoryStorage(stored)), undefined);
   });
 
   test('costs the repeat, not the command, when storage refuses the write', () => {

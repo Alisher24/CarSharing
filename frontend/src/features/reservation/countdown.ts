@@ -8,7 +8,14 @@
 export type Deadline = {
   /** The moment the reservation runs out, as the contract writes it. */
   expiresAt: string;
+} & ServerClock;
 
+/**
+ * A moment the server stated together with the local moment its answer arrived. Every interval the
+ * interface shows is measured between two such moments; the difference between them is what turns a
+ * stored moment into the moment it names now.
+ */
+export type ServerClock = {
   /** The moment the answer was computed at, as the contract writes it. */
   serverTime: string;
 
@@ -53,6 +60,19 @@ export function remainingText(milliseconds: number): string {
   const minutes = Math.floor(total / 60);
   const seconds = total % 60;
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+/**
+ * serverMomentAt is the moment the server would state now, or undefined when either the moment it
+ * did state or the local clock cannot be read. The server's own moment is the truth; the local clock
+ * only says how long ago that answer arrived, so a tab that was suspended for an hour reads the
+ * server's hour as passed rather than as a count of the ticks it managed to run.
+ */
+export function serverMomentAt(clock: ServerClock, now: Date): number | undefined {
+  const computed = momentOf(clock.serverTime);
+  if (computed === undefined) return undefined;
+
+  return computed + (now.getTime() - clock.receivedAt.getTime());
 }
 
 // A moment the contract wrote is read as the instant it names. Milliseconds are what a browser can

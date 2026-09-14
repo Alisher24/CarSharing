@@ -30,10 +30,20 @@ type Rental struct {
 	StartedAt  *time.Time
 	EndedAt    *time.Time
 
+	// ModeStartedAt is the moment the ride entered the mode it is in, which is the moment the interval
+	// it is in began. It is set exactly while the rental is a ride that has begun.
+	ModeStartedAt *time.Time
+
 	// Tariff is the price list this rental was made under, stored with the rental rather than read
 	// from the catalog on demand: a later change of the catalog must not reach a reservation that
 	// already exists.
 	Tariff tariffs.Tariff
+}
+
+// Riding reports whether the rental is a ride that has begun, which is what an answer publishes with a
+// mode moment and a progress.
+func (r Rental) Riding() bool {
+	return (r.Stage == stage.Active || r.Stage == stage.Paused) && r.ModeStartedAt != nil
 }
 
 // rentalFields is the shape every rental read and every rental transition returns. One declaration
@@ -49,6 +59,7 @@ const rentalFields = `
     expires_at,
     started_at,
     ended_at,
+    mode_started_at,
     tariff_id,
     tariff_currency,
     tariff_billing_policy,
@@ -144,6 +155,7 @@ func scanRental(rows pgx.Rows, found *Rental) error {
 		&found.ExpiresAt,
 		&found.StartedAt,
 		&found.EndedAt,
+		&found.ModeStartedAt,
 		&found.Tariff.ID,
 		&found.Tariff.Currency,
 		&found.Tariff.BillingPolicy,

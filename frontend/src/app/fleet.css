@@ -622,9 +622,26 @@
   margin: 0;
 }
 
+.reservation-panel-rates-missing {
+  margin: 0;
+  font-size: var(--font-size-detail);
+  color: var(--color-danger);
+}
+
+/* What a ride in force has done so far: the two durations and the estimate the service published,
+   written as a definition list so each value keeps the name of the interval it measures. */
+.ride-progress dt {
+  color: var(--color-ink-label);
+}
+
+.ride-progress dd {
+  margin: 0;
+}
+
 .reservation-panel-actions,
 .reservation-panel-confirm,
-.reservation-panel-unknown {
+.reservation-panel-unknown,
+.ride-progress {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-sm) var(--space-md);

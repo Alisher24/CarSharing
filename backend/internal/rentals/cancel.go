@@ -135,17 +135,17 @@ func (s *Service) recordExpiry(ctx context.Context, moment time.Time, target Ren
 // endReservationAs moves one reservation to a stage that releases its vehicle and returns the rental
 // as it now stands. The stage it moves from is part of the statement, so a rental another
 // transaction has already moved is left alone and reported as unmoved.
-const endReservationAsStatement = `
+const releaseRentalStatement = `
 UPDATE rentals
-SET stage = $2, ended_at = $3, version = version + 1
-WHERE id = $1 AND stage = $4
+SET stage = $3, ended_at = $4, mode_started_at = NULL, version = version + 1
+WHERE id = $1 AND stage = $2
 RETURNING` + rentalFields
 
 func endReservationAs(
 	ctx context.Context, pool *pgxpool.Pool, id string, ending stage.Stage, at time.Time,
 ) (Rental, bool, error) {
-	rows, err := database.QuerierFrom(ctx, pool).Query(ctx, endReservationAsStatement,
-		id, ending, at, stage.Reserved)
+	rows, err := database.QuerierFrom(ctx, pool).Query(ctx, releaseRentalStatement,
+		id, stage.Reserved, ending, at)
 	if err != nil {
 		return Rental{}, false, err
 	}

@@ -33,8 +33,9 @@ type Dependencies struct {
 	// given an implementation that refuses every stream instead.
 	Events EventStream
 
-	// Reservations is the account's own reservation: the commands that move it and the read that
-	// answers what is current. Only the full application serves those operations.
+	// Reservations is the account's own rental: the commands that move it, the ride commands that
+	// start, pause and continue it, and the read that answers what is current. Only the full
+	// application serves those operations.
 	Reservations Reservations
 
 	// Notifications is the account's own notifications: the collection and the read that marks one
@@ -64,6 +65,7 @@ type server struct {
 	accounts
 	catalogHandlers
 	reservationHandlers
+	rideHandlers
 	notificationHandlers
 	streams
 }

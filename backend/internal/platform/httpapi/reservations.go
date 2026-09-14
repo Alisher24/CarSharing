@@ -48,10 +48,10 @@ type commandFailure struct {
 	retryAfter *int
 }
 
-// failureOf translates a failure of the rentals module. Every case is repeatable: the same command
-// with the same key gets the same class of answer again, and none of them reports a change that did
-// not happen.
-func failureOf(err error) commandFailure {
+// commandFailureOf translates a failure of the rentals module. Every case is repeatable: the same
+// command with the same key gets the same class of answer again, and none of them reports a change that
+// did not happen.
+func commandFailureOf(err error) commandFailure {
 	switch {
 	case errors.Is(err, idempotency.ErrFingerprintMismatch):
 		return commandFailure{
@@ -98,12 +98,19 @@ func replayedHeader(replayed bool) *bool {
 	return ptr(true)
 }
 
-// Reservations is what the reservation operations need from the rentals module: the commands that
-// move a rental, and the read that answers what is current.
+// Reservations is what the operations on one's own rental need from the rentals module: the commands
+// that move a rental and the read that answers what is current.
 type Reservations interface {
 	Reserve(ctx context.Context, command rentals.ReserveCommand) (rentals.Answered, error)
 	Cancel(ctx context.Context, command rentals.CancelCommand) (rentals.Answered, error)
 	Current(ctx context.Context, caller uuid.UUID) (rentals.Current, error)
+
+	// The ride commands move a rental between a reservation, a driving ride and a paused one. They
+	// belong to the same module and the same surface, so they are asked of the same dependency rather
+	// than of a second one naming one implementation twice.
+	StartRide(ctx context.Context, command rentals.StartRideCommand) (rentals.Answered, error)
+	PauseRide(ctx context.Context, command rentals.PauseRideCommand) (rentals.Answered, error)
+	ResumeRide(ctx context.Context, command rentals.ResumeRideCommand) (rentals.Answered, error)
 }
 
 // reservationHandlers answers the operations that belong to one signed-in person's own reservation.
@@ -177,7 +184,7 @@ func (h reservationHandlers) Reserve(
 		Attempt:   reserveAttempt(ctx, commandKeyHeader(request.Params.IdempotencyKey), fingerprint),
 	})
 	if err != nil {
-		failure := failureOf(err)
+		failure := commandFailureOf(err)
 		reportUncarried(ctx, err, failure)
 		return reserveFailure(ctx, failure), nil
 	}
@@ -206,7 +213,7 @@ func (h reservationHandlers) CancelRental(
 		Attempt:  cancelAttempt(ctx, commandKeyHeader(request.Params.IdempotencyKey), fingerprint),
 	})
 	if err != nil {
-		failure := failureOf(err)
+		failure := commandFailureOf(err)
 		reportUncarried(ctx, err, failure)
 		return cancelFailure(ctx, failure), nil
 	}

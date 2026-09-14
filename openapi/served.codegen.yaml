@@ -20,6 +20,11 @@ output-options:
     - getCurrentRental
     - reserve
     - cancelRental
+    # The three ride commands: start, pause and resume. Finishing a ride is a later task, so it stays
+    # out of the served set until its own operation is implemented.
+    - startRental
+    - pauseRental
+    - resumeRental
     - getNotifications
     - readNotification
     # The two streams are served here too: the boundary validates them against the contract, and the

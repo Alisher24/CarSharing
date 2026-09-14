@@ -2,7 +2,6 @@ import type { ApiError, CurrentSnapshot, Rental, TariffSnapshot } from '../../sh
 import { SERVICE_TIME_ZONE } from '../../shared/locale.ts';
 import { somText } from '../fleet/money.ts';
 import type { Countdown } from './countdown.ts';
-import type { CommandPhase } from './useReservations.ts';
 
 /**
  * The Russian wording of the reservation, and the two rules that produce it: how a moment of the
@@ -86,9 +85,6 @@ export const REPEAT_ACTION = 'Повторить команду';
 /** What the interface says instead of offering a repeat past its window. */
 export const REPEAT_EXPIRED = 'Повторить команду больше нельзя: прошло больше суток';
 
-/** What the panel shows while a booking is being sent. */
-export const BOOKING_PENDING = 'Отправляем запрос…';
-
 /** Where a person goes from the panel to the vehicle that is held for them. */
 export const GO_TO_VEHICLE = 'Показать на карте';
 
@@ -163,13 +159,19 @@ export function bishkekMoment(wireMoment: string): string | undefined {
 }
 
 /** The rates of one reservation, as the snapshot it was made under states them. */
-export type RateText = { driving?: string; paused?: string };
+export type RateText = { driving: string | null; paused: string | null };
 
-/** The two rates of a stored snapshot, each written as a price or left out when unreadable. */
+/** What a rate is charged for, which is what makes two rates of the same rental comparable. */
+export const RATE_UNIT = 'за начатую минуту';
+
+/** What is written instead of the rates when the stored snapshot states none of them. */
+export const TARIFF_MISSING = 'Тариф не указан';
+
+/** The two rates of a stored snapshot, each written as a price or held out when unreadable. */
 export function rateTextOf(snapshot: TariffSnapshot): RateText {
   return {
-    driving: somText(snapshot.driving_rate_tyiyn_per_started_minute),
-    paused: somText(snapshot.paused_rate_tyiyn_per_started_minute),
+    driving: somText(snapshot.driving_rate_tyiyn_per_started_minute) ?? null,
+    paused: somText(snapshot.paused_rate_tyiyn_per_started_minute) ?? null,
   };
 }
 
@@ -211,24 +213,4 @@ export function warningText(
     deadline: `${WARNING_ENDS_AT} ${endsAt}`,
     remaining: `${TIME_LEFT} ${countdown.text}`,
   };
-}
-
-/**
- * The sentence the last command is reported with, or undefined while there is nothing to report. A
- * command still on its way says so; one whose answer never arrived says that instead of pretending
- * to know; a refusal is named by its contract code.
- */
-export function commandNotice(phase: CommandPhase): string | undefined {
-  switch (phase.state) {
-    case 'sending':
-      return phase.action === 'reserve' ? BOOKING_PENDING : CANCEL_PENDING;
-    case 'unknown':
-      return UNKNOWN_COMMAND;
-    case 'refused':
-      return refusalText(phase.code);
-    case 'signed-out':
-      return SIGN_IN_TO_BOOK;
-    default:
-      return undefined;
-  }
 }
