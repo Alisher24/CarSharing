@@ -37,12 +37,15 @@ func cancelFailure(ctx context.Context, failure commandFailure) servedapi.Cancel
 	return spelled.(servedapi.CancelRentalResponseObject)
 }
 
-// retryAfterOf asks for a wait only when the answer says the same command is still running. A stored
-// refusal that carries a moment of its own — an exhausted allowance above all — never borrows this
-// header for it.
+// retryAfterOf asks for a wait when the answer asks for one. Two answers do, for the same reason and
+// with the same interval: a command whose twin is still running, and a payment whose attempt the
+// service has not finished making. A stored refusal that carries a moment of its own — an exhausted
+// allowance above all — never borrows this header for it.
 func retryAfterOf(body servedapi.ApiError) *int {
-	if body.Code != servedapi.IDEMPOTENCYINPROGRESS {
+	switch body.Code {
+	case servedapi.IDEMPOTENCYINPROGRESS, servedapi.PAYMENTINPROGRESS:
+		return retryAfterCommandBusy()
+	default:
 		return nil
 	}
-	return retryAfterCommandBusy()
 }

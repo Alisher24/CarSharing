@@ -67,6 +67,7 @@ type server struct {
 	reservationHandlers
 	rideHandlers
 	finishHandlers
+	payHandlers
 	notificationHandlers
 	streams
 }

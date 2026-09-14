@@ -49,6 +49,10 @@ func NewHandler(dependencies Dependencies) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	payments, err := newPayHandlers(dependencies.Reservations)
+	if err != nil {
+		return nil, err
+	}
 	notifications, err := newNotificationHandlers(dependencies.Notifications, dependencies.Cursors)
 	if err != nil {
 		return nil, err
@@ -64,6 +68,7 @@ func NewHandler(dependencies Dependencies) (http.Handler, error) {
 		reservationHandlers:  reservations,
 		rideHandlers:         rides,
 		finishHandlers:       finishes,
+		payHandlers:          payments,
 		notificationHandlers: notifications,
 		streams:              streaming,
 	}

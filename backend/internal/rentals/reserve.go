@@ -137,6 +137,17 @@ func (s *Service) reservationWithin(
 		return refused(moment, Refusal{Kind: ActiveRentalExists}), nil
 	}
 
+	// A debt is judged next, before anything about the vehicle is read: it is the one condition here
+	// a person clears themselves, and a client told about a vehicle it cannot have would offer the
+	// command again the moment the vehicle was free.
+	owed, err := s.invoices.Outstanding(ctx, command.Caller)
+	if err != nil {
+		return Outcome{}, err
+	}
+	if owed {
+		return refused(moment, Refusal{Kind: OutstandingInvoice}), nil
+	}
+
 	vehicle, err := s.vehicles.VehicleAt(ctx, command.VehicleID, moment)
 	if errors.Is(err, fleet.ErrVehicleNotFound) {
 		return refused(moment, Refusal{Kind: VehicleUnavailable}), nil

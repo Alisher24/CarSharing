@@ -84,6 +84,21 @@ var (
 			http.StatusServiceUnavailable: shapeOf(declaredBody[servedapi.ApiError](), finishUnavailable),
 		},
 	}
+
+	// A payment answers the invoice it settled rather than the ride it belongs to, which is the whole
+	// of what a person who asked to pay is told. It states the same statuses the finish does, because
+	// the refusals a payment meets are the ones a missing invoice and a payment in flight carry.
+	payInvoiceOperation = commandOperation{
+		name:    "payment",
+		path:    payInvoicePath,
+		refused: http.StatusConflict,
+		answers: map[int]answerShape{
+			http.StatusOK:                 shapeOf(declaredBody[servedapi.PayResult](), paySucceeded),
+			http.StatusNotFound:           shapeOf(declaredBody[servedapi.ApiError](), payNotFound),
+			http.StatusConflict:           shapeOf(declaredBody[servedapi.ApiError](), payConflict),
+			http.StatusServiceUnavailable: shapeOf(declaredBody[servedapi.ApiError](), payUnavailable),
+		},
+	}
 )
 
 // reserveCreated spells the answer of a reservation that was made.
@@ -230,6 +245,34 @@ func finishUnavailable(body servedapi.ApiError, _ bool) any {
 	return servedapi.FinishRental503JSONResponse{Body: body}
 }
 
+// paySucceeded spells the answer of an invoice whose payment was decided, which carries the invoice
+// with the state of its payment rather than the ride it belongs to.
+func paySucceeded(body servedapi.PayResult, _ bool) any {
+	return servedapi.PayInvoice200JSONResponse{
+		Body:    body,
+		Headers: servedapi.PayInvoice200ResponseHeaders{},
+	}
+}
+
+// payNotFound spells an invoice this account does not hold.
+func payNotFound(body servedapi.ApiError, _ bool) any {
+	return servedapi.PayInvoice404JSONResponse{Body: body}
+}
+
+// payConflict spells a payment that was refused: an invoice whose first attempt the service still owes,
+// and the two answers a command key that is already in use is given.
+func payConflict(body servedapi.ApiError, _ bool) any {
+	return servedapi.PayInvoice409JSONResponse{
+		Body:    body,
+		Headers: servedapi.PayInvoice409ResponseHeaders{RetryAfter: retryAfterOf(body)},
+	}
+}
+
+// payUnavailable spells a payment that could not be decided at all.
+func payUnavailable(body servedapi.ApiError, _ bool) any {
+	return servedapi.PayInvoice503JSONResponse{Body: body}
+}
+
 // markReplayed marks an answer an earlier attempt already gave. It is a header on the response object
 // rather than a status, and every command operation declares it for every status it answers.
 func markReplayed(spelled any) any {
@@ -270,6 +313,12 @@ func markReplayed(spelled any) any {
 	case servedapi.FinishRental409JSONResponse:
 		answer.Headers.IdempotencyReplayed = replayedHeader(true)
 		return answer
+	case servedapi.PayInvoice200JSONResponse:
+		answer.Headers.IdempotencyReplayed = replayedHeader(true)
+		return answer
+	case servedapi.PayInvoice409JSONResponse:
+		answer.Headers.IdempotencyReplayed = replayedHeader(true)
+		return answer
 	default:
 		return spelled
 	}
@@ -298,6 +347,9 @@ func attachRetryAfter(spelled any, retryAfter *int) any {
 		answer.Headers.RetryAfter = retryAfter
 		return answer
 	case servedapi.FinishRental409JSONResponse:
+		answer.Headers.RetryAfter = retryAfter
+		return answer
+	case servedapi.PayInvoice409JSONResponse:
 		answer.Headers.RetryAfter = retryAfter
 		return answer
 	default:

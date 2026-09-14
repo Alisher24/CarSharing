@@ -26,6 +26,8 @@ const (
 	messageInvalidRentalState    = "The rental does not allow this operation"
 	messageOutsideServiceZone    = "The vehicle is outside the service area"
 	messageTelemetryStale        = "The position of the vehicle is not confirmed"
+	messageOutstandingInvoice    = "The account owes an unsettled invoice"
+	messagePaymentInProgress     = "The payment of this invoice is still being attempted"
 	messageIdempotencyConflict   = "The command key already answered another command"
 	messageIdempotencyInProgress = "The same command is still being processed"
 )
@@ -80,7 +82,11 @@ func refusalContract(refusal rentals.Refusal) (servedapi.ErrorCode, int, string,
 		return servedapi.OUTSIDESERVICEZONE, http.StatusConflict, messageOutsideServiceZone, nil
 	case rentals.TelemetryStale:
 		return servedapi.TELEMETRYSTALE, http.StatusConflict, messageTelemetryStale, nil
-	case rentals.RentalNotFound:
+	case rentals.OutstandingInvoice:
+		return servedapi.OUTSTANDINGINVOICE, http.StatusConflict, messageOutstandingInvoice, nil
+	case rentals.PaymentInProgress:
+		return servedapi.PAYMENTINPROGRESS, http.StatusConflict, messagePaymentInProgress, nil
+	case rentals.RentalNotFound, rentals.InvoiceNotFound:
 		return codeResourceNotFound, http.StatusNotFound, messageResourceNotFound, nil
 	default:
 		return "", 0, "", fmt.Errorf("the rentals module refused with an unknown kind %q", refusal.Kind)

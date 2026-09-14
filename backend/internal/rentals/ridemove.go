@@ -70,6 +70,11 @@ func (s *Service) FinishRide(ctx context.Context, command FinishCommand) (Answer
 	return s.Finish(ctx, command)
 }
 
+// PayInvoice settles the caller's invoice for a ride that has ended.
+func (s *Service) PayInvoice(ctx context.Context, command PayCommand) (Answered, error) {
+	return s.Pay(ctx, command)
+}
+
 // startRideStatement moves one reservation into a ride that is driving. The ride begins at the moment
 // the transaction fixed, which becomes both the moment the ride started and the moment its first mode
 // began: they are one instant, so they are one value.
