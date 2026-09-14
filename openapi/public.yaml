@@ -2568,7 +2568,7 @@ paths:
     post:
       operationId: startRental
       summary: start Rental
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-body-limit: 65536
       description: >-
         Reconcile with server time before transition; persist expiry or depletion even if the command
@@ -2911,7 +2911,7 @@ paths:
     post:
       operationId: pauseRental
       summary: pause Rental
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-body-limit: 65536
       description: >-
         Reconcile with server time before transition; persist expiry or depletion even if the command
@@ -3236,7 +3236,7 @@ paths:
     post:
       operationId: resumeRental
       summary: resume Rental
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-body-limit: 65536
       description: >-
         Reconcile with server time before transition; persist expiry or depletion even if the command

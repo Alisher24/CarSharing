@@ -30,7 +30,7 @@ const (
 // reserveRender spells the outcome of a reservation command as the answer its operation declares.
 func reserveRender(ctx context.Context, outcome rentals.Outcome) (rentals.Response, error) {
 	if outcome.Refused() {
-		return refusalResponse(ctx, outcome.Refusal)
+		return refusalRender(ctx, reserveOperation, outcome.Refusal)
 	}
 	rental, err := reservedRentalBody(outcome)
 	if err != nil {
@@ -45,9 +45,9 @@ func reserveRender(ctx context.Context, outcome rentals.Outcome) (rentals.Respon
 // cancelRender spells the outcome of a cancellation as the answer its operation declares.
 func cancelRender(ctx context.Context, outcome rentals.Outcome) (rentals.Response, error) {
 	if outcome.Refused() {
-		return refusalResponse(ctx, outcome.Refusal)
+		return refusalRender(ctx, cancelOperation, outcome.Refusal)
 	}
-	rental, err := rentalBody(outcome.Rental, outcome.Vehicle, outcome.Moment)
+	rental, err := rentalBody(outcome.Rental, outcome.Vehicle, outcome.Moment, outcome.Progress)
 	if err != nil {
 		return rentals.Response{}, err
 	}
@@ -55,22 +55,6 @@ func cancelRender(ctx context.Context, outcome rentals.Outcome) (rentals.Respons
 		ServerTime: timestamp.Format(outcome.Moment),
 		Rental:     rental,
 	})
-}
-
-// refusalResponse renders a domain refusal. The code carries its own status, and the details a
-// client displays travel in the error envelope rather than beside it.
-func refusalResponse(ctx context.Context, refusal rentals.Refusal) (rentals.Response, error) {
-	code, status, message, err := refusalContract(refusal)
-	if err != nil {
-		return rentals.Response{}, err
-	}
-	body := apiErrorBody(ctx, code, message)
-	details, err := refusalDetails(refusal)
-	if err != nil {
-		return rentals.Response{}, err
-	}
-	body.Details = details
-	return encoded(status, body)
 }
 
 // refusalContract names the code, status and message of a refusal. Every kind is one the contract
@@ -145,7 +129,7 @@ func currentSnapshot(current rentals.Current) (servedapi.CurrentSnapshot, error)
 			DailyLimit: limit,
 		})
 	}
-	rental, err := rentalBody(*current.Rental, current.Vehicle, current.Moment)
+	rental, err := rentalBody(*current.Rental, current.Vehicle, current.Moment, current.Progress)
 	if err != nil {
 		return servedapi.CurrentSnapshot{}, err
 	}
@@ -176,11 +160,12 @@ func reservedRentalBody(outcome rentals.Outcome) (servedapi.ReservedRental, erro
 	}, nil
 }
 
-// rentalBody publishes a rental in the shape its stage selects. A ride is published from the facts
-// the rental itself records: this build records no interval and no mode change, so a ride that has
-// started reports the moments it knows and the durations its records account for. Ride commands and
-// the intervals they track belong to the tasks that own them.
-func rentalBody(rental rentals.Rental, vehicle fleet.Vehicle, moment time.Time) (servedapi.Rental, error) {
+// rentalBody publishes a rental in the shape its stage selects. A ride that has begun is published
+// from the facts the rental and its intervals record: the moment it started, the moment its current
+// mode began, and what the ride has taken by the moment of the answer.
+func rentalBody(
+	rental rentals.Rental, vehicle fleet.Vehicle, moment time.Time, progress rentals.Progress,
+) (servedapi.Rental, error) {
 	published, err := publishedVehicleBody(vehicle, moment)
 	if err != nil {
 		return servedapi.Rental{}, err
@@ -197,6 +182,18 @@ func rentalBody(rental rentals.Rental, vehicle fleet.Vehicle, moment time.Time) 
 			State:          servedapi.ReservedRentalStateReserved,
 			ExpiresAt:      timestamp.Format(rental.ExpiresAt),
 		})
+	case stage.Active:
+		ride, err := activeRideBody(rental, published, progress)
+		if err != nil {
+			return servedapi.Rental{}, err
+		}
+		return body, body.FromActiveRental(ride)
+	case stage.Paused:
+		ride, err := pausedRideBody(rental, published, progress)
+		if err != nil {
+			return servedapi.Rental{}, err
+		}
+		return body, body.FromPausedRental(ride)
 	case stage.Cancelled:
 		return body, body.FromCancelledRental(servedapi.CancelledRental{
 			Id:             rental.ID,
@@ -219,6 +216,69 @@ func rentalBody(rental rentals.Rental, vehicle fleet.Vehicle, moment time.Time) 
 		})
 	default:
 		return servedapi.Rental{}, fmt.Errorf("a rental in stage %q cannot be published yet", rental.Stage)
+	}
+}
+
+// activeRideBody publishes a ride that is driving.
+func activeRideBody(
+	rental rentals.Rental, vehicle servedapi.Vehicle, progress rentals.Progress,
+) (servedapi.ActiveRental, error) {
+	startedAt, modeStartedAt, err := rideMoments(rental)
+	if err != nil {
+		return servedapi.ActiveRental{}, err
+	}
+	return servedapi.ActiveRental{
+		Id:             rental.ID,
+		Vehicle:        vehicle,
+		Version:        exactInteger(rental.Version),
+		ReservedAt:     timestamp.Format(rental.ReservedAt),
+		TariffSnapshot: tariffSnapshotBody(rental),
+		State:          servedapi.Active,
+		StartedAt:      startedAt,
+		ModeStartedAt:  modeStartedAt,
+		Progress:       progressBody(progress),
+	}, nil
+}
+
+// pausedRideBody publishes a ride that is standing still.
+func pausedRideBody(
+	rental rentals.Rental, vehicle servedapi.Vehicle, progress rentals.Progress,
+) (servedapi.PausedRental, error) {
+	startedAt, modeStartedAt, err := rideMoments(rental)
+	if err != nil {
+		return servedapi.PausedRental{}, err
+	}
+	return servedapi.PausedRental{
+		Id:             rental.ID,
+		Vehicle:        vehicle,
+		Version:        exactInteger(rental.Version),
+		ReservedAt:     timestamp.Format(rental.ReservedAt),
+		TariffSnapshot: tariffSnapshotBody(rental),
+		State:          servedapi.PausedRentalStatePaused,
+		StartedAt:      startedAt,
+		ModeStartedAt:  modeStartedAt,
+		Progress:       progressBody(progress),
+	}, nil
+}
+
+// rideMoments reports the two moments a ride publishes, both of which the transition that began it
+// wrote: a ride without them is not one this build can have written.
+func rideMoments(rental rentals.Rental) (servedapi.Timestamp, servedapi.Timestamp, error) {
+	if rental.StartedAt == nil || rental.ModeStartedAt == nil {
+		return "", "", fmt.Errorf("a rental in stage %q carries no ride moments", rental.Stage)
+	}
+	return timestamp.Format(*rental.StartedAt), timestamp.Format(*rental.ModeStartedAt), nil
+}
+
+// progressBody publishes what a ride has taken: the durations of each mode, the minutes begun in each
+// and what those minutes cost under the rates stored with the rental.
+func progressBody(progress rentals.Progress) servedapi.Progress {
+	return servedapi.Progress{
+		DrivingDurationMicroseconds: exactInteger(int64(progress.DrivingDuration.Microseconds())),
+		PausedDurationMicroseconds:  exactInteger(int64(progress.PausedDuration.Microseconds())),
+		DrivingStartedMinutes:       exactInteger(progress.DrivingMinutes),
+		PausedStartedMinutes:        exactInteger(progress.PausedMinutes),
+		EstimatedAmountTyiyn:        exactInteger(progress.AmountTyiyn),
 	}
 }
 

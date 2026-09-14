@@ -65,11 +65,16 @@ type Refusal struct {
 }
 
 // Outcome is what a command decided: the rental it moved, the vehicle as the answer publishes it at
-// the moment the command fixed, and that moment — or the refusal that changed nothing.
+// the moment the command fixed, that moment — or the refusal that changed nothing.
 type Outcome struct {
 	Rental  Rental
 	Vehicle fleet.Vehicle
 	Moment  time.Time
+
+	// Progress is what a ride that has begun has taken by the moment of the answer. A command that did
+	// not leave the rental a ride carries the zero value, which is not published.
+	Progress Progress
+
 	Refusal Refusal
 }
 

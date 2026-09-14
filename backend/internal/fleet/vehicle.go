@@ -85,6 +85,18 @@ func (v Vehicle) FitToStart() bool {
 	return false
 }
 
+// StartRefusalReasons lists why a rental of this vehicle cannot begin. A vehicle a rental holds is
+// published as held whatever its condition, so StateAt says nothing about whether it could be driven:
+// the reason a start is refused is asked of the vehicle itself, in the vocabulary the catalog
+// publishes. FitToStart is the rule a start and a free vehicle are both judged by, and the reason it
+// answers with is the catalog's own word for it.
+func (v Vehicle) StartRefusalReasons() []UnavailableReason {
+	if v.FitToStart() {
+		return nil
+	}
+	return []UnavailableReason{InsufficientEnergy}
+}
+
 // unavailabilityCheck is one condition that keeps a free vehicle from being rented.
 type unavailabilityCheck struct {
 	reason  UnavailableReason

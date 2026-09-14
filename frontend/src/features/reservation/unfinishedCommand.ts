@@ -6,7 +6,10 @@
  */
 
 /** The action a stored command asked for. */
-export type CommandAction = 'reserve' | 'cancel';
+export type CommandAction = 'reserve' | 'cancel' | 'start' | 'pause' | 'resume';
+
+/** The actions a stored record may name, which is what makes a record readable at all. */
+const COMMAND_ACTIONS: readonly CommandAction[] = ['reserve', 'cancel', 'start', 'pause', 'resume'];
 
 /**
  * One command whose outcome the browser does not know. It is written before the request is sent, so
@@ -18,7 +21,7 @@ export type UnfinishedCommand = {
 
   action: CommandAction;
 
-  /** What the command named: the vehicle it asked for, or the rental it gave back. */
+  /** What the command named: the vehicle it asked for, or the rental it acted on. */
   parameters: { vehicleId?: string; rentalId?: string };
 
   /** The key of the original attempt, which is the only key a repeat may present. */
@@ -100,7 +103,7 @@ function readUnfinished(storage: CommandStorage | undefined): UnfinishedCommand 
     const parsed = JSON.parse(raw) as UnfinishedCommand;
     if (typeof parsed?.owner !== 'string' || typeof parsed.key !== 'string') return undefined;
     if (typeof parsed.sentAt !== 'number') return undefined;
-    if (parsed.action !== 'reserve' && parsed.action !== 'cancel') return undefined;
+    if (!COMMAND_ACTIONS.includes(parsed.action)) return undefined;
 
     return parsed;
   } catch {

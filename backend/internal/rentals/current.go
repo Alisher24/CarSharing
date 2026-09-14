@@ -21,6 +21,10 @@ type Current struct {
 	// Vehicle is the vehicle the live rental holds. It is absent when there is no live rental.
 	Vehicle fleet.Vehicle
 
+	// Progress is what a ride that has begun has taken by the moment of the read. A reservation
+	// carries the zero value, which is not published.
+	Progress Progress
+
 	// Limit is the day's allowance, which is answered whether or not a rental is current.
 	Limit DailyLimit
 }
@@ -61,6 +65,12 @@ func (s *Service) Current(ctx context.Context, caller uuid.UUID) (Current, error
 			}
 			current.Rental = held
 			current.Vehicle = vehicle
+			if held.Riding() {
+				current.Progress, err = readProgress(txCtx, s.pool, *held, moment)
+				if err != nil {
+					return err
+				}
+			}
 			return nil
 		})
 	if err != nil {

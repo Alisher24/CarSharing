@@ -115,13 +115,18 @@ func (s store) insertTelemetry(ctx context.Context, vehicle Vehicle) error {
 // clock, and with the conditions it is made under taken from the price list it names. Any unique
 // violation leaves it out, so a rental a person has since started on the same vehicle is never
 // displaced by one that was merely prepared.
+//
+// A prepared ride records no interval, so the mode it is in began when the ride did: that is the one
+// moment the row itself accounts for, and it is what the constraint on a started ride requires.
 const insertRentalStatement = `
 INSERT INTO rentals (
     id, user_id, vehicle_id, stage, tariff_id, zone_id, reserved_at, expires_at, started_at,
+    mode_started_at,
     tariff_currency, tariff_billing_policy, tariff_driving_rate_tyiyn_per_started_minute,
     tariff_paused_rate_tyiyn_per_started_minute, tariff_version
 )
 SELECT $1, $2, $3, $4, $5, $6, now(), now() + make_interval(secs => $7),
+       CASE WHEN $8 THEN now() END,
        CASE WHEN $8 THEN now() END,
        price.currency, price.billing_policy, price.driving_rate_tyiyn_per_started_minute,
        price.paused_rate_tyiyn_per_started_minute, price.version
@@ -171,12 +176,15 @@ func (s store) insertRental(ctx context.Context, prepared preparedRental) error 
 // like a change older than the one it already shows, and would be discarded.
 const restoreRentalStatement = `
 INSERT INTO rentals (
-    id, user_id, vehicle_id, stage, tariff_id, zone_id, reserved_at, expires_at, started_at, version,
+    id, user_id, vehicle_id, stage, tariff_id, zone_id, reserved_at, expires_at, started_at,
+    mode_started_at, version,
     tariff_currency, tariff_billing_policy, tariff_driving_rate_tyiyn_per_started_minute,
     tariff_paused_rate_tyiyn_per_started_minute, tariff_version
 )
 SELECT $1, $2, $3, $4, $5, $6, now(), now() + make_interval(secs => $7),
-       CASE WHEN $8 THEN now() END, $9,
+       CASE WHEN $8 THEN now() END,
+       CASE WHEN $8 THEN now() END,
+       $9,
        price.currency, price.billing_policy, price.driving_rate_tyiyn_per_started_minute,
        price.paused_rate_tyiyn_per_started_minute, price.version
 FROM tariffs price
@@ -188,6 +196,7 @@ ON CONFLICT (id) DO UPDATE SET
     reserved_at = EXCLUDED.reserved_at,
     expires_at = EXCLUDED.expires_at,
     started_at = EXCLUDED.started_at,
+    mode_started_at = EXCLUDED.mode_started_at,
     ended_at = CASE WHEN EXCLUDED.stage IN ('reserved', 'active', 'paused') THEN NULL ELSE now() END,
     tariff_currency = EXCLUDED.tariff_currency,
     tariff_billing_policy = EXCLUDED.tariff_billing_policy,

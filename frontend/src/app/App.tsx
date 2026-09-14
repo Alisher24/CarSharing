@@ -18,9 +18,11 @@ import { FleetMap } from '../features/map/FleetMap';
 import { useNotifications } from '../features/notifications/useNotifications';
 import { ReservationPanel } from '../features/reservation/ReservationPanel';
 import { ReservationWarning } from '../features/reservation/ReservationWarning';
-import { commandNotice, limitAllowsBooking, limitText, SIGN_IN_TO_BOOK } from '../features/reservation/reservationCopy';
+import { commandText } from '../features/reservation/commandPhase';
+import { limitAllowsBooking, limitText, SIGN_IN_TO_BOOK } from '../features/reservation/reservationCopy';
 import { useCurrentRental } from '../features/reservation/useCurrentRental';
 import { useReservations } from '../features/reservation/useReservations';
+import { useRideCommands } from '../features/reservation/useRideCommands';
 import { loadedValue } from '../shared/api/Resource';
 import type { CurrentSnapshot } from '../shared/api/current';
 import type { Reservations } from '../features/reservation/useReservations';
@@ -46,6 +48,7 @@ export function App() {
   // reservation, and the private stream keeps both of them current.
   const current = useCurrentRental(account, privateEvents);
   const reservations = useReservations(account, current);
+  const ride = useRideCommands(account, current);
   const notifications = useNotifications(account, privateEvents);
   const currentSnapshot = loadedValue(current.resource);
 
@@ -72,7 +75,7 @@ export function App() {
       />
       {accountOpen && <AccountPanel account={account} submission={submission} onSubmit={submit} onLeave={leave} />}
 
-      <ReservationPanel resource={current.resource} reservations={reservations} onShowVehicle={select} />
+      <ReservationPanel resource={current.resource} reservations={reservations} ride={ride} onShowVehicle={select} />
       <ReservationWarning current={current.resource} notifications={notifications} />
 
       <div className="fleet-bar">
@@ -125,7 +128,7 @@ function bookingOf(
     limit: signedIn ? limitText(snapshot) : SIGN_IN_TO_BOOK,
     limitAllows: limitAllowsBooking(snapshot),
     awaitingRepeat: reservations.repeatable !== undefined,
-    notice: commandNotice(reservations.phase),
+    notice: commandText(reservations.phase),
     book: reservations.book,
   };
 }

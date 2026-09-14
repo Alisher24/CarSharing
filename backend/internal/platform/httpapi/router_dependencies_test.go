@@ -77,6 +77,24 @@ func (fixedReservations) Current(context.Context, uuid.UUID) (rentals.Current, e
 	return rentals.Current{}, nil
 }
 
+func (fixedReservations) StartRide(
+	context.Context, rentals.StartRideCommand,
+) (rentals.Answered, error) {
+	return rentals.Answered{}, nil
+}
+
+func (fixedReservations) PauseRide(
+	context.Context, rentals.PauseRideCommand,
+) (rentals.Answered, error) {
+	return rentals.Answered{}, nil
+}
+
+func (fixedReservations) ResumeRide(
+	context.Context, rentals.ResumeRideCommand,
+) (rentals.Answered, error) {
+	return rentals.Answered{}, nil
+}
+
 type fixedNotifications struct{}
 
 func (fixedNotifications) Collection(

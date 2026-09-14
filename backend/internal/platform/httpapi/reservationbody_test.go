@@ -93,7 +93,7 @@ func TestReservedAnswerPublishesTheStoredConditions(t *testing.T) {
 
 func TestExhaustedAllowanceIsRefusedWithTheMomentItReturns(t *testing.T) {
 	returns := reservedAt.Add(10*time.Hour + 44*time.Minute + 30*time.Second)
-	response, err := refusalResponse(context.Background(), rentals.Refusal{
+	response, err := refusalRender(context.Background(), reserveOperation, rentals.Refusal{
 		Kind:  rentals.DailyLimitReached,
 		Limit: rentals.DailyLimit{Available: false, ResetsAt: returns},
 	})
@@ -124,7 +124,7 @@ func TestExhaustedAllowanceIsRefusedWithTheMomentItReturns(t *testing.T) {
 }
 
 func TestUnsuitableVehicleIsRefusedWithTheCatalogReasons(t *testing.T) {
-	response, err := refusalResponse(context.Background(), rentals.Refusal{
+	response, err := refusalRender(context.Background(), reserveOperation, rentals.Refusal{
 		Kind:               rentals.VehicleUnavailable,
 		UnavailableReasons: []fleet.UnavailableReason{fleet.InsufficientEnergy, fleet.TelemetryStale},
 	})
