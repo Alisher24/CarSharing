@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Alisher24/CarSharing/backend/internal/billing"
 	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/timestamp"
@@ -23,6 +24,8 @@ const (
 	messageReservationExpired    = "The reservation has expired"
 	messageRentalCompleted       = "The rental has already been completed"
 	messageInvalidRentalState    = "The rental does not allow this operation"
+	messageOutsideServiceZone    = "The vehicle is outside the service area"
+	messageTelemetryStale        = "The position of the vehicle is not confirmed"
 	messageIdempotencyConflict   = "The command key already answered another command"
 	messageIdempotencyInProgress = "The same command is still being processed"
 )
@@ -73,6 +76,10 @@ func refusalContract(refusal rentals.Refusal) (servedapi.ErrorCode, int, string,
 		return servedapi.RENTALCOMPLETED, http.StatusConflict, messageRentalCompleted, nil
 	case rentals.InvalidRentalState:
 		return servedapi.INVALIDRENTALSTATE, http.StatusConflict, messageInvalidRentalState, nil
+	case rentals.OutsideServiceZone:
+		return servedapi.OUTSIDESERVICEZONE, http.StatusConflict, messageOutsideServiceZone, nil
+	case rentals.TelemetryStale:
+		return servedapi.TELEMETRYSTALE, http.StatusConflict, messageTelemetryStale, nil
 	case rentals.RentalNotFound:
 		return codeResourceNotFound, http.StatusNotFound, messageResourceNotFound, nil
 	default:
@@ -164,7 +171,7 @@ func reservedRentalBody(outcome rentals.Outcome) (servedapi.ReservedRental, erro
 // from the facts the rental and its intervals record: the moment it started, the moment its current
 // mode began, and what the ride has taken by the moment of the answer.
 func rentalBody(
-	rental rentals.Rental, vehicle fleet.Vehicle, moment time.Time, progress rentals.Progress,
+	rental rentals.Rental, vehicle fleet.Vehicle, moment time.Time, progress billing.Charge,
 ) (servedapi.Rental, error) {
 	published, err := publishedVehicleBody(vehicle, moment)
 	if err != nil {
@@ -221,7 +228,7 @@ func rentalBody(
 
 // activeRideBody publishes a ride that is driving.
 func activeRideBody(
-	rental rentals.Rental, vehicle servedapi.Vehicle, progress rentals.Progress,
+	rental rentals.Rental, vehicle servedapi.Vehicle, progress billing.Charge,
 ) (servedapi.ActiveRental, error) {
 	startedAt, modeStartedAt, err := rideMoments(rental)
 	if err != nil {
@@ -242,7 +249,7 @@ func activeRideBody(
 
 // pausedRideBody publishes a ride that is standing still.
 func pausedRideBody(
-	rental rentals.Rental, vehicle servedapi.Vehicle, progress rentals.Progress,
+	rental rentals.Rental, vehicle servedapi.Vehicle, progress billing.Charge,
 ) (servedapi.PausedRental, error) {
 	startedAt, modeStartedAt, err := rideMoments(rental)
 	if err != nil {
@@ -272,13 +279,13 @@ func rideMoments(rental rentals.Rental) (servedapi.Timestamp, servedapi.Timestam
 
 // progressBody publishes what a ride has taken: the durations of each mode, the minutes begun in each
 // and what those minutes cost under the rates stored with the rental.
-func progressBody(progress rentals.Progress) servedapi.Progress {
+func progressBody(progress billing.Charge) servedapi.Progress {
 	return servedapi.Progress{
 		DrivingDurationMicroseconds: exactInteger(int64(progress.DrivingDuration.Microseconds())),
 		PausedDurationMicroseconds:  exactInteger(int64(progress.PausedDuration.Microseconds())),
 		DrivingStartedMinutes:       exactInteger(progress.DrivingMinutes),
 		PausedStartedMinutes:        exactInteger(progress.PausedMinutes),
-		EstimatedAmountTyiyn:        exactInteger(progress.AmountTyiyn),
+		EstimatedAmountTyiyn:        exactInteger(int64(progress.TotalTyiyn)),
 	}
 }
 

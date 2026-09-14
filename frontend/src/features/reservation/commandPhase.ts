@@ -23,6 +23,7 @@ const PENDING_TEXT: Record<CommandAction, string> = {
   start: 'Начинаем поездку…',
   pause: 'Ставим поездку на паузу…',
   resume: 'Продолжаем поездку…',
+  finish: 'Завершаем поездку…',
 };
 
 /** What the command of an ended session is answered with, which is the same for every command. */

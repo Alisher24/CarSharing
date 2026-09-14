@@ -7,7 +7,7 @@ import (
 
 // halfTheRange is the largest value whose double fits twice in the signed 64-bit range. Two of them
 // are the pair the design states as overflowing the total while each product fits on its own.
-const halfTheRange int64 = 1 << 62
+const halfTheRange RateTyiynPerStartedMinute = 1 << 62
 
 // A duration cannot be negative: a ride that took less than no time is not one the arithmetic can
 // price, and answering it with zero minutes would publish a ride that cost nothing.
@@ -62,7 +62,7 @@ func TestTheLargestRatePaysForOneMinuteAndNoMore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("one minute at the largest rate was refused: %v", err)
 	}
-	if charge.TotalTyiyn != maxRepresentable {
+	if charge.TotalTyiyn != AmountTyiyn(maxRepresentable) {
 		t.Errorf("one minute costs %d tyiyn, want %d", charge.TotalTyiyn, maxRepresentable)
 	}
 

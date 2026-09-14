@@ -95,6 +95,12 @@ func (fixedReservations) ResumeRide(
 	return rentals.Answered{}, nil
 }
 
+func (fixedReservations) FinishRide(
+	context.Context, rentals.FinishCommand,
+) (rentals.Answered, error) {
+	return rentals.Answered{}, nil
+}
+
 type fixedNotifications struct{}
 
 func (fixedNotifications) Collection(

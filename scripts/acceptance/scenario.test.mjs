@@ -358,5 +358,6 @@ function finishedPersonalRental(rentalId, email, vehicleId) {
     expiresAt: `now() - interval '16 minutes'`,
     startedAt: `now() - interval '29 minutes'`,
     endedAt: `now() - interval '2 minutes'`,
+    completionReason: 'user_finished',
   });
 }

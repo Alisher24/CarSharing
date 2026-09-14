@@ -36,6 +36,8 @@ const notificationFields = `
     note.read_at,
     note.active,
     note.version,
+    COALESCE(note.invoice_id::text, ''),
+    COALESCE(note.completion_reason, ''),
     rental.expires_at`
 
 // notificationColumns reads the notification together with the rental it is about, because a
@@ -103,11 +105,10 @@ func (s *Store) Create(
 	if err != nil {
 		return Notification{}, false, err
 	}
-	announced, err := s.announce(ctx, stored)
-	if err != nil {
+	if err = s.announce(ctx, stored); err != nil {
 		return Notification{}, false, err
 	}
-	return announced, true, nil
+	return stored, true, nil
 }
 
 // Deactivate makes the notification of one rental and kind inactive and moves its version, and
@@ -293,27 +294,22 @@ func (s *Store) change(ctx context.Context, next Notification) (Notification, bo
 	if err != nil {
 		return Notification{}, false, err
 	}
-	announced, err := s.announce(ctx, stored)
-	if err != nil {
+	if err = s.announce(ctx, stored); err != nil {
 		return Notification{}, false, err
 	}
-	return announced, true, nil
+	return stored, true, nil
 }
 
 // announce records the personal signal of one stored change. It is written through the querier the
 // context carries, so it commits with the change it describes: a stored change nobody is told about
 // and a signal about a change that was not stored are both states this store cannot reach.
-func (s *Store) announce(ctx context.Context, stored Notification) (Notification, error) {
-	err := events.Record(ctx, s.pool, events.Signal{
+func (s *Store) announce(ctx context.Context, stored Notification) error {
+	return events.Record(ctx, s.pool, events.Signal{
 		Kind:       events.NotificationChanged,
 		ResourceID: stored.ID,
 		Version:    stored.Version,
 		Recipient:  stored.UserID,
 	})
-	if err != nil {
-		return Notification{}, err
-	}
-	return stored, nil
 }
 
 // readNotification reads at most one notification, so that a selection matching several rows is
@@ -353,6 +349,8 @@ func scanNotification(rows pgx.Rows, found *Notification) error {
 		&found.ReadAt,
 		&found.Active,
 		&found.Version,
+		&found.InvoiceID,
+		&found.CompletionReason,
 		&found.ExpiresAt,
 	)
 }

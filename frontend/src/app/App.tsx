@@ -75,7 +75,13 @@ export function App() {
       />
       {accountOpen && <AccountPanel account={account} submission={submission} onSubmit={submit} onLeave={leave} />}
 
-      <ReservationPanel resource={current.resource} reservations={reservations} ride={ride} onShowVehicle={select} />
+      <ReservationPanel
+        resource={current.resource}
+        owner={session}
+        reservations={reservations}
+        ride={ride}
+        onShowVehicle={select}
+      />
       <ReservationWarning current={current.resource} notifications={notifications} />
 
       <div className="fleet-bar">

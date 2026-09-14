@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Alisher24/CarSharing/backend/internal/billing"
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
+	"github.com/Alisher24/CarSharing/backend/internal/invoices"
+	"github.com/Alisher24/CarSharing/backend/internal/notifications"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/tariffs"
 	"github.com/google/uuid"
@@ -49,6 +52,14 @@ const (
 	// RentalNotFound reports an identifier this account holds no rental for, whether no such rental
 	// exists or it belongs to somebody else.
 	RentalNotFound RefusalKind = "rental_not_found"
+
+	// OutsideServiceZone reports a ride whose confirmed position is not covered by the service area
+	// the reservation was made in. The ride is not ended and keeps charging.
+	OutsideServiceZone RefusalKind = "outside_service_zone"
+
+	// TelemetryStale reports a ride whose vehicle has no confirmed position recent enough to decide
+	// an ending by. The ride is not ended and keeps charging.
+	TelemetryStale RefusalKind = "telemetry_stale"
 )
 
 // Refusal is a domain answer that changed nothing, together with what displaying it needs.
@@ -71,9 +82,13 @@ type Outcome struct {
 	Vehicle fleet.Vehicle
 	Moment  time.Time
 
-	// Progress is what a ride that has begun has taken by the moment of the answer. A command that did
-	// not leave the rental a ride carries the zero value, which is not published.
-	Progress Progress
+	// Progress is what a ride that has begun has taken by the moment of the answer. A command that
+	// did not leave the rental a ride carries the zero value, which is not published.
+	Progress billing.Charge
+
+	// Invoice is what a finished ride cost. A command that issued no invoice carries the zero value,
+	// which is not published.
+	Invoice invoices.Invoice
 
 	Refusal Refusal
 }
@@ -117,9 +132,34 @@ type Service struct {
 	vehicles *fleet.Store
 	prices   *tariffs.Store
 	results  *idempotency.Store
+
+	// invoices records what a finished ride cost and completions reports it to the account that
+	// rode. Both are reached inside the transaction that ends the ride, so neither can describe an
+	// ending that was rolled back.
+	invoices    *invoices.Store
+	completions *notifications.Completer
+
+	// finishLanding is the rule an ending ride is judged by where it stands, which the process was
+	// configured with rather than reading the environment here.
+	finishLanding string
 }
 
-func NewService(pool *pgxpool.Pool, vehicles *fleet.Store, prices *tariffs.Store) (*Service, error) {
+// Settings are what the module was told about the installation it runs in: the rule an ending ride is
+// judged by, which a deployment keeps and only a demonstration may relax.
+type Settings struct {
+	FinishLanding string
+}
+
+// NewService assembles the module over one connection pool. Every dependency is named here and
+// checked here, so a command never reaches a missing one and the process fails at startup instead.
+func NewService(
+	pool *pgxpool.Pool,
+	vehicles *fleet.Store,
+	prices *tariffs.Store,
+	issued *invoices.Store,
+	completions *notifications.Completer,
+	settings Settings,
+) (*Service, error) {
 	for _, required := range []struct {
 		name     string
 		supplied bool
@@ -127,16 +167,22 @@ func NewService(pool *pgxpool.Pool, vehicles *fleet.Store, prices *tariffs.Store
 		{"database pool", pool != nil},
 		{"vehicle catalog", vehicles != nil},
 		{"price lists", prices != nil},
+		{"invoice records", issued != nil},
+		{"completion reports", completions != nil},
+		{"finish landing rule", settings.FinishLanding != ""},
 	} {
 		if !required.supplied {
 			return nil, fmt.Errorf("%w: %s", ErrIncompleteModule, required.name)
 		}
 	}
 	return &Service{
-		pool:     pool,
-		vehicles: vehicles,
-		prices:   prices,
-		results:  idempotency.NewStore(pool),
+		pool:          pool,
+		vehicles:      vehicles,
+		prices:        prices,
+		results:       idempotency.NewStore(pool),
+		invoices:      issued,
+		completions:   completions,
+		finishLanding: settings.FinishLanding,
 	}, nil
 }
 

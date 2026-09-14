@@ -260,12 +260,12 @@ const beyondTheExactDoubleRange int64 = 900_719_925_474_099_399
 // unmarshal into a float and would already have lost its last digits in the text, so this checks the
 // type of each field as well as its digits.
 func TestProgressIsPublishedAsExactDecimalStrings(t *testing.T) {
-	published := progressBody(rentals.Progress{
+	published := progressBody(billing.Charge{
 		DrivingDuration: 60*time.Second + time.Microsecond,
 		PausedDuration:  45 * time.Second,
 		DrivingMinutes:  2,
 		PausedMinutes:   1,
-		AmountTyiyn:     beyondTheExactDoubleRange,
+		TotalTyiyn:      billing.AmountTyiyn(beyondTheExactDoubleRange),
 	})
 	encoded, err := json.Marshal(published)
 	if err != nil {

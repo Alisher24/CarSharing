@@ -16,6 +16,7 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/demo"
 	"github.com/Alisher24/CarSharing/backend/internal/events"
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
+	"github.com/Alisher24/CarSharing/backend/internal/invoices"
 	"github.com/Alisher24/CarSharing/backend/internal/notifications"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/config"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/cursor"
@@ -69,7 +70,9 @@ func application(cfg config.Config, pool *pgxpool.Pool, hub *events.Hub) (httpap
 		return httpapi.Dependencies{}, err
 	}
 	vehicles := fleet.NewStore(pool)
-	reservations, err := rentals.NewService(pool, vehicles, tariffs.NewStore(pool))
+	reservations, err := rentals.NewService(pool, vehicles, tariffs.NewStore(pool),
+		invoices.NewStore(pool), notifications.NewCompleter(pool),
+		rentals.Settings{FinishLanding: cfg.FinishLanding})
 	if err != nil {
 		return httpapi.Dependencies{}, err
 	}

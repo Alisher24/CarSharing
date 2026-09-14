@@ -135,6 +135,11 @@ type Config struct {
 	// is empty in a process that was given no key, and the process that issues cursors refuses to
 	// start rather than signing with one every installation would share.
 	CursorSigningKey []byte
+
+	// FinishLanding is the rule an ending ride is judged by. A deployment keeps the rule the product
+	// states; only the demonstration profile may relax it, and the command that installs a
+	// demonstration is what does so.
+	FinishLanding string
 }
 
 func Load() (Config, error) {
@@ -169,6 +174,10 @@ func Load() (Config, error) {
 	}
 	cfg.AllowedOrigins = splitOrigins(envOrDefault("ALLOWED_ORIGINS", defaultAllowedOrigins))
 	cfg.SessionCookieSecure = os.Getenv("SESSION_COOKIE_SECURE") == "true"
+	cfg.FinishLanding, err = loadFinishLanding(cfg.Environment)
+	if err != nil {
+		return cfg, err
+	}
 	cfg.Argon2, err = loadArgon2()
 	if err != nil {
 		return cfg, err

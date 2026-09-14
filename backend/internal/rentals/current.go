@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/Alisher24/CarSharing/backend/internal/billing"
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -23,7 +24,7 @@ type Current struct {
 
 	// Progress is what a ride that has begun has taken by the moment of the read. A reservation
 	// carries the zero value, which is not published.
-	Progress Progress
+	Progress billing.Charge
 
 	// Limit is the day's allowance, which is answered whether or not a rental is current.
 	Limit DailyLimit

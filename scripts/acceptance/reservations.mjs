@@ -107,6 +107,10 @@ export async function endSuiteReservations() {
   const mine = `(SELECT id FROM users WHERE email IN (${madeAccounts.map((one) => `'${one.email}'`).join(', ')}))`;
   sql(`DELETE FROM outbox WHERE resource_id IN (SELECT id FROM rentals WHERE user_id IN ${mine})`);
   sql(`DELETE FROM idempotency_requests WHERE user_id IN ${mine}`);
+  // A ride a suite finished left an invoice and the report of it behind. Both belong to the rental they
+  // describe, and the notification also names the invoice, so the invoice goes before the rental it
+  // belongs to.
+  sql(`DELETE FROM invoices WHERE rental_id IN (SELECT id FROM rentals WHERE user_id IN ${mine})`);
   sql(`DELETE FROM rentals WHERE user_id IN ${mine}`);
 }
 

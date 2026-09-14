@@ -1,0 +1,364 @@
+package invoices
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"math"
+	"time"
+
+	"github.com/Alisher24/CarSharing/backend/internal/billing"
+	"github.com/Alisher24/CarSharing/backend/internal/completion"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+// ErrInvoiceNotFound reports an invoice this account does not hold, whether no such invoice exists or
+// it belongs to somebody else.
+var ErrInvoiceNotFound = errors.New("no such invoice")
+
+// Draft is an invoice about to be written: the ride it describes, the lines of the charge it states and
+// the total of them. It carries no identifier and no version, because those belong to the row that is
+// created rather than to the decision that asks for it.
+type Draft struct {
+	RentalID   string
+	UserID     uuid.UUID
+	IssuedAt   time.Time
+	Completion completion.Reason
+
+	Driving Line
+	Paused  Line
+
+	TotalTyiyn billing.AmountTyiyn
+}
+
+// Validate reports why a draft cannot be written as an invoice, or nil when it can. It guards the
+// statement below from a value no row would accept and a reader no row could explain; the storage
+// states the same rules again, so a draft that passed here and was refused there is a defect rather
+// than the only check there was.
+func (d Draft) Validate() error {
+	switch {
+	case d.RentalID == "":
+		return errors.New("an invoice must name the ride it describes")
+	case d.UserID == uuid.Nil:
+		return errors.New("an invoice must name the account that owes it")
+	case d.IssuedAt.IsZero():
+		return errors.New("an invoice must state when it was issued")
+	case !d.Completion.Known():
+		return fmt.Errorf("an invoice cannot state the completion reason %q", d.Completion)
+	case d.TotalTyiyn < 0:
+		return errors.New("an invoice cannot owe a negative amount")
+	}
+	total := billing.AmountTyiyn(0)
+	for _, line := range []struct {
+		name string
+		mode billing.Mode
+		line Line
+	}{
+		{"driving", billing.Driving, d.Driving},
+		{"paused", billing.Paused, d.Paused},
+	} {
+		if line.line.Mode != line.mode {
+			return fmt.Errorf("the %s line of an invoice describes %q", line.name, line.line.Mode)
+		}
+		if err := line.line.Validate(); err != nil {
+			return err
+		}
+		if line.line.AmountTyiyn > math.MaxInt64-total {
+			return errors.New("the total amount does not fit the signed 64-bit range")
+		}
+		total += line.line.AmountTyiyn
+	}
+	if total != d.TotalTyiyn {
+		return errors.New("the total of an invoice is not the sum of its two lines")
+	}
+	return nil
+}
+
+// Validate reports why a line cannot be one of an invoice, or nil when it can.
+func (l Line) Validate() error {
+	switch {
+	case l.Mode != billing.Driving && l.Mode != billing.Paused:
+		return errors.New("a line must describe one of the two modes")
+	case l.Duration < 0:
+		return errors.New("a duration cannot be negative")
+	case l.Minutes < 0:
+		return errors.New("minutes begun cannot be negative")
+	case l.Rate < 0:
+		return errors.New("a rate cannot be negative")
+	case l.AmountTyiyn < 0:
+		return errors.New("an amount cannot be negative")
+	}
+	priced, err := billing.PricedAt(l.Rate, l.Minutes)
+	if err != nil {
+		return err
+	}
+	if priced != l.AmountTyiyn {
+		return errors.New("an amount is not the rate of its line times the minutes begun in it")
+	}
+	return nil
+}
+
+// Store is the invoice tables. Every statement runs on the querier the context carries, so an invoice
+// commits together with the change that produced it or not at all.
+type Store struct{ pool *pgxpool.Pool }
+
+func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
+
+// invoiceFields is the shape every read of an invoice answers with: the invoice, its two lines and the
+// state of its payment. One declaration keeps a read by rental and a read by identifier from drifting
+// apart.
+const invoiceFields = `
+    invoice.id,
+    invoice.rental_id,
+    invoice.user_id,
+    invoice.issued_at,
+    invoice.currency,
+    invoice.billing_policy,
+    invoice.completion_reason,
+    invoice.version,
+    invoice.driving_duration_microseconds,
+    invoice.driving_billed_started_minutes,
+    invoice.driving_rate_tyiyn_per_started_minute,
+    invoice.paused_duration_microseconds,
+    invoice.paused_billed_started_minutes,
+    invoice.paused_rate_tyiyn_per_started_minute,
+    invoice.total_amount_tyiyn,
+    payment.status,
+    payment.version,
+    payment.updated_at`
+
+// invoiceColumns reads the payment beside the invoice, because the contract publishes the two together
+// and an invoice is always issued with one.
+const invoiceColumns = `
+SELECT` + invoiceFields + `
+FROM invoices invoice
+JOIN invoice_payments payment ON payment.invoice_id = invoice.id`
+
+const (
+	invoiceOfRentalSelection = invoiceColumns + `
+WHERE invoice.rental_id = $1`
+
+	invoiceByIDForSelection = invoiceColumns + `
+WHERE invoice.id = $1 AND invoice.user_id = $2`
+)
+
+// Issue writes one invoice for one finished ride and answers it as it was stored.
+//
+// The identifier is drawn here and the row is read back through the selection every reader uses, so
+// what an issuance answers is what a later read of the same invoice answers. The statement copies the
+// currency and the policy from the rental rather than taking them from the draft: an invoice states the
+// conditions its ride was reserved under, and a caller cannot hand it others by mistake.
+func (s *Store) Issue(ctx context.Context, draft Draft) (Invoice, error) {
+	if err := draft.Validate(); err != nil {
+		return Invoice{}, err
+	}
+	id, err := uuid.NewV7()
+	if err != nil {
+		return Invoice{}, err
+	}
+	if err = s.insert(ctx, id.String(), draft); err != nil {
+		return Invoice{}, err
+	}
+	return s.ByID(ctx, draft.UserID, id.String())
+}
+
+// insertLine is one line of an invoice as the statement below is given it. Every value is a plain
+// int64: a named type of the same width is not one the driver is obliged to send as an integer, and a
+// number that reached the database as a double would have lost the last digits of a rate or the
+// microseconds of a duration before the column was ever written.
+type insertLine struct {
+	durationMicroseconds int64
+	billedMinutes        int64
+	rateTyiynPerMinute   int64
+}
+
+// insertLineOf reduces one line of a draft to the plain whole numbers the statement is given.
+func insertLineOf(line Line) insertLine {
+	return insertLine{
+		durationMicroseconds: int64(line.Duration),
+		billedMinutes:        line.Minutes,
+		rateTyiynPerMinute:   int64(line.Rate),
+	}
+}
+
+// insert writes the invoice and the first state of its payment, one statement each: an invoice without
+// a payment is a view the contract cannot publish, so the two are written together.
+func (s *Store) insert(ctx context.Context, id string, draft Draft) error {
+	driving, paused := insertLineOf(draft.Driving), insertLineOf(draft.Paused)
+	querier := database.QuerierFrom(ctx, s.pool)
+	written, err := querier.Exec(ctx, insertInvoiceStatement,
+		id,
+		draft.UserID,
+		draft.IssuedAt,
+		draft.Completion,
+		driving.durationMicroseconds,
+		driving.billedMinutes,
+		driving.rateTyiynPerMinute,
+		paused.durationMicroseconds,
+		paused.billedMinutes,
+		paused.rateTyiynPerMinute,
+		int64(draft.TotalTyiyn),
+		issuedVersion,
+		draft.RentalID,
+	)
+	if err != nil {
+		return err
+	}
+	if written.RowsAffected() == 0 {
+		// The selection matched no rental, so there is no ride to invoice. A ride removed while its
+		// ending ran is the only way here, and writing the payment alone would leave a payment about
+		// nothing.
+		return ErrInvoiceNotFound
+	}
+	_, err = querier.Exec(ctx, insertPaymentStatement, id, PendingPayment, issuedVersion, draft.IssuedAt)
+	return err
+}
+
+// ByRental reads the invoice of one ride. A ride that has not been invoiced is reported as absent
+// rather than answered with an empty invoice.
+func (s *Store) ByRental(ctx context.Context, rentalID string) (Invoice, error) {
+	return s.read(ctx, invoiceOfRentalSelection, rentalID)
+}
+
+// ByID reads one invoice this account holds. Another account's invoice is reported as absent, so the
+// answer cannot be used to learn that it exists.
+func (s *Store) ByID(ctx context.Context, owner uuid.UUID, id string) (Invoice, error) {
+	return s.read(ctx, invoiceByIDForSelection, id, owner)
+}
+
+// issuedVersion is the version an invoice and its payment are written at. The invoice never moves past
+// it — an invoice is immutable — and the payment moves when its state changes.
+const issuedVersion int64 = 1
+
+// insertInvoiceStatement writes one invoice for one ride. The currency and the billing policy are
+// selected from the rental rather than handed in by the caller, so an invoice cannot be issued under a
+// price list its ride was never reserved under.
+//
+// Every number is cast to the type of its column. Without the cast the database is free to read a
+// parameter as a floating-point number, and a rate of 9007199254740993 tyiyn would be stored as the
+// double nearest to it while a duration would be rounded to whole milliseconds: an invoice is the one
+// record of what a ride cost, so its digits are stated rather than inferred.
+const insertInvoiceStatement = `
+INSERT INTO invoices (
+    id,
+    rental_id,
+    user_id,
+    issued_at,
+    currency,
+    billing_policy,
+    completion_reason,
+    driving_duration_microseconds,
+    driving_billed_started_minutes,
+    driving_rate_tyiyn_per_started_minute,
+    paused_duration_microseconds,
+    paused_billed_started_minutes,
+    paused_rate_tyiyn_per_started_minute,
+    total_amount_tyiyn,
+    version
+)
+SELECT $1::uuid,
+       rental.id,
+       $2::uuid,
+       $3::timestamptz,
+       rental.tariff_currency,
+       rental.tariff_billing_policy,
+       $4::text,
+       $5::bigint,
+       $6::bigint,
+       $7::bigint,
+       $8::bigint,
+       $9::bigint,
+       $10::bigint,
+       $11::bigint,
+       $12::bigint
+FROM rentals rental
+WHERE rental.id = $13::uuid`
+
+const insertPaymentStatement = `
+INSERT INTO invoice_payments (invoice_id, status, version, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $4)`
+
+// read reads at most one invoice, so that a selection matching several rows is reported as a failure
+// of the caller's expectation rather than silently answering the first.
+func (s *Store) read(ctx context.Context, selection string, arguments ...any) (Invoice, error) {
+	rows, err := database.QuerierFrom(ctx, s.pool).Query(ctx, selection, arguments...)
+	if err != nil {
+		return Invoice{}, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		if err = rows.Err(); err != nil {
+			return Invoice{}, err
+		}
+		return Invoice{}, ErrInvoiceNotFound
+	}
+	var found Invoice
+	if err = scanInvoice(rows, &found); err != nil {
+		return Invoice{}, err
+	}
+	if rows.Next() {
+		return Invoice{}, errors.New("the selection matched more than one invoice")
+	}
+	return found, rows.Err()
+}
+
+// scanInvoice reads one row into an invoice. Every whole number is read into a plain int64 and carried
+// into its own type afterwards: a named type of the same width is not one the driver plans a scan for,
+// and a value it cannot plan for arrives as the zero value rather than as a failure — an invoice of a
+// ride that cost nothing is exactly the kind of record nobody would question.
+func scanInvoice(rows pgx.Rows, found *Invoice) error {
+	var (
+		drivingDuration int64
+		drivingMinutes  int64
+		drivingRate     int64
+		pausedDuration  int64
+		pausedMinutes   int64
+		pausedRate      int64
+		total           int64
+	)
+	err := rows.Scan(
+		&found.ID,
+		&found.RentalID,
+		&found.UserID,
+		&found.IssuedAt,
+		&found.Currency,
+		&found.BillingPolicy,
+		&found.Completion,
+		&found.Version,
+		&drivingDuration,
+		&drivingMinutes,
+		&drivingRate,
+		&pausedDuration,
+		&pausedMinutes,
+		&pausedRate,
+		&total,
+		&found.Payment,
+		&found.PaymentVersion,
+		&found.PaymentUpdatedAt,
+	)
+	if err != nil {
+		return err
+	}
+	// Which mode a line describes is where it was read rather than what a column states: the contract
+	// fixes the driving line first and the paused one second, so the position of the line is the fact.
+	found.Driving = Line{
+		Mode:        billing.Driving,
+		Duration:    billing.Microseconds(drivingDuration),
+		Minutes:     drivingMinutes,
+		Rate:        billing.RateTyiynPerStartedMinute(drivingRate),
+		AmountTyiyn: billing.AmountTyiyn(drivingMinutes * drivingRate),
+	}
+	found.Paused = Line{
+		Mode:        billing.Paused,
+		Duration:    billing.Microseconds(pausedDuration),
+		Minutes:     pausedMinutes,
+		Rate:        billing.RateTyiynPerStartedMinute(pausedRate),
+		AmountTyiyn: billing.AmountTyiyn(pausedMinutes * pausedRate),
+	}
+	found.TotalTyiyn = billing.AmountTyiyn(total)
+	return nil
+}

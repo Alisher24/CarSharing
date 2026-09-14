@@ -102,7 +102,7 @@ func TestTheExamplesOfThePolicy(t *testing.T) {
 			if charge.PausedMinutes != example.pausedMinutes {
 				t.Errorf("the paused mode has begun %d minutes, want %d", charge.PausedMinutes, example.pausedMinutes)
 			}
-			if charge.TotalTyiyn != example.amountTyiyn {
+			if charge.TotalTyiyn != AmountTyiyn(example.amountTyiyn) {
 				t.Errorf("the ride costs %d tyiyn, want %d", charge.TotalTyiyn, example.amountTyiyn)
 			}
 		})
@@ -140,16 +140,16 @@ func TestStartedMinutesRoundsEachSumUpOnce(t *testing.T) {
 func TestChargePricesTheMinutesOfItsOwnMode(t *testing.T) {
 	for _, priced := range []struct {
 		name    string
-		rate    int64
+		rate    RateTyiynPerStartedMinute
 		minutes int64
-		amount  int64
+		amount  AmountTyiyn
 	}{
 		{name: "nothing begun", rate: 1234, minutes: 0, amount: 0},
 		{name: "one driving minute", rate: 1234, minutes: 1, amount: 1234},
 		{name: "one paused minute", rate: 321, minutes: 1, amount: 321},
 		{name: "two paused minutes", rate: 321, minutes: 2, amount: 642},
 	} {
-		amount, err := demoRates.Charge(priced.rate, priced.minutes)
+		amount, err := PricedAt(priced.rate, priced.minutes)
 		if err != nil {
 			t.Fatalf("%s was refused: %v", priced.name, err)
 		}

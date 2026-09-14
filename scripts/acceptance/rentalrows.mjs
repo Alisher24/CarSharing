@@ -22,16 +22,16 @@ const FROZEN_COLUMNS = `
 
 /**
  * The statement that writes one rental: its identifier, the address of the account it belongs to,
- * the vehicle, the stage, and the moments stated as SQL expressions. The conditions come from the
- * price list in force, so the row says what the operator charged at that moment rather than what a
- * later reader would charge.
+ * the vehicle, the stage, the moments stated as SQL expressions and, for a ride this build could have
+ * ended, why it ended. The conditions come from the price list in force, so the row says what the
+ * operator charged at that moment rather than what a later reader would charge.
  */
 function rentalStatement(row) {
   const version = row.version ?? 1;
   return `
     INSERT INTO rentals (
         id, user_id, vehicle_id, stage, tariff_id, zone_id,
-        reserved_at, expires_at, started_at, ended_at, version,${FROZEN_COLUMNS}
+        reserved_at, expires_at, started_at, ended_at, completion_reason, version,${FROZEN_COLUMNS}
     )
     SELECT
         ${quoted(row.id)},
@@ -44,10 +44,20 @@ function rentalStatement(row) {
         ${row.expiresAt},
         ${row.startedAt ?? 'null'},
         ${row.endedAt ?? 'null'},
+        ${reasonOf(row)},
         ${version},${FROZEN_CONDITIONS}
     FROM tariffs price
     ORDER BY price.id
     LIMIT 1`;
+}
+
+/**
+ * Why one written rental ended, as SQL the statement carries. A rental that has not ended states no
+ * reason, and the table refuses a row that ended without one, so a fixture that writes a completed
+ * ride has to say what ended it.
+ */
+function reasonOf(row) {
+  return row.completionReason === undefined ? 'null' : quoted(row.completionReason);
 }
 
 /**

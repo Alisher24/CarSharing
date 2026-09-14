@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/Alisher24/CarSharing/backend/internal/completion"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 	"github.com/Alisher24/CarSharing/backend/internal/tariffs"
@@ -30,6 +31,13 @@ type Rental struct {
 	StartedAt  *time.Time
 	EndedAt    *time.Time
 
+	// CompletionReason is why the ride ended, which exactly the rentals that have ended carry.
+	CompletionReason *completion.Reason
+
+	// ZoneID is the service area the vehicle stood in when the reservation was made. It is what a
+	// finish is judged against: the ride may not be ended where the area does not cover it.
+	ZoneID string
+
 	// ModeStartedAt is the moment the ride entered the mode it is in, which is the moment the interval
 	// it is in began. It is set exactly while the rental is a ride that has begun.
 	ModeStartedAt *time.Time
@@ -53,12 +61,14 @@ const rentalFields = `
     id,
     user_id,
     vehicle_id,
+    zone_id,
     stage,
     version,
     reserved_at,
     expires_at,
     started_at,
     ended_at,
+    completion_reason,
     mode_started_at,
     tariff_id,
     tariff_currency,
@@ -149,12 +159,14 @@ func scanRental(rows pgx.Rows, found *Rental) error {
 		&found.ID,
 		&found.UserID,
 		&found.VehicleID,
+		&found.ZoneID,
 		&found.Stage,
 		&found.Version,
 		&found.ReservedAt,
 		&found.ExpiresAt,
 		&found.StartedAt,
 		&found.EndedAt,
+		&found.CompletionReason,
 		&found.ModeStartedAt,
 		&found.Tariff.ID,
 		&found.Tariff.Currency,
