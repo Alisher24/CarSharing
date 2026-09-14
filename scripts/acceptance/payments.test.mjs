@@ -39,6 +39,7 @@ import {
   IDEMPOTENCY_HEADER,
   availableVehicle,
   call,
+  cancel,
   compose,
   liveRentals,
   newAccount,
@@ -253,6 +254,40 @@ describe('a refused attempt', () => {
     // The same command passes once the invoice is settled, which is what says the debt was the refusal.
     const allowed = await reserve(await availableVehicle(), newCommandKey(), account);
     assert.equal(allowed.status, 201, allowed.text);
+  });
+
+  test('is judged before the day allowance, which is what a person clears themselves', async () => {
+    // The two conditions are made to stand together, and neither is faked: the day's allowance is spent
+    // through the service by a reservation that is given back (giving one back does not return it), and
+    // the debt is a positive invoice of an earlier day that nothing has settled. The answer must name
+    // the debt, because that is the one of the two a person can do something about.
+    compose('stop', 'worker');
+    try {
+      const account = await newAccount(`${ACCOUNT_PREFIX}-order`);
+      const vehicleId = await availableVehicle();
+      const created = await reserve(vehicleId, newCommandKey(), account);
+      assert.equal(created.status, 201, created.text);
+      const cancelled = await cancel(created.json.rental.id, newCommandKey(), account);
+      assert.equal(cancelled.status, 200, cancelled.text);
+
+      // The allowance really is spent: the next reservation is refused for it and for nothing else.
+      const spent = await reserve(await availableVehicle(), newCommandKey(), account);
+      assert.equal(spent.status, 409, spent.text);
+      assert.equal(spent.json.code, 'DAILY_LIMIT_REACHED', spent.text);
+
+      // The debt is written for the same account, of a day that does not spend today's allowance, so
+      // the only thing the answer can have changed about is which condition is judged first.
+      const owed = debtInvoice({ account, vehicleId, daysAgo: 1 });
+      assert.equal(owesMoney(account), true, 'the written invoice is not read as a debt');
+
+      const blocked = await reserve(await availableVehicle(), newCommandKey(), account);
+      assert.equal(blocked.status, 409, blocked.text);
+      assert.equal(blocked.json.code, 'OUTSTANDING_INVOICE', blocked.text);
+      assert.equal(liveRentals('user_id', ownerId(account)), 0, 'the refusal created a rental');
+      assert.equal(storedPayment(owed.invoiceId).status, 'pending', 'the refusal settled the invoice');
+    } finally {
+      await startWorker();
+    }
   });
 });
 
