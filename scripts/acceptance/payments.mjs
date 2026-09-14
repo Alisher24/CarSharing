@@ -130,11 +130,6 @@ export function issuedAt(invoiceId) {
   );
 }
 
-/** The ride one invoice describes, which a demand for the outcome of its next attempt names. */
-export function rentalOfInvoice(invoiceId) {
-  return sql(`SELECT rental_id FROM invoices WHERE id = '${invoiceId}'`);
-}
-
 /** Every line of one invoice as it is stored, so a check can prove a refusal left them alone. */
 export function storedLines(invoiceId) {
   return sql(

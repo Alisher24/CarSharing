@@ -28,7 +28,6 @@ import {
   paymentCount,
   prepareIntervals,
   prepareFreeRide,
-  rentalOfInvoice,
   restoreRentalRates,
   storedLines,
   storedPayment,
