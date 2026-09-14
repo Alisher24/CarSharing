@@ -35,35 +35,39 @@ const (
 	// attempt is made, no moment moves and no version grows.
 	LeaveInvoice ManualAction = "leave"
 
-	// AttemptPayment is one attempt at an unsettled invoice.
+	// AttemptPayment is one attempt at an unsettled invoice, which is the person's own attempt rather
+	// than the one the service owes.
 	AttemptPayment ManualAction = "attempt"
 )
 
 // manualPaymentRule is the whole of what a manual command does in one state of a payment: what it
-// does, and the refusal it answers with when it does nothing. Stating both together is what keeps a
-// state from permitting an attempt and refusing it at the same time.
+// does, and the refusal it answers with instead when it does nothing. Stating both together is what
+// keeps a state from permitting an attempt and refusing it at the same time.
 type manualPaymentRule struct {
 	action  ManualAction
 	refusal RefusalKind
 }
 
-// manualPaymentRules is what a command a person sends does in each state. Only a refusal permits an
-// attempt: while the service still owes the first attempt there is nothing for a person to repeat, and
-// a settled invoice has nothing left to do — which is what makes a new key on a paid invoice answer the
-// view that exists rather than a second payment.
+// manualPaymentRules is what a command a person sends does in each state.
+//
+// A refusal is what the two states that permit nothing answer with. A pending invoice is one of them:
+// its first attempt is the service's own work and is already owed, so a person waits for it rather
+// than paying in its place, and the command changes nothing. A settled invoice is the other: it has
+// nothing left to do, which is what makes a new key on it answer the view that exists rather than a
+// second payment.
 var manualPaymentRules = map[PaymentStage]manualPaymentRule{
-	PaymentPaid:   {action: LeaveInvoice},
-	PaymentFailed: {action: AttemptPayment},
+	PaymentPaid:   {action: LeaveInvoice, refusal: ""},
+	PaymentFailed: {action: AttemptPayment, refusal: ""},
 	PaymentPending: {
-		action:  AttemptPayment,
+		action:  LeaveInvoice,
 		refusal: PaymentInProgress,
 	},
 }
 
 // ManualPayment reports what a command a person sent does with an invoice whose payment stands in the
-// given state, and which refusal it answers with when it does nothing. A state this vocabulary does not
-// declare permits nothing and is refused as a payment that is still running: an invoice whose state
-// nobody can explain must not be paid a second time.
+// given state, and which refusal it answers with instead when it does nothing. A state this vocabulary
+// does not declare permits nothing and is refused as a payment that is still running: an invoice whose
+// state nobody can explain must not be paid a second time.
 func ManualPayment(stage PaymentStage) (ManualAction, RefusalKind) {
 	rule, known := manualPaymentRules[stage]
 	if !known {

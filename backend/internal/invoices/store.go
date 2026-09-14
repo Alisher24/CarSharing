@@ -146,6 +146,9 @@ WHERE invoice.rental_id = $1`
 
 	invoiceByIDForSelection = invoiceColumns + `
 WHERE invoice.id = $1 AND invoice.user_id = $2`
+
+	invoiceByIDSelection = invoiceColumns + `
+WHERE invoice.id = $1`
 )
 
 // Issue writes one invoice for one finished ride and answers it as it was stored.
@@ -262,11 +265,6 @@ SELECT rental_id, user_id
 FROM invoices
 WHERE id = $1`
 
-// invoiceByIDSelection reads one invoice by its own identifier. A command that serves the account of
-// the invoice is answered by it, which is the one difference from the read a person is given.
-const invoiceByIDSelection = invoiceColumns + `
-WHERE invoice.id = $1`
-
 // Outstanding reports whether this account owes money: whether it holds a positive invoice that no
 // attempt has settled. It names the account rather than reading every invoice, because a debt is a
 // property of one account and reading another's would be reading what this command has no business
@@ -354,21 +352,14 @@ VALUES ($1, $2, $3, $4, $4, $5::timestamptz)`
 // are cleared, so a payment never holds a moment its own state does not explain. The version counts
 // the views this change produced, which is one per transition.
 const settleStatement = `
-WITH settled AS (
-    UPDATE invoice_payments
-    SET status = $2::text,
-        version = version + 1,
-        updated_at = $3::timestamptz,
-        paid_at = $4::timestamptz,
-        failed_at = $5::timestamptz,
-        failure_code = $6::text
-    WHERE invoice_id = $1 AND status = $7::text
-    RETURNING invoice_id
-)
-SELECT` + invoiceFields + `
-FROM invoices invoice
-JOIN invoice_payments payment ON payment.invoice_id = invoice.id
-JOIN settled ON settled.invoice_id = invoice.id`
+UPDATE invoice_payments
+SET status = $2::text,
+    version = version + 1,
+    updated_at = $3::timestamptz,
+    paid_at = $4::timestamptz,
+    failed_at = $5::timestamptz,
+    failure_code = $6::text
+WHERE invoice_id = $1 AND status = $7::text`
 
 // Settle moves the payment of one invoice from the state the transition starts from to the state the
 // attempt reached, and answers the invoice as the selection every reader uses reads it.
@@ -377,13 +368,18 @@ JOIN settled ON settled.invoice_id = invoice.id`
 // repeat of: the first attempt applies to an invoice nothing has settled, and a manual attempt to one
 // that was refused before. A transition that does not apply to the state the row stands in is reported
 // as a refusal rather than as a successful write of nothing, and the row is left untouched.
+//
+// The transition and the read that answers it are two statements rather than one statement with a
+// returning clause. A statement sees the snapshot its own start fixed, so the read inside it would
+// answer the payment as it stood before the transition wrote it — the answer would describe the state
+// the attempt replaced while the row already held the state it reached.
 func (s *Store) Settle(
 	ctx context.Context, invoiceID string, from PaymentStatus, outcome SettleOutcome,
 ) (Invoice, error) {
 	if err := outcome.Validate(); err != nil {
 		return Invoice{}, err
 	}
-	rows, err := database.QuerierFrom(ctx, s.pool).Query(ctx, settleStatement,
+	written, err := database.QuerierFrom(ctx, s.pool).Exec(ctx, settleStatement,
 		invoiceID,
 		outcome.Status,
 		outcome.Moment,
@@ -395,19 +391,10 @@ func (s *Store) Settle(
 	if err != nil {
 		return Invoice{}, err
 	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		if err = rows.Err(); err != nil {
-			return Invoice{}, err
-		}
+	if written.RowsAffected() == 0 {
 		return Invoice{}, ErrPaymentAlreadySettled
 	}
-	var settled Invoice
-	if err = scanInvoice(rows, &settled); err != nil {
-		return Invoice{}, err
-	}
-	return settled, rows.Err()
+	return s.read(ctx, invoiceByIDSelection, invoiceID)
 }
 
 // paidMomentOf, failedMomentOf and failureCodeOf state what one outcome writes into the three columns

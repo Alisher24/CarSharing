@@ -30,7 +30,7 @@ func TestWhatAManualCommandDoesFollowsFromThePaymentState(t *testing.T) {
 		{
 			name:    "an invoice the service still owes an attempt on is refused",
 			stage:   PaymentPending,
-			action:  AttemptPayment,
+			action:  LeaveInvoice,
 			refusal: PaymentInProgress,
 		},
 		{

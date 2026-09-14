@@ -7,6 +7,7 @@
 // surface of the demonstration control is not served — so a check that needs a decline writes the
 // demand the way the demonstration control would.
 import { call, sql } from './client.mjs';
+import { insertRentalReturning } from './rentalrows.mjs';
 import { endSuiteReservations } from './reservations.mjs';
 
 /** Where a payment is sent, which is the path its idempotency fingerprint covers. */
@@ -96,6 +97,26 @@ export function awaitingAttempt(invoiceId) {
   );
 }
 
+/**
+ * Whether one account owes money, read the way the rule reads it: a positive invoice of its own that no
+ * attempt has settled. A check that a payment cleared the debt asks this rather than reserving again,
+ * because a second reservation of the same day would be refused for the day's allowance instead.
+ */
+export function owesMoney(account) {
+  return (
+    sql(
+      `SELECT EXISTS (
+         SELECT 1
+         FROM invoices invoice
+         JOIN invoice_payments payment ON payment.invoice_id = invoice.id
+         WHERE invoice.user_id = (SELECT id FROM users WHERE email = '${account.email}')
+           AND invoice.total_amount_tyiyn > 0
+           AND payment.status <> 'paid'
+       )`,
+    ) === 't'
+  );
+}
+
 /** The amount one invoice states, which no payment transition moves. */
 export function storedTotal(invoiceId) {
   return sql(`SELECT total_amount_tyiyn FROM invoices WHERE id = '${invoiceId}'`);
@@ -107,6 +128,11 @@ export function issuedAt(invoiceId) {
     `SELECT to_char(issued_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
      FROM invoices WHERE id = '${invoiceId}'`,
   );
+}
+
+/** The ride one invoice describes, which a demand for the outcome of its next attempt names. */
+export function rentalOfInvoice(invoiceId) {
+  return sql(`SELECT rental_id FROM invoices WHERE id = '${invoiceId}'`);
 }
 
 /** Every line of one invoice as it is stored, so a check can prove a refusal left them alone. */
@@ -144,6 +170,19 @@ export function dayLimitOf(account) {
            = (now() AT TIME ZONE meta.timezone)::date`,
     ),
   );
+}
+
+/**
+ * Makes one ride cost nothing by charging nothing for it: both rates of the price list the rental
+ * stored are set to zero.
+ *
+ * The other way an invoice could be zero — a ride whose intervals last less than a minute — is not
+ * reachable: the policy rounds each mode up to begun minutes, and the table refuses an interval that
+ * does not last, so even the shortest interval a ride can have has begun a minute. A ride is therefore
+ * free exactly when the rates it was reserved under are zero.
+ */
+export function prepareFreeRide(rentalId) {
+  return moveRentalRates(rentalId, 0, 0);
 }
 
 /**
@@ -230,13 +269,90 @@ export function storedRates(rentalId) {
 }
 
 /**
- * Removes every record one check made about a payment: the tasks the queue owes about its invoices and
- * the demands it recorded. The rides themselves are handed back by the reservation suite's cleanup,
- * which is also what frees the vehicles the checks of the next suite need.
+ * Gives one account a debt of a finished ride of its own: a completed ride, its charged intervals and a
+ * positive invoice nothing has settled, all written as the roles that own them.
+ *
+ * The command that finishes a ride spends the free reservation of the day, so a check about the rule
+ * that a debt keeps an account out of its next reservation writes a ride of an earlier day instead: the
+ * account then owes money and has spent nothing today, and the refusal it meets is the rule under check
+ * rather than the day's allowance.
+ */
+export function debtInvoice({ account, vehicleId, daysAgo = 1 }) {
+  const rentalId = sql(
+    insertRentalReturning(
+      {
+        id: sql('SELECT uuidv7()'),
+        email: account.email,
+        vehicleId,
+        stage: 'completed',
+        reservedAt: `now() - interval '${daysAgo} days'`,
+        expiresAt: `now() - interval '${daysAgo} days' + interval '15 minutes'`,
+        startedAt: `now() - interval '${daysAgo} days' + interval '1 minute'`,
+        endedAt: `now() - interval '${daysAgo} days' + interval '4 minutes'`,
+        completionReason: 'user_finished',
+      },
+      'id',
+    ),
+  );
+  sql(
+    `INSERT INTO ride_segments (rental_id, mode, started_at, ended_at)
+     SELECT '${rentalId}', mode, started_at, ended_at
+     FROM (VALUES
+       ('driving', now() - interval '${daysAgo} days' + interval '1 minute',
+                   now() - interval '${daysAgo} days' + interval '3 minutes'),
+       ('paused',  now() - interval '${daysAgo} days' + interval '3 minutes',
+                   now() - interval '${daysAgo} days' + interval '4 minutes')
+     ) AS segment(mode, started_at, ended_at)`,
+  );
+  const invoiceId = sql(
+    `WITH written AS (
+       INSERT INTO invoices (
+         id, rental_id, user_id, issued_at, currency, billing_policy, completion_reason,
+         driving_duration_microseconds, driving_billed_started_minutes,
+         driving_rate_tyiyn_per_started_minute,
+         paused_duration_microseconds, paused_billed_started_minutes,
+         paused_rate_tyiyn_per_started_minute,
+         total_amount_tyiyn, version
+       )
+       SELECT uuidv7(), rental.id, rental.user_id,
+              rental.ended_at, rental.tariff_currency, rental.tariff_billing_policy,
+              rental.completion_reason,
+              120000000, 2, rental.tariff_driving_rate_tyiyn_per_started_minute,
+              60000000, 1, rental.tariff_paused_rate_tyiyn_per_started_minute,
+              2 * rental.tariff_driving_rate_tyiyn_per_started_minute
+                + rental.tariff_paused_rate_tyiyn_per_started_minute,
+              1
+       FROM rentals rental
+       WHERE rental.id = '${rentalId}'
+       RETURNING id
+     )
+     SELECT id FROM written`,
+  );
+  sql(
+    `INSERT INTO invoice_payments (invoice_id, status, version, created_at, updated_at)
+     VALUES ('${invoiceId}', 'pending', 1, now(), now())`,
+  );
+  // The attempt the service owes the invoice is written as the ending of a ride would write it, so a
+  // check that waits for the worker to settle the debt is waiting for work the queue really holds.
+  sql(
+    `INSERT INTO outbox (kind, resource_id, version, recipient_id)
+     SELECT '${PAYMENT_ATTEMPT}', invoice.id, rental.version, invoice.user_id
+     FROM invoices invoice
+     JOIN rentals rental ON rental.id = invoice.rental_id
+     WHERE invoice.id = '${invoiceId}'`,
+  );
+  return { rentalId, invoiceId };
+}
+
+/**
+ * Removes every record one check made about a payment: the tasks the queue owes about its invoices, the
+ * demands it recorded, and the rides and invoices a check about the debt of an account wrote itself.
+ * The rides a check made through the service are handed back by the reservation suite's cleanup, which
+ * is also what frees the vehicles the checks of the next suite need.
  */
 export async function endSuitePayments() {
-  forgetPayments();
   await endSuiteReservations();
+  forgetPayments();
 }
 
 /** Removes what one check left behind, so the next check starts from an invoice nobody has paid. */
@@ -244,16 +360,18 @@ export function clearPayments() {
   forgetPayments();
 }
 
-/** Forgets the tasks, the demands and the invoices of every account this suite registered. */
+/** Forgets the tasks, the demands, the invoices and the written rides of this suite's accounts. */
 function forgetPayments() {
   const mine = `(SELECT id FROM users WHERE email LIKE '${ACCOUNT_PREFIX}-%')`;
   sql(
     `DELETE FROM outbox
      WHERE recipient_id IN ${mine}
-        OR resource_id IN (SELECT id FROM invoices WHERE user_id IN ${mine})`,
+        OR resource_id IN (SELECT id FROM invoices WHERE user_id IN ${mine})
+        OR resource_id IN (SELECT id FROM rentals WHERE user_id IN ${mine})`,
   );
   sql(`DELETE FROM demo_payment_outcomes`);
   sql(`DELETE FROM invoices WHERE user_id IN ${mine}`);
+  sql(`DELETE FROM rentals WHERE user_id IN ${mine} AND ended_at IS NOT NULL`);
 }
 
 /** The prefix every account this suite registers carries, which is also how its rows are found. */

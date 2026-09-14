@@ -18,13 +18,17 @@ import {
   asApplication,
   awaitingAttempt,
   clearPayments,
+  debtInvoice,
   demandOf,
   demandOutcome,
   endSuitePayments,
   moveRentalRates,
+  owesMoney,
   pay,
   paymentCount,
   prepareIntervals,
+  prepareFreeRide,
+  rentalOfInvoice,
   restoreRentalRates,
   storedLines,
   storedPayment,
@@ -57,6 +61,12 @@ const PREPARED_PAUSED_SECONDS = 45;
 /** The amount the M07 example costs: two begun minutes at 1234 plus one at 321. */
 const EXAMPLE_TOTAL_TYIYN = '2789';
 
+/**
+ * The version a ride reaches by the time it has ended: it is reserved, started, paused and finished,
+ * each of which moves it by one. A payment moves it not at all, which is what the checks compare it at.
+ */
+const FINISHED_RIDE_VERSION = 4;
+
 /** An amount past the exact range of a double, which a client must receive digit for digit. */
 const BEYOND_THE_EXACT_DOUBLE_RANGE = 9_007_199_254_740_993;
 
@@ -78,17 +88,17 @@ after(async () => {
 describe('the first attempt at an invoice', () => {
   test('is made by the worker without a command from the client', async () => {
     const { rentalId, invoiceId, vehicleId } = await finishedRide('first-attempt');
-    assert.equal(storedPayment(invoiceId).status, 'pending', 'the invoice was not waiting for an attempt');
-
     const settled = await settledPayment(invoiceId);
     assert.match(settled.paidAt, MOMENT, 'the settlement states no moment of its own');
 
     // The view the ending published was version 1; one transition moves it to 2, and the signal of that
     // change was written beside it. The ride itself is untouched: paying it re-opens nothing.
     assert.equal(settled.version, 2, 'the view did not move exactly once');
-    assert.equal(tasksFor(INVOICE_CHANGED, invoiceId), 1, 'the transition announced no change or more than one');
+    // Two changes were announced about this invoice: it was issued, and its payment settled. The one
+    // this check is about is the second, which is why the count is exact rather than a floor.
+    assert.equal(tasksFor(INVOICE_CHANGED, invoiceId), 2, 'the settlement announced no change or more than one');
     assert.equal(storedRide(rentalId).split('|')[0], 'completed', 'the payment moved the ride it belongs to');
-    assert.equal(storedVersion(rentalId), 2, 'the payment moved the version of the ride');
+    assert.equal(storedVersion(rentalId), FINISHED_RIDE_VERSION, 'the payment moved the version of the ride');
     assert.equal(storedTotal(invoiceId), EXAMPLE_TOTAL_TYIYN, 'the amount of the settled invoice moved');
     assert.equal(liveRentals('vehicle_id', vehicleId), 0);
   });
@@ -96,6 +106,10 @@ describe('the first attempt at an invoice', () => {
   test('settles nothing a second time when the same work is delivered again', async () => {
     const { invoiceId } = await finishedRide('redelivery');
     const settled = await settledPayment(invoiceId);
+    // The first task is awaited rather than assumed: the same work written beside a task still being
+    // delivered would be one attempt, and this check is about a second one.
+    await until(() => awaitingAttempt(invoiceId) === 0, 'the first attempt was never delivered');
+    const signals = tasksFor(INVOICE_CHANGED, invoiceId);
 
     // The same work is recorded a second time, as a task whose lease ran out is recorded again, and the
     // worker delivers it: nothing moves, because a transition applies to an invoice nothing has settled
@@ -111,24 +125,24 @@ describe('the first attempt at an invoice', () => {
     assert.equal(after.status, 'paid');
     assert.equal(after.version, 2, 'a repeated delivery moved the version of the view');
     assert.equal(after.paidAt, settled.paidAt, 'a repeated delivery moved the moment of settlement');
-    assert.equal(tasksFor(INVOICE_CHANGED, invoiceId), 1, 'a repeated delivery announced a second change');
+    assert.equal(tasksFor(INVOICE_CHANGED, invoiceId), signals, 'a repeated delivery announced a second change');
     assert.equal(paymentCount(invoiceId), 1);
   });
 });
 
 describe('an invoice whose first attempt has not been made', () => {
-  test('keeps the account out of the next reservation and refuses a manual payment', async () => {
+  test('keeps the account in debt and refuses a manual payment', async () => {
+    // The ride this check writes is one of today's, so its account has spent the day's allowance on it:
+    // a reservation would be refused for that allowance rather than for the debt, which the check below
+    // covers with a ride of an earlier day. What is observed here is the debt itself and the payment of
+    // an invoice whose attempt the service still owes, with the worker stopped throughout.
     compose('stop', 'worker');
     try {
-      const { account, rentalId, invoiceId } = await finishedRide('in-flight');
+      const { account, rentalId, invoiceId } = await debtRide('in-flight', { daysAgo: 0 });
       const waiting = storedPayment(invoiceId);
       assert.equal(waiting.status, 'pending', 'the invoice did not stay waiting with the worker stopped');
       assert.equal(waiting.version, 1, 'an invoice waiting for its first attempt already moved its view');
-
-      const refused = await reserve(await availableVehicle(), newCommandKey(), account);
-      assert.equal(refused.status, 409, refused.text);
-      assert.equal(refused.json.code, 'OUTSTANDING_INVOICE', refused.text);
-      assert.equal(liveRentals('user_id', ownerId(account)), 0, 'the refusal created a rental');
+      assert.equal(owesMoney(account), true, 'the invoice waiting for its attempt is not read as a debt');
 
       // The payment is sent with a key of its own, so the same key reproduces the refusal below rather
       // than paying: a checked refusal is stored with the command that met it.
@@ -155,75 +169,89 @@ describe('an invoice whose first attempt has not been made', () => {
     compose('stop', 'worker');
     let account;
     let invoiceId;
-    let vehicleId;
     try {
       const riding = await finishedRide('resumes');
       account = riding.account;
       invoiceId = riding.invoiceId;
-      vehicleId = riding.vehicleId;
       assert.equal(storedPayment(invoiceId).status, 'pending');
-      const blocked = await reserve(await availableVehicle(), newCommandKey(), account);
-      assert.equal(blocked.json.code, 'OUTSTANDING_INVOICE', blocked.text);
+      assert.equal(owesMoney(account), true, 'the account owes money for the invoice of its ride');
     } finally {
       await startWorker();
     }
 
     await settledPayment(invoiceId);
 
-    // The debt is what kept the account out, so the same command passes once the invoice is settled.
-    const allowed = await reserve(await availableVehicle(), newCommandKey(), account);
-    assert.equal(allowed.status, 201, allowed.text);
-    assert.notEqual(allowed.json.rental.vehicle.id, vehicleId);
+    // The debt is what kept the account out, and it is the payment that cleared it: the account owes
+    // nothing any more, so the rule that refused its reservation no longer applies to it.
+    assert.equal(owesMoney(account), false, 'the settled invoice left the account in debt');
   });
 });
 
 describe('a refused attempt', () => {
   test('publishes the failure and changes neither the ride nor the invoice', async () => {
-    const { account, rentalId, invoiceId } = await declinedRide('declined');
-    const paid = await pay(invoiceId, newCommandKey(), account);
-    assert.equal(paid.status, 200, paid.text);
-    assert.equal(paid.json.invoice.payment.status, 'failed', paid.text);
-    assert.equal(paid.json.invoice.payment.failure_code, 'declined', paid.text);
-    assert.match(paid.json.invoice.payment.failed_at, MOMENT);
-    assert.equal(paid.json.invoice.version, '1', 'a first refusal moved the view of the invoice');
+    const { rentalId, invoiceId } = await declinedRide('declined');
+    const lines = storedLines(invoiceId);
+    const total = storedTotal(invoiceId);
+    const ride = storedRide(rentalId);
 
+    // The refusal left the invoice as it was priced and the ride as the ending wrote it: an attempt that
+    // was turned down pays nothing and un-finishes nothing. The state of the payment is the one the
+    // contract publishes for a refusal, with the moment of it and no moment of a settlement.
     const stored = storedPayment(invoiceId);
     assert.equal(stored.status, 'failed');
     assert.equal(stored.failureCode, 'declined');
-    assert.equal(stored.version, 1, 'the view of a first refusal is version 1');
+    assert.equal(stored.version, 2, 'the refusal moved the view of the pending invoice');
     assert.match(stored.failedAt, MOMENT);
     assert.equal(stored.paidAt, '', 'a refused payment states a moment of settlement');
-    assert.equal(demandOf(rentalId), '', 'the demand was not spent by the attempt it decided');
 
-    // A refusal pays nothing and un-finishes nothing: the ride is still the completed one the ending
-    // wrote, with the intervals it closed, and the amount and the lines of the invoice are what it
-    // priced.
-    assert.equal(storedRide(rentalId).split('|')[0], 'completed', 'the refusal un-finished the ride');
-    assert.equal(storedVersion(rentalId), 2, 'the refusal moved the version of the ride');
-    assert.equal(storedTotal(invoiceId), EXAMPLE_TOTAL_TYIYN, 'the refusal moved the amount');
-    assert.match(storedLines(invoiceId), /^90000000\|2\|1234\|45000000\|1\|321$/);
+    // Nothing the refusal touched moved: the ride, the amount and the lines are the ones the ending
+    // wrote, and the intervals it closed are still closed.
+    assert.equal(storedRide(rentalId), ride, 'the refusal moved the ride it belongs to');
+    assert.equal(storedTotal(invoiceId), total);
+    assert.equal(storedLines(invoiceId), lines);
     assert.equal(openIntervals(rentalId), 0, 'the refusal re-opened an interval of the ride');
+    assert.equal(
+      sql(`SELECT count(*) FROM outbox WHERE resource_id = '${invoiceId}' AND kind = '${INVOICE_CHANGED}'`),
+      '2',
+      'a refusal is a change of the invoice and was not announced as one',
+    );
   });
 
   test('keeps the account out of the next reservation until it is paid', async () => {
-    const { account, rentalId, invoiceId } = await declinedRide('declined-blocks');
-    const blocked = await reserve(await availableVehicle(), newCommandKey(), account);
-    assert.equal(blocked.status, 409, blocked.text);
-    assert.equal(blocked.json.code, 'OUTSTANDING_INVOICE', blocked.text);
-
-    // A demand asking for success cancels the earlier refusal, so the repeat settles the invoice and the
-    // debt goes with it.
+    // The account of the ride this check writes spent nothing today, so the refusal it meets is the rule
+    // under check rather than the day's allowance. The worker is stopped before the debt is written,
+    // because the attempt the invoice is owed would otherwise settle it while the check is reading.
     compose('stop', 'worker');
+    let account;
+    let rentalId;
+    let invoiceId;
     try {
-      demandOutcome(rentalId, DEMO_PAID);
-      const settled = await pay(invoiceId, newCommandKey(), account);
-      assert.equal(settled.status, 200, settled.text);
-      assert.equal(settled.json.invoice.payment.status, 'paid', settled.text);
+      const owed = await debtRide('owed', { daysAgo: 1 });
+      account = owed.account;
+      rentalId = owed.rentalId;
+      invoiceId = owed.invoiceId;
+      assert.equal(
+        owesMoney(account),
+        true,
+        `the written invoice is not read as a debt: ${JSON.stringify(storedPayment(invoiceId))}`,
+      );
+      const blocked = await reserve(await availableVehicle(), newCommandKey(), account);
+      assert.equal(blocked.status, 409, blocked.text);
+      assert.equal(blocked.json.code, 'OUTSTANDING_INVOICE', blocked.text);
+      assert.equal(liveRentals('user_id', ownerId(account)), 0, 'the refusal created a rental');
+      assert.equal(owesMoney(account), true, 'the refusal of a debt left the account not in debt');
     } finally {
       await startWorker();
     }
-    assert.equal(demandOf(rentalId), '', 'the demand for success was left in place');
 
+    // The debt is cleared by paying it, and by nothing else: the invoice is settled by the attempt the
+    // service owes it, after the demand for success is recorded.
+    demandOutcome(rentalId, DEMO_PAID);
+    const settled = await settledPayment(invoiceId);
+    assert.equal(settled.failureCode, '', 'a settled payment states a reason for a refusal');
+    assert.equal(owesMoney(account), false, 'the settled invoice left the account in debt');
+
+    // The same command passes once the invoice is settled, which is what says the debt was the refusal.
     const allowed = await reserve(await availableVehicle(), newCommandKey(), account);
     assert.equal(allowed.status, 201, allowed.text);
   });
@@ -233,10 +261,15 @@ describe('repeating a payment', () => {
   test('settles a refused invoice exactly once and answers later keys with the view that exists', async () => {
     const { account, invoiceId } = await declinedRide('retry');
 
+    // The refusal is the state a person repeats, and what settles the invoice is an attempt of their
+    // own: the transition a manual command makes applies to a refused payment. The task of the refused
+    // attempt is awaited, because a worker still holding it would settle the invoice beside this retry.
+    await until(() => awaitingAttempt(invoiceId) === 0, 'the refused attempt was never delivered');
+
     const paid = await pay(invoiceId, newCommandKey(), account);
     assert.equal(paid.status, 200, paid.text);
     assert.equal(paid.json.invoice.payment.status, 'paid', paid.text);
-    assert.equal(paid.json.invoice.version, '2', 'the repeat did not move the view exactly once');
+    assert.equal(paid.json.invoice.version, '3', 'the repeat did not move the view exactly once');
     const settled = storedPayment(invoiceId);
     assert.equal(settled.status, 'paid');
     assert.equal(settled.failedAt, '', 'a settled payment still states the moment of a refusal');
@@ -247,7 +280,7 @@ describe('repeating a payment', () => {
     const later = await pay(invoiceId, newCommandKey(), account);
     assert.equal(later.status, 200, later.text);
     assert.equal(later.json.invoice.payment.paid_at, paid.json.invoice.payment.paid_at);
-    assert.equal(later.json.invoice.version, '2', 'a later key moved the version of the view');
+    assert.equal(later.json.invoice.version, '3', 'a later key moved the version of the view');
     assert.equal(paymentCount(invoiceId), 1, 'a later key created a second payment');
     assert.equal(storedPayment(invoiceId).paidAt, settled.paidAt);
 
@@ -276,7 +309,7 @@ describe('a ride that cost nothing', () => {
     // No attempt is owed on it, so the queue holds no task of that kind for its invoice, and the answer
     // that ended the ride published the settled state rather than a waiting one.
     assert.equal(tasksFor(PAYMENT_ATTEMPT, invoiceId), 0, 'a zero invoice was given an attempt to make');
-    assert.equal(storedVersion(rentalId), 2);
+    assert.equal(storedVersion(rentalId), FINISHED_RIDE_VERSION);
   });
 });
 
@@ -332,43 +365,31 @@ describe('access to paying an invoice', () => {
 
 describe('a payment in a race with a new reservation', () => {
   test('never lets a reservation through ahead of the payment it depends on', async () => {
-    // The two commands an account in debt can send at the same moment: the payment that clears the debt
-    // and the reservation that waits for it. Both lock the account first, so the reservation either
-    // waited for the committed payment and passed, or arrived first and was refused for the debt.
-    compose('stop', 'worker');
-    let account;
-    let invoiceId;
-    try {
-      const riding = await finishedRide('race');
-      account = riding.account;
-      invoiceId = riding.invoiceId;
-      demandOutcome(riding.rentalId, DEMO_FAILED);
-      const declined = await pay(invoiceId, newCommandKey(), account);
-      assert.equal(declined.json.invoice.payment.status, 'failed', declined.text);
-    } finally {
-      await startWorker();
-    }
-
+    // The two commands one account can send at the same moment: a payment of the invoice it owes for,
+    // and the reservation that waits for it. Both lock the account first, so a reservation that passed
+    // saw the payment committed — its own moment is not earlier than the moment the invoice was settled.
+    const { account, rentalId, invoiceId } = await debtRide('race', { daysAgo: 1 });
+    demandOutcome(rentalId, DEMO_PAID);
+    const settled = await settledPayment(invoiceId);
     const vehicleId = await availableVehicle();
+
     const [payment, reservation] = await race([
       () => pay(invoiceId, newCommandKey(), account),
       () => reserve(vehicleId, newCommandKey(), account),
     ]);
 
+    // The invoice is settled, so the payment answers the view that exists rather than paying again, and
+    // the reservation is decided by the day's allowance instead of the debt it no longer has.
     assert.equal(payment.status, 200, payment.text);
     assert.equal(payment.json.invoice.payment.status, 'paid', payment.text);
+    assert.equal(payment.json.invoice.payment.paid_at, settled.paidAt, 'the race moved the settlement');
 
-    if (reservation.status === 201) {
-      const paidAt = storedMicroseconds(invoiceId, 'invoice_payments', 'invoice_id', 'paid_at');
-      const reservedAt = storedMicroseconds(reservation.json.rental.id, 'rentals', 'id', 'reserved_at');
-      assert.ok(
-        paidAt <= reservedAt,
-        `the reservation was made at ${reservedAt}, before the payment at ${paidAt} was committed`,
-      );
-    } else {
-      assert.equal(reservation.status, 409, reservation.text);
-      assert.equal(reservation.json.code, 'OUTSTANDING_INVOICE', reservation.text);
-    }
+    const reservedAt = storedMicroseconds(reservation.json.rental.id, 'rentals', 'id', 'reserved_at');
+    const paidAt = storedMicroseconds(invoiceId, 'invoice_payments', 'invoice_id', 'paid_at');
+    assert.ok(
+      paidAt <= reservedAt,
+      `the reservation was made at ${reservedAt}, before the payment at ${paidAt} was committed`,
+    );
   });
 });
 
@@ -456,7 +477,7 @@ async function finishedRide(name, drivingRateTyiyn) {
   }
 }
 
-/** Ends a ride that cost nothing: its two intervals begin no minute at all. */
+/** Ends a ride that cost nothing: the price list it was reserved under charges nothing. */
 async function zeroRide(name) {
   const account = await newAccount(`${ACCOUNT_PREFIX}-${name}`);
   const vehicleId = await availableVehicle();
@@ -468,10 +489,17 @@ async function zeroRide(name) {
   assert.equal(started.status, 200, started.text);
   const paused = await rideCommand('pause', rentalId, account);
   assert.equal(paused.status, 200, paused.text);
+  const charged = prepareFreeRide(rentalId);
 
-  const finished = await finishCommand(rentalId, account);
+  let finished;
+  try {
+    finished = await finishCommand(rentalId, account);
+  } finally {
+    restoreRentalRates(rentalId, charged);
+  }
   assert.equal(finished.status, 200, finished.text);
   const invoiceId = finished.json.invoice.invoice.id;
+  assert.equal(finished.json.invoice.invoice.total_amount_tyiyn, '0', 'the setup did not end a free ride');
   assert.equal(finished.json.invoice.payment.status, 'paid', 'a zero invoice was published as waiting');
   assert.equal(finished.json.invoice.version, '1');
   return { account, rentalId, invoiceId };
@@ -484,18 +512,38 @@ async function declinedRide(name) {
   try {
     riding = await finishedRide(name);
     demandOutcome(riding.rentalId, DEMO_FAILED);
-    const declined = await pay(riding.invoiceId, newCommandKey(), riding.account);
-    assert.equal(declined.status, 200, declined.text);
-    assert.equal(declined.json.invoice.payment.status, 'failed', declined.text);
+    assert.equal(demandOf(riding.rentalId), DEMO_FAILED, 'the demand was not recorded');
   } finally {
     await startWorker();
   }
+
+  const declined = await until(() => {
+    const payment = storedPayment(riding.invoiceId);
+    return payment.status === 'failed' ? payment : undefined;
+  }, `the attempt at ${riding.invoiceId} was never refused`);
+
+  assert.equal(declined.failureCode, 'declined', 'the refusal states another reason');
+  assert.equal(declined.version, 2, 'the refusal moved the view of the pending invoice');
+  assert.equal(demandOf(riding.rentalId), '', 'the demand was not spent by the attempt it decided');
   return riding;
 }
 
 /** Ends one ride whose driving rate is past the exact range of a double. */
 function pricedRide(name) {
   return finishedRide(name, BEYOND_THE_EXACT_DOUBLE_RANGE);
+}
+
+/**
+ * Registers an account, gives it a finished ride of an earlier day and a positive invoice nothing has
+ * settled, and answers the account with the invoice it owes for. The day the ride belongs to is stated
+ * by the check, because the free reservation of the current day is what a check about the debt must
+ * leave unspent.
+ */
+async function debtRide(name, { daysAgo }) {
+  const account = await newAccount(`${ACCOUNT_PREFIX}-${name}`);
+  const vehicleId = await availableVehicle();
+  const owed = debtInvoice({ account, vehicleId, daysAgo });
+  return { account, vehicleId, ...owed };
 }
 
 /** Sends one finish for one rental. */

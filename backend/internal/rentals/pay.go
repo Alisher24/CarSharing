@@ -72,11 +72,11 @@ func (s *Service) payWithin(ctx context.Context, moment time.Time, command PayCo
 	}
 
 	action, refusal := ManualPayment(PaymentStage(issued.Payment))
-	if action == LeaveInvoice {
-		return Outcome{Moment: moment, Invoice: issued}, nil
-	}
 	if refusal != "" {
 		return refused(moment, Refusal{Kind: refusal}), nil
+	}
+	if action == LeaveInvoice {
+		return Outcome{Moment: moment, Invoice: issued}, nil
 	}
 
 	// A manual attempt is a new key by definition — the key of the attempt that was refused
