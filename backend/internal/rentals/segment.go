@@ -17,39 +17,6 @@ const (
 	Paused  Mode = "paused"
 )
 
-// Segment is one interval of a ride: the mode it was driven in and the moment it began, which is the
-// moment the mode before it ended. An interval without an end is the one the ride is in.
-type Segment struct {
-	Mode      Mode
-	StartedAt time.Time
-	EndedAt   *time.Time
-}
-
-// segmentsStatement reads the intervals of one ride in the order they were opened.
-const segmentsStatement = `
-SELECT mode, started_at, ended_at
-FROM ride_segments
-WHERE rental_id = $1
-ORDER BY started_at, id`
-
-func readSegments(ctx context.Context, pool *pgxpool.Pool, rentalID string) ([]Segment, error) {
-	rows, err := database.QuerierFrom(ctx, pool).Query(ctx, segmentsStatement, rentalID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var intervals []Segment
-	for rows.Next() {
-		var interval Segment
-		if err = rows.Scan(&interval.Mode, &interval.StartedAt, &interval.EndedAt); err != nil {
-			return nil, err
-		}
-		intervals = append(intervals, interval)
-	}
-	return intervals, rows.Err()
-}
-
 // closeOpenSegment ends the interval the ride is in at the given moment. The pairing of the end and
 // the absence of one is the whole of "still open", so a ride another transaction has already moved on
 // is left alone: exactly one interval per transition is closed, and never an already closed one.

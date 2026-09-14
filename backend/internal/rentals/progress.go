@@ -20,11 +20,6 @@ type Progress struct {
 	AmountTyiyn     int64
 }
 
-// RidingProgress reads what one ride has taken at the moment of an answer.
-func (s *Service) RidingProgress(ctx context.Context, rental Rental, moment time.Time) (Progress, error) {
-	return readProgress(ctx, s.pool, rental, moment)
-}
-
 // startedMinutesStatement applies the billing policy to the intervals of one ride: each mode is summed
 // over the whole ride first, and each sum is rounded up once. Rounding every interval separately would
 // bill three twenty-second intervals as three begun minutes instead of one.
