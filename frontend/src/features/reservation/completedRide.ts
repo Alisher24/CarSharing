@@ -1,4 +1,4 @@
-import type { FinishResult } from '../../shared/api/current.ts';
+import type { FinishResult, InvoiceView } from '../../shared/api/current.ts';
 
 /**
  * What the browser remembers about a ride it ended: the answer the service gave, which is the invoice
@@ -22,6 +22,16 @@ export type CompletedRide = {
 
   /** The answer itself, as the service gave it. */
   finished: FinishResult;
+
+  /**
+   * The state of what is owed on the invoice, as the service last published it: the answer that ended
+   * the ride, and the answer to every payment since. It is kept beside the ending rather than derived
+   * from it, because the payment moves while the invoice and the ride never do.
+   *
+   * Nothing else in this build publishes that state: reading an invoice from the service is a later
+   * task, and the signal that a payment changed carries a version but not a status.
+   */
+  payment: InvoiceView;
 };
 
 /** How long an ending is shown. Past it the account screen of a later task is where it belongs. */
@@ -48,8 +58,35 @@ export function storeCompletedRide(
   receivedAt: number,
   storage = browserStorage(),
 ): void {
+  writeCompletedRide({ owner, receivedAt, finished, payment: finished.invoice }, storage);
+}
+
+/**
+ * storePayment records the state of a payment the service has just published, in the record of the
+ * ending it belongs to. It is written by the handler that received the answer rather than by a render,
+ * so a reload of the tab shows the state the service confirmed instead of the one it replaced.
+ *
+ * A record that is not this account's is not touched: another account's ending is not this payment's
+ * to describe, and a record that cannot be read is left as it is rather than replaced by a payment
+ * with no invoice beside it.
+ */
+export function storePayment(
+  owner: string,
+  invoiceId: string,
+  payment: InvoiceView,
+  receivedAt: number,
+  storage = browserStorage(),
+): void {
+  const held = readCompletedRide(storage);
+  if (held === undefined || held.owner !== owner) return;
+  if (held.finished.invoice.invoice.id !== invoiceId) return;
+
+  writeCompletedRide({ ...held, receivedAt, payment }, storage);
+}
+
+function writeCompletedRide(record: CompletedRide, storage: CompletionStorage | undefined): void {
   try {
-    storage?.setItem(STORAGE_KEY, JSON.stringify({ owner, receivedAt, finished }));
+    storage?.setItem(STORAGE_KEY, JSON.stringify(record));
   } catch {
     // Storage that refuses the write costs the summary on screen, never the ending itself.
   }
@@ -99,6 +136,9 @@ function readCompletedRide(storage: CompletionStorage | undefined): CompletedRid
     if (typeof parsed?.owner !== 'string') return undefined;
     if (typeof parsed.receivedAt !== 'number') return undefined;
     if (!isFinishedResult(parsed.finished)) return undefined;
+    // A record written before payments were kept states none of its own. The view the ending carried
+    // is the state it was written with, which is what the panel shows rather than nothing at all.
+    if (!isInvoiceView(parsed.payment)) parsed.payment = parsed.finished.invoice;
 
     return parsed;
   } catch {
@@ -119,6 +159,20 @@ function isFinishedResult(finished: unknown): finished is FinishResult {
   if (typeof answer.invoice?.invoice?.total_amount_tyiyn !== 'string') return false;
 
   return typeof answer.rental?.completion?.reason === 'string';
+}
+
+/**
+ * isInvoiceView reports whether a stored value is still a view of an invoice. The status is what the
+ * payment is shown by, so a record that does not state one is refused: a payment drawn from a value
+ * that cannot say what it is would be a state nobody published.
+ */
+function isInvoiceView(payment: unknown): payment is InvoiceView {
+  if (typeof payment !== 'object' || payment === null) return false;
+  const view = payment as InvoiceView;
+  if (typeof view.invoice?.id !== 'string') return false;
+  if (typeof view.version !== 'string') return false;
+
+  return typeof view.payment?.status === 'string';
 }
 
 function browserStorage(): CompletionStorage | undefined {

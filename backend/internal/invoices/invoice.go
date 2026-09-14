@@ -58,12 +58,22 @@ type Invoice struct {
 	TotalTyiyn billing.AmountTyiyn
 
 	// Payment is the state of what is owed on this invoice: the status, the version of the view it is
-	// published through, and the moment that view last moved. This task issues an invoice and states
-	// that nothing has been paid yet; every later state of a payment belongs to the transition that
-	// produces it.
+	// published through, and the moment that view last moved.
 	Payment          PaymentStatus
 	PaymentVersion   int64
 	PaymentUpdatedAt time.Time
+
+	// PaidAt is the moment the invoice was settled and FailedAt the moment an attempt at it was
+	// refused, with FailureCode the reason that refusal is published under. A payment that has not
+	// reached a state carries no moment and no reason of it, and one absence is what says so: what is
+	// not there is absent rather than held as the zero instant, which is a moment of the year one and
+	// not a missing one.
+	//
+	// Each of the three is a pointer for the same reason: the columns admit null, and a value type
+	// cannot hold the absence the row states.
+	PaidAt      *time.Time
+	FailedAt    *time.Time
+	FailureCode *FailureCode
 }
 
 // Lines is the two lines of an invoice in the order the contract publishes them.

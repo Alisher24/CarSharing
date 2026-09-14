@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { isLiveRental, type CurrentSnapshot, type Rental, type ReservedRental } from '../../shared/api/current.ts';
 import type { Resource } from '../../shared/api/Resource.ts';
 import { loadedValue } from '../../shared/api/Resource.ts';
+import type { Account } from '../account/useAccount.ts';
 import { commandText } from './commandPhase.ts';
 import { completedRide, type CompletedRide } from './completedRide.ts';
 import type { Countdown, ServerClock } from './countdown.ts';
@@ -31,6 +32,7 @@ import { START_ACTION } from './rideCopy.ts';
 import { TariffRates } from './TariffRates.tsx';
 import { withinRepeatWindow, type UnfinishedCommand } from './unfinishedCommand.ts';
 import { useCountdown } from './useCountdown.ts';
+import { usePayment } from './usePayment.ts';
 import type { Reservations } from './useReservations.ts';
 import type { RideCommands } from './useRideCommands.ts';
 
@@ -40,6 +42,9 @@ type ReservationPanelProps = {
 
   /** The account the panel belongs to, which the record of an ending is kept apart by. */
   owner: string | undefined;
+
+  /** The account itself, which the payment of an ending needs the session of. */
+  account: Account;
 
   reservations: Reservations;
 
@@ -53,14 +58,23 @@ type ReservationPanelProps = {
  * ReservationPanel is what a person reads about their own rental above the map. It is permanent while
  * somebody is signed in: a reservation shows the vehicle, the time left, the frozen rates, the
  * cancellation and the control that starts the ride, and a ride that has started shows its mode, its
- * durations and what it has cost so far. A ride that has just ended shows what it cost and why, which
- * is read from the answer the ending produced rather than from the account's current state: the
- * service publishes no shape for "the ride I finished last" yet. Without any of those it shows the
- * day's allowance, which is not something to infer from having no rental.
+ * durations and what it has cost so far. A ride that has just ended shows what it cost, why, and where
+ * the payment of that charge stands, which is read from the answers the service gave rather than from
+ * the account's current state: the service publishes no shape for "the ride I finished last" yet.
+ * Without any of those it shows the day's allowance, which is not something to infer from having no
+ * rental.
  */
-export function ReservationPanel({ resource, owner, reservations, ride, onShowVehicle }: ReservationPanelProps) {
+export function ReservationPanel({
+  resource,
+  owner,
+  account,
+  reservations,
+  ride,
+  onShowVehicle,
+}: ReservationPanelProps) {
   const snapshot = loadedValue(resource);
   const finished = useCompletedRide(owner, resource, ride);
+  const paid = usePayment(account);
   if (snapshot === undefined) return null;
 
   const rental = currentRental(snapshot);
@@ -73,7 +87,7 @@ export function ReservationPanel({ resource, owner, reservations, ride, onShowVe
         finished === undefined ? (
           <p className="reservation-panel-empty">{NOTHING_CURRENT}</p>
         ) : (
-          <FinishedRideView finished={finished.finished} />
+          <FinishedRideView finished={finished.finished} payment={finished.payment} paid={paid} />
         )
       ) : (
         <CurrentRental

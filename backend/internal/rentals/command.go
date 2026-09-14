@@ -60,6 +60,18 @@ const (
 	// TelemetryStale reports a ride whose vehicle has no confirmed position recent enough to decide
 	// an ending by. The ride is not ended and keeps charging.
 	TelemetryStale RefusalKind = "telemetry_stale"
+
+	// OutstandingInvoice reports an account that owes money: a positive invoice of its own that
+	// nothing has settled. No reservation is made, and the debt is cleared only by paying it.
+	OutstandingInvoice RefusalKind = "outstanding_invoice"
+
+	// PaymentInProgress reports an invoice whose first attempt the service still owes: a person waits
+	// for that attempt rather than paying in its place, and the command that asked changes nothing.
+	PaymentInProgress RefusalKind = "payment_in_progress"
+
+	// InvoiceNotFound reports an identifier this account holds no invoice for, whether no such invoice
+	// exists or it belongs to somebody else.
+	InvoiceNotFound RefusalKind = "invoice_not_found"
 )
 
 // Refusal is a domain answer that changed nothing, together with what displaying it needs.

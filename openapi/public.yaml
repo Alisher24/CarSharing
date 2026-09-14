@@ -3916,7 +3916,7 @@ paths:
     post:
       operationId: payInvoice
       summary: pay Invoice
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-body-limit: 65536
       description: >-
         An accepted demo decline is HTTP 200 PayResult with failed payment. A new key for an already paid

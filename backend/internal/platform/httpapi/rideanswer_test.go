@@ -86,6 +86,11 @@ func TestEveryRefusalKindIsSpelled(t *testing.T) {
 		rentals.RentalCompleted,
 		rentals.InvalidRentalState,
 		rentals.RentalNotFound,
+		rentals.OutsideServiceZone,
+		rentals.TelemetryStale,
+		rentals.OutstandingInvoice,
+		rentals.PaymentInProgress,
+		rentals.InvoiceNotFound,
 	}
 	for _, kind := range kinds {
 		if _, _, _, err := refusalContract(rentals.Refusal{Kind: kind}); err != nil {

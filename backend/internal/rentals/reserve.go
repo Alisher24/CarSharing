@@ -122,9 +122,20 @@ func (s *Service) reservationWithin(
 		return Outcome{}, err
 	}
 
-	// The day's allowance is judged first of what remains, because it is what a person must be told
-	// about: their own live rental is a consequence of having spent it, and a client told only about
-	// the rental would offer the command again as soon as that rental ended.
+	// A debt is judged first of what remains, before the day's allowance and before anything about the
+	// vehicle is read: it is the one condition here a person clears themselves, and a client told
+	// about an allowance or a vehicle instead would be offered nothing it could do about the answer.
+	owed, err := s.invoices.Outstanding(ctx, command.Caller)
+	if err != nil {
+		return Outcome{}, err
+	}
+	if owed {
+		return refused(moment, Refusal{Kind: OutstandingInvoice}), nil
+	}
+
+	// The day's allowance is judged next, because it is what a person must be told about: their own
+	// live rental is a consequence of having spent it, and a client told only about the rental would
+	// offer the command again as soon as that rental ended.
 	limit, err := readDailyLimit(ctx, s.pool, command.Caller, moment)
 	if err != nil {
 		return Outcome{}, err

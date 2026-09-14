@@ -128,7 +128,10 @@ const invoiceFields = `
     invoice.total_amount_tyiyn,
     payment.status,
     payment.version,
-    payment.updated_at`
+    payment.updated_at,
+    payment.paid_at,
+    payment.failed_at,
+    payment.failure_code`
 
 // invoiceColumns reads the payment beside the invoice, because the contract publishes the two together
 // and an invoice is always issued with one.
@@ -143,6 +146,9 @@ WHERE invoice.rental_id = $1`
 
 	invoiceByIDForSelection = invoiceColumns + `
 WHERE invoice.id = $1 AND invoice.user_id = $2`
+
+	invoiceByIDSelection = invoiceColumns + `
+WHERE invoice.id = $1`
 )
 
 // Issue writes one invoice for one finished ride and answers it as it was stored.
@@ -188,6 +194,7 @@ func insertLineOf(line Line) insertLine {
 // a payment is a view the contract cannot publish, so the two are written together.
 func (s *Store) insert(ctx context.Context, id string, draft Draft) error {
 	driving, paused := insertLineOf(draft.Driving), insertLineOf(draft.Paused)
+	status, paidAt := FirstPayment(draft.TotalTyiyn, draft.IssuedAt)
 	querier := database.QuerierFrom(ctx, s.pool)
 	written, err := querier.Exec(ctx, insertInvoiceStatement,
 		id,
@@ -213,7 +220,7 @@ func (s *Store) insert(ctx context.Context, id string, draft Draft) error {
 		// nothing.
 		return ErrInvoiceNotFound
 	}
-	_, err = querier.Exec(ctx, insertPaymentStatement, id, PendingPayment, issuedVersion, draft.IssuedAt)
+	_, err = querier.Exec(ctx, insertPaymentStatement, id, status, issuedVersion, draft.IssuedAt, paidAt)
 	return err
 }
 
@@ -228,6 +235,58 @@ func (s *Store) ByRental(ctx context.Context, rentalID string) (Invoice, error) 
 func (s *Store) ByID(ctx context.Context, owner uuid.UUID, id string) (Invoice, error) {
 	return s.read(ctx, invoiceByIDForSelection, id, owner)
 }
+
+// ByIDForRead reads one invoice and the ride it describes for anyone who may hold it. The contract
+// states no read of an invoice of one's own, so this is not a published operation: it is how a command
+// that has not yet established whose invoice it was handed names the two rows it must lock before it
+// can decide anything, and the account that owns them.
+//
+// The read takes no lock, because it runs before the first one: a command locks the rows it planned
+// for and proves afterwards that the relationships did not change.
+func (s *Store) ByIDForRead(ctx context.Context, id string) (Invoice, string, error) {
+	var rentalID string
+	var owner uuid.UUID
+	err := database.QuerierFrom(ctx, s.pool).QueryRow(ctx, invoiceOwnerStatement, id).
+		Scan(&rentalID, &owner)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Invoice{}, "", ErrInvoiceNotFound
+	}
+	if err != nil {
+		return Invoice{}, "", err
+	}
+	found, err := s.read(ctx, invoiceByIDSelection, id)
+	return found, rentalID, err
+}
+
+// invoiceOwnerStatement names the ride an invoice describes and the account that owes it, without
+// reading the invoice itself: a command needs the two rows to lock rather than the amount to display.
+const invoiceOwnerStatement = `
+SELECT rental_id, user_id
+FROM invoices
+WHERE id = $1`
+
+// Outstanding reports whether this account owes money: whether it holds a positive invoice that no
+// attempt has settled. It names the account rather than reading every invoice, because a debt is a
+// property of one account and reading another's would be reading what this command has no business
+// with.
+//
+// A zero invoice is not a debt: it is settled by the moment it was issued, so the payment state alone
+// answers the question and the amount is not judged a second time here.
+func (s *Store) Outstanding(ctx context.Context, owner uuid.UUID) (bool, error) {
+	var owed bool
+	err := database.QuerierFrom(ctx, s.pool).QueryRow(ctx, outstandingStatement, owner).Scan(&owed)
+	return owed, err
+}
+
+const outstandingStatement = `
+SELECT EXISTS (
+    SELECT 1
+    FROM invoices invoice
+    JOIN invoice_payments payment ON payment.invoice_id = invoice.id
+    WHERE invoice.user_id = $1
+      AND invoice.total_amount_tyiyn > 0
+      AND payment.status <> 'paid'
+)`
 
 // issuedVersion is the version an invoice and its payment are written at. The invoice never moves past
 // it — an invoice is immutable — and the payment moves when its state changes.
@@ -277,9 +336,93 @@ SELECT $1::uuid,
 FROM rentals rental
 WHERE rental.id = $13::uuid`
 
+// insertPaymentStatement writes the first state of a payment. The moment a settled payment states is
+// the moment its invoice was issued, so a zero invoice is paid from the instant it exists; a payment
+// that is not settled carries no moment of one, which the check of the table requires.
 const insertPaymentStatement = `
-INSERT INTO invoice_payments (invoice_id, status, version, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $4)`
+INSERT INTO invoice_payments (invoice_id, status, version, created_at, updated_at, paid_at)
+VALUES ($1, $2, $3, $4, $4, $5::timestamptz)`
+
+// settleStatement moves the payment of one invoice from the state it must stand in to the one the
+// attempt reached. Which state it starts from is part of the statement rather than of a read before
+// it, so a second attempt at an invoice somebody has already settled moves no row and is answered as
+// the refusal it is, whatever two attempts did at once.
+//
+// Each moment is written together with the state that carries it and the moments of the other state
+// are cleared, so a payment never holds a moment its own state does not explain. The version counts
+// the views this change produced, which is one per transition.
+const settleStatement = `
+UPDATE invoice_payments
+SET status = $2::text,
+    version = version + 1,
+    updated_at = $3::timestamptz,
+    paid_at = $4::timestamptz,
+    failed_at = $5::timestamptz,
+    failure_code = $6::text
+WHERE invoice_id = $1 AND status = $7::text`
+
+// Settle moves the payment of one invoice from the state the transition starts from to the state the
+// attempt reached, and answers the invoice as the selection every reader uses reads it.
+//
+// The state it starts from is named by the caller because the transitions differ in what they are a
+// repeat of: the first attempt applies to an invoice nothing has settled, and a manual attempt to one
+// that was refused before. A transition that does not apply to the state the row stands in is reported
+// as a refusal rather than as a successful write of nothing, and the row is left untouched.
+//
+// The transition and the read that answers it are two statements rather than one statement with a
+// returning clause. A statement sees the snapshot its own start fixed, so the read inside it would
+// answer the payment as it stood before the transition wrote it — the answer would describe the state
+// the attempt replaced while the row already held the state it reached.
+func (s *Store) Settle(
+	ctx context.Context, invoiceID string, from PaymentStatus, outcome SettleOutcome,
+) (Invoice, error) {
+	if err := outcome.Validate(); err != nil {
+		return Invoice{}, err
+	}
+	written, err := database.QuerierFrom(ctx, s.pool).Exec(ctx, settleStatement,
+		invoiceID,
+		outcome.Status,
+		outcome.Moment,
+		paidMomentOf(outcome),
+		failedMomentOf(outcome),
+		failureCodeOf(outcome),
+		from,
+	)
+	if err != nil {
+		return Invoice{}, err
+	}
+	if written.RowsAffected() == 0 {
+		return Invoice{}, ErrPaymentAlreadySettled
+	}
+	return s.read(ctx, invoiceByIDSelection, invoiceID)
+}
+
+// paidMomentOf, failedMomentOf and failureCodeOf state what one outcome writes into the three columns
+// that belong to a state: a state that does not carry a value writes none, so the row cannot end up
+// holding a moment or a reason that its own status does not explain.
+func paidMomentOf(outcome SettleOutcome) *time.Time {
+	if outcome.Status == PaidPayment {
+		moment := outcome.Moment
+		return &moment
+	}
+	return nil
+}
+
+func failedMomentOf(outcome SettleOutcome) *time.Time {
+	if outcome.Status == FailedPayment {
+		moment := outcome.Moment
+		return &moment
+	}
+	return nil
+}
+
+func failureCodeOf(outcome SettleOutcome) *FailureCode {
+	if outcome.Status == FailedPayment {
+		code := outcome.FailureCode
+		return &code
+	}
+	return nil
+}
 
 // read reads at most one invoice, so that a selection matching several rows is reported as a failure
 // of the caller's expectation rather than silently answering the first.
@@ -339,6 +482,9 @@ func scanInvoice(rows pgx.Rows, found *Invoice) error {
 		&found.Payment,
 		&found.PaymentVersion,
 		&found.PaymentUpdatedAt,
+		&found.PaidAt,
+		&found.FailedAt,
+		&found.FailureCode,
 	)
 	if err != nil {
 		return err

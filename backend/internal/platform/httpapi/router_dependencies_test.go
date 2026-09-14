@@ -101,6 +101,12 @@ func (fixedReservations) FinishRide(
 	return rentals.Answered{}, nil
 }
 
+func (fixedReservations) PayInvoice(
+	context.Context, rentals.PayCommand,
+) (rentals.Answered, error) {
+	return rentals.Answered{}, nil
+}
+
 type fixedNotifications struct{}
 
 func (fixedNotifications) Collection(

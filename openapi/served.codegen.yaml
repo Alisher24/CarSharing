@@ -21,11 +21,12 @@ output-options:
     - reserve
     - cancelRental
     # The ride commands: start, pause, resume and the finish that ends the ride and issues its
-    # invoice.
+    # invoice, and the payment of that invoice.
     - startRental
     - pauseRental
     - resumeRental
     - finishRental
+    - payInvoice
     - getNotifications
     - readNotification
     # The two streams are served here too: the boundary validates them against the contract, and the

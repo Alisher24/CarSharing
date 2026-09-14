@@ -56,7 +56,11 @@ func run() error {
 // that runs out on its own, and the deadline pass performs one transition per reservation — its
 // release or its warning — whichever process performs it.
 func work(ctx context.Context, pool *pgxpool.Pool) error {
-	delivery, err := outbox.NewWorker(pool, events.Deliveries(pool).Deliver)
+	deliveries, err := deliveries(pool)
+	if err != nil {
+		return err
+	}
+	delivery, err := outbox.NewWorker(pool, deliveries.Deliver)
 	if err != nil {
 		return err
 	}
@@ -71,4 +75,24 @@ func work(ctx context.Context, pool *pgxpool.Pool) error {
 	<-ctx.Done()
 	slog.Info("worker stopped")
 	return nil
+}
+
+// deliveries is the table of what this process delivers, assembled where the process is: the signals
+// the queue carries to every API process, and the first attempt at the payment of an invoice, which is
+// work of the service rather than a message to anybody.
+//
+// A task of a kind this table does not name is kept in the queue with its error, so a kind whose
+// delivery belongs to a later task — the letter with the invoice — is owed rather than reported as
+// delivered.
+func deliveries(pool *pgxpool.Pool) (outbox.Deliveries, error) {
+	payments, err := rentals.NewRentalPayment(pool)
+	if err != nil {
+		return nil, err
+	}
+	table := events.Deliveries(pool)
+	table[rentals.PaymentAttemptTask()] = func(ctx context.Context, task outbox.Task) error {
+		_, err := payments.Attempt(ctx, task.ResourceID)
+		return err
+	}
+	return table, nil
 }

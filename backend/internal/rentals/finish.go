@@ -224,9 +224,14 @@ func invoiceDraft(ended Rental, priced billing.Charge, moment time.Time) invoice
 // vehicle that stopped being held and is therefore free again in the catalog, the invoice that was
 // issued, and the work a worker must still deliver.
 //
-// The delivery of an invoice is the letter the contract describes and no process of this build sends
-// yet. The task is recorded anyway: the queue keeps a kind whose delivery is not declared, so the
-// letter is owed from the moment the ride ends rather than from the moment somebody remembers it.
+// The deliveries an ending owes are two: the attempt at the payment of the invoice and the letter that
+// carries it. The attempt is recorded only for an invoice that is still waiting for one — a ride that
+// cost nothing is settled by the moment its invoice was issued — and that question is asked of the
+// state the invoice was stored with rather than of a second comparison of its amount with zero.
+//
+// The delivery of the letter is the one the contract describes and no process of this build sends yet.
+// The task is recorded anyway: the queue keeps a kind whose delivery is not declared, so the letter is
+// owed from the moment the ride ends rather than from the moment somebody remembers it.
 func announceFinish(ctx context.Context, pool *pgxpool.Pool, ended Rental, issued invoices.Invoice) error {
 	version, err := raiseVehicleVersion(ctx, pool, ended.VehicleID)
 	if err != nil {
@@ -241,8 +246,29 @@ func announceFinish(ctx context.Context, pool *pgxpool.Pool, ended Rental, issue
 	); err != nil {
 		return err
 	}
+	if err = recordPaymentAttempt(ctx, pool, ended, issued); err != nil {
+		return err
+	}
 	return events.Record(ctx, pool, events.Signal{
 		Kind:       invoiceIssuedTask,
+		ResourceID: issued.ID,
+		Version:    ended.Version,
+		Recipient:  ended.UserID,
+	})
+}
+
+// recordPaymentAttempt owes one attempt at the invoice of a ride that has ended, unless nothing is owed
+// on it. The task names the invoice as its resource and the ride as the version it was recorded at, and
+// it is addressed to the account that rode: the attempt belongs to one payment rather than to the
+// installation.
+func recordPaymentAttempt(
+	ctx context.Context, pool *pgxpool.Pool, ended Rental, issued invoices.Invoice,
+) error {
+	if issued.Payment != invoices.PendingPayment {
+		return nil
+	}
+	return events.Record(ctx, pool, events.Signal{
+		Kind:       paymentAttemptTask,
 		ResourceID: issued.ID,
 		Version:    ended.Version,
 		Recipient:  ended.UserID,

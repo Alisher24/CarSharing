@@ -31,6 +31,20 @@ func finishedBody(outcome rentals.Outcome) (servedapi.FinishResult, error) {
 	}, nil
 }
 
+// paidBody publishes what the payment of one invoice decided: the invoice with the state of its
+// payment as the transition left it. The answer is the invoice of the ride rather than the ride, so a
+// client that asked to pay reads the amount it paid and the moment it was settled.
+func paidBody(outcome rentals.Outcome) (servedapi.PayResult, error) {
+	invoice, err := invoiceViewBody(outcome.Invoice)
+	if err != nil {
+		return servedapi.PayResult{}, err
+	}
+	return servedapi.PayResult{
+		ServerTime: timestamp.Format(outcome.Moment),
+		Invoice:    invoice,
+	}, nil
+}
+
 // completedRentalBody publishes a ride that has ended. A rental in another stage cannot be described
 // by this shape, so it is reported as a defect of the server rather than written as if it had ended.
 func completedRentalBody(outcome rentals.Outcome) (servedapi.CompletedRental, error) {
@@ -125,15 +139,43 @@ func invoiceLineBody(line invoices.Line) servedapi.InvoiceLine {
 }
 
 // paymentBody publishes the state of what is owed on an invoice. Each status the contract declares
-// carries exactly the moments it can have, so a status this build does not issue is reported as a
-// defect of the server rather than written under another status's shape.
+// carries exactly the moments it can have: a payment that is still being attempted states when its
+// view last moved, a refused one states when it was refused and why, and a settled one states when it
+// was paid. A status this build does not produce is reported as a defect of the server rather than
+// written under another status's shape.
+//
+// A state that carries a moment the row does not hold is refused here for the same reason: a payment
+// published with a moment nobody read would date a settlement that never happened.
 func paymentBody(issued invoices.Invoice) (servedapi.Payment, error) {
-	var body servedapi.Payment
 	switch issued.Payment {
 	case invoices.PendingPayment:
+		var body servedapi.Payment
 		err := body.FromPendingPayment(servedapi.PendingPayment{
 			Status:    servedapi.Pending,
 			UpdatedAt: timestamp.Format(issued.PaymentUpdatedAt),
+		})
+		return body, err
+	case invoices.FailedPayment:
+		if issued.FailedAt == nil || issued.FailureCode == nil || !issued.FailureCode.Known() {
+			return servedapi.Payment{}, fmt.Errorf(
+				"a refused payment of %s carries no moment or no reason", issued.ID)
+		}
+		var body servedapi.Payment
+		err := body.FromFailedPayment(servedapi.FailedPayment{
+			Status:      servedapi.Failed,
+			FailedAt:    timestamp.Format(*issued.FailedAt),
+			FailureCode: servedapi.Declined,
+		})
+		return body, err
+	case invoices.PaidPayment:
+		if issued.PaidAt == nil {
+			return servedapi.Payment{}, fmt.Errorf(
+				"a settled payment of %s carries no moment of settlement", issued.ID)
+		}
+		var body servedapi.Payment
+		err := body.FromPaidPayment(servedapi.PaidPayment{
+			Status: servedapi.Paid,
+			PaidAt: timestamp.Format(*issued.PaidAt),
 		})
 		return body, err
 	default:

@@ -78,6 +78,7 @@ export function App() {
       <ReservationPanel
         resource={current.resource}
         owner={session}
+        account={account}
         reservations={reservations}
         ride={ride}
         onShowVehicle={select}
