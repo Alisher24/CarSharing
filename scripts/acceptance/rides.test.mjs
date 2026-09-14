@@ -56,6 +56,43 @@ const DRAINED_BASIS_POINTS = 500;
 const PREPARED_DRIVING_SECONDS = 25;
 const PREPARED_PAUSED_SECONDS = 0.25;
 
+/**
+ * The durations the check of the specification's example gives the two intervals, in seconds. Ninety
+ * seconds of driving have begun two minutes and forty-five seconds of pause have begun one, which is
+ * the example M07 states at the demonstration rates of 1234 and 321 tyiyn.
+ *
+ * The pause is prepared at forty-five seconds and not at the top of its minute, because the interval
+ * a paused ride is in is open: the service measures it up to the moment it answers, so the sum is the
+ * prepared one plus the second or so the check spends before it reads. Keep this below a minute by
+ * more than that delay, or the check measures two begun minutes of pause instead of one.
+ */
+const EXAMPLE_DRIVING_SECONDS = 90;
+const EXAMPLE_PAUSED_SECONDS = 45;
+
+/**
+ * The pause the snapshot check prepares. It is shorter than the example's because that check makes
+ * three more database round trips than the example does, and a pause it measured past a minute would
+ * begin a second minute the amount below does not account for.
+ */
+const SNAPSHOT_PAUSED_SECONDS = 30;
+
+/** What those durations cost at the demonstration rates of 1234 and 321 tyiyn per begun minute. */
+const EXAMPLE_AMOUNT_TYIYN = 2789;
+
+/** The begun minutes ninety seconds of driving are, which every check of an amount states. */
+const EXPECTED_DRIVING_STARTED_MINUTES = 2;
+
+/** The rates the demonstration charges, which a reservation stores in its snapshot. */
+const DRIVING_RATE_TYIYN = 1234;
+const PAUSED_RATE_TYIYN = 321;
+
+/** The rates a check moves the catalog to, standing in for an operator's later price change. */
+const MOVED_DRIVING_RATE_TYIYN = 2000;
+const MOVED_PAUSED_RATE_TYIYN = 500;
+
+/** An amount past the exact range of a double, which a client must receive digit for digit. */
+const BEYOND_THE_EXACT_DOUBLE_RANGE = 9_007_199_254_740_993;
+
 /** How far ahead of the two racing starts the deadline is placed when it must fall between them. */
 const ACROSS_SECONDS = 0.25;
 
@@ -396,6 +433,110 @@ describe('what a ride publishes about the time it has taken', () => {
   });
 });
 
+describe('the amount a ride costs', () => {
+  test('is the example of the specification, read from the intervals the database holds', async () => {
+    const { account, rentalId } = await rideCommandRide('example');
+
+    // Ninety seconds of driving and forty-five of pause: two begun minutes of driving and one of
+    // pause, which at the demonstration rates of 1234 and 321 tyiyn is exactly 2789.
+    prepareModeDurations(rentalId, EXAMPLE_DRIVING_SECONDS, EXAMPLE_PAUSED_SECONDS);
+
+    const current = await currentOf(account);
+    assert.equal(current.status, 200, current.text);
+    const rental = current.json.rental;
+    const durations = modeDurationsAt(rentalId, current.json.server_time);
+    assert.equal(durations.driving, EXAMPLE_DRIVING_SECONDS * 1_000_000);
+    assert.ok(
+      durations.paused >= EXAMPLE_PAUSED_SECONDS * 1_000_000,
+      `the pause the check prepared is ${durations.paused} microseconds`,
+    );
+
+    const snapshot = rental.tariff_snapshot;
+    assert.equal(snapshot.driving_rate_tyiyn_per_started_minute, String(DRIVING_RATE_TYIYN));
+    assert.equal(snapshot.paused_rate_tyiyn_per_started_minute, String(PAUSED_RATE_TYIYN));
+
+    // The expected amount is computed from the two sums and the two stored rates, not written as a
+    // constant: the check would still pass if the arithmetic of the service changed with them.
+    const amount =
+      expectedMinutes(durations.driving) * Number(snapshot.driving_rate_tyiyn_per_started_minute) +
+      expectedMinutes(durations.paused) * Number(snapshot.paused_rate_tyiyn_per_started_minute);
+    assert.equal(amount, EXAMPLE_AMOUNT_TYIYN);
+    assert.equal(rental.progress.driving_started_minutes, '2');
+    assert.equal(rental.progress.paused_started_minutes, '1');
+    assert.equal(rental.progress.estimated_amount_tyiyn, String(EXAMPLE_AMOUNT_TYIYN));
+  });
+
+  test('is priced at the rates the reservation stored when the catalog moves afterwards', async () => {
+    const { account, rentalId } = await rideCommandRide('snapshot');
+
+    // Ninety seconds of driving, so that the amount has two begun minutes of driving to be wrong
+    // about, and a pause of half a minute, which begins one minute with the whole of the check's own
+    // delay to spare.
+    prepareModeDurations(rentalId, EXAMPLE_DRIVING_SECONDS, SNAPSHOT_PAUSED_SECONDS);
+
+    // The rates the rental stored are read, then replaced by a pair the demonstration never charges:
+    // that is the catalog change of this check, standing in for an operator who changed the price
+    // list after the reservation was made. The catalog itself still charges 1234 and 321 while the
+    // check reads, so an amount computed from the catalog would not be the one the check accepts
+    // below. Every value it asserts is derived from what it reads back, not written as a constant.
+    const stored = { driving: DRIVING_RATE_TYIYN, paused: PAUSED_RATE_TYIYN };
+    const moved = moveRentalRates(rentalId, MOVED_DRIVING_RATE_TYIYN, MOVED_PAUSED_RATE_TYIYN);
+    assert.deepEqual(moved, stored, 'the rental stored rates other than the ones this check assumes');
+    try {
+      const rented = await currentOf(account);
+      assert.equal(rented.status, 200, rented.text);
+
+      const progress = rented.json.rental.progress;
+      const snapshot = rented.json.rental.tariff_snapshot;
+      assert.equal(
+        snapshot.driving_rate_tyiyn_per_started_minute,
+        String(MOVED_DRIVING_RATE_TYIYN),
+        'the check did not move the rates the rental publishes',
+      );
+      assert.equal(Number(progress.driving_started_minutes), EXPECTED_DRIVING_STARTED_MINUTES);
+      assert.ok(
+        Number(progress.paused_started_minutes) >= 1,
+        `the paused minutes are ${progress.paused_started_minutes}`,
+      );
+      assert.equal(
+        progress.estimated_amount_tyiyn,
+        amountOf(progress, snapshot),
+        'the amount is not the minutes the answer publishes at the rates the snapshot stored',
+      );
+    } finally {
+      restoreRentalRates(rentalId, moved);
+    }
+
+    // The rates are back where the check found them, so the suites after this one read the
+    // demonstration rather than what a check left behind.
+    assert.deepEqual(storedRentalRates(rentalId), stored);
+  });
+
+  test('keeps every digit of an amount no floating-point number can hold', async () => {
+    const { account, rentalId } = await rideCommandRide('beyond-2-53');
+    const moved = moveRentalRates(rentalId, BEYOND_THE_EXACT_DOUBLE_RANGE, 0);
+    try {
+      // One begun minute of driving at that rate is exactly that many tyiyn. A value that passed
+      // through a number would arrive as 9007199254740992 or as a rounded neighbour.
+      const answer = await currentOf(account);
+      assert.equal(answer.status, 200, answer.text);
+
+      // Read from the text of the answer rather than from the parsed body: what this check is about
+      // is the digits the service published, and a parser is the thing that would lose them.
+      const published = publishedInteger(answer.text, 'estimated_amount_tyiyn');
+      assert.equal(published, String(BEYOND_THE_EXACT_DOUBLE_RANGE));
+      assert.equal(BigInt(published), BigInt(BEYOND_THE_EXACT_DOUBLE_RANGE));
+      // The digits that a double would have left behind, named here so the check shows what it is
+      // about: this is the value the amount becomes on the way through a floating-point number.
+      assert.equal(Number(published), 9_007_199_254_740_992);
+      assert.equal(answer.json.rental.progress.estimated_amount_tyiyn, String(BEYOND_THE_EXACT_DOUBLE_RANGE));
+      assert.equal(Number(answer.json.rental.progress.estimated_amount_tyiyn), Number(published));
+    } finally {
+      restoreRentalRates(rentalId, moved);
+    }
+  });
+});
+
 describe('a ride whose reservation deadline has passed', () => {
   test('is still current, still holds its vehicle and still takes a command', async () => {
     const { account, vehicleId, rentalId } = await reservedRide('past-deadline');
@@ -477,6 +618,20 @@ async function reservedRide(name) {
   const created = await reserve(vehicleId, newCommandKey(), account);
   assert.equal(created.status, 201, created.text);
   return { account, vehicleId, rentalId: created.json.rental.id };
+}
+
+/**
+ * Takes a vehicle and drives it into the paused stage, which is the state every check of an amount
+ * starts from: a paused ride holds one open interval, so the durations of both modes can be prepared
+ * without the open one growing while the check reads.
+ */
+async function rideCommandRide(name) {
+  const reserved = await reservedRide(name);
+  for (const operation of ['start', 'pause']) {
+    const answer = await rideCommand(operation, reserved.rentalId, newCommandKey(), reserved.account);
+    assert.equal(answer.status, 200, answer.text);
+  }
+  return reserved;
 }
 
 /** Sends one ride command for one rental and reports the answer, whatever it is. */
@@ -623,6 +778,123 @@ function prepareIntervals(rentalId) {
      )
      WHERE id = '${rentalId}'`,
   );
+}
+
+/**
+ * Gives every interval of one ride the duration the check of an amount compares against, keeping the
+ * chain continuous. The moments are written rather than waited for, because a ride of two begun
+ * minutes would otherwise cost two minutes of wall-clock time.
+ *
+ * The chain ends at the present moment, so the ride is entirely in the past and the sums are the ones
+ * stated here however long the check takes. Anchoring it to the moment the ride began would place
+ * every interval before the ride did, and the service, reading at a later moment, would count only
+ * the overlap — a ride driving for ninety seconds and paused for eighty shares none of its pause with
+ * the moment the ride began.
+ *
+ * Only two intervals are expected: a ride that has been started and paused holds exactly one of each
+ * mode, so the durations the check states are the sums the service reads back.
+ */
+function prepareModeDurations(rentalId, drivingSeconds, pausedSeconds) {
+  const seconds = `CASE segment.mode
+                WHEN 'driving' THEN ${drivingSeconds}::double precision
+                ELSE ${pausedSeconds}::double precision
+              END`;
+  sql(
+    `WITH ride AS (
+       SELECT segment.id,
+              segment.ended_at IS NULL AS open,
+              row_number() OVER (ORDER BY segment.started_at, segment.id) AS position,
+              ${seconds} AS seconds
+       FROM ride_segments segment
+       WHERE segment.rental_id = '${rentalId}'
+     ),
+     chained AS (
+       SELECT ride.id, ride.open, ride.seconds,
+              sum(ride.seconds) OVER (ORDER BY ride.position ROWS UNBOUNDED PRECEDING) AS finish
+       FROM ride
+     ),
+     anchored AS (
+       SELECT chained.id, chained.open,
+              now() - make_interval(secs => (SELECT max(finish) FROM chained))
+                    + make_interval(secs => chained.finish - chained.seconds) AS started_at,
+              now() - make_interval(secs => (SELECT max(finish) FROM chained))
+                    + make_interval(secs => chained.finish) AS ended_at
+       FROM chained
+     )
+     UPDATE ride_segments AS segment
+     SET started_at = anchored.started_at,
+         ended_at = CASE WHEN anchored.open THEN NULL ELSE anchored.ended_at END
+     FROM anchored
+     WHERE segment.id = anchored.id;
+
+     UPDATE rentals
+     SET mode_started_at = (
+       SELECT started_at FROM ride_segments WHERE rental_id = '${rentalId}' AND ended_at IS NULL
+     )
+     WHERE id = '${rentalId}'`,
+  );
+}
+
+/**
+ * Moves the rates one rental was reserved under, which is how this suite stands in for an operator
+ * changing the catalog after a reservation was made, and answers what the rental stored before. The
+ * rates are written on the rental rather than read from the price list, because those are the ones a
+ * ride is priced at.
+ */
+function moveRentalRates(rentalId, drivingRateTyiyn, pausedRateTyiyn) {
+  const replaced = storedRentalRates(rentalId);
+  sql(
+    `UPDATE rentals SET ` +
+      `tariff_driving_rate_tyiyn_per_started_minute = ${drivingRateTyiyn}, ` +
+      `tariff_paused_rate_tyiyn_per_started_minute = ${pausedRateTyiyn} ` +
+      `WHERE id = '${rentalId}'`,
+  );
+  return replaced;
+}
+
+/** The rates one rental was reserved under, as the columns hold them. */
+function storedRentalRates(rentalId) {
+  const rates = sql(
+    `SELECT tariff_driving_rate_tyiyn_per_started_minute, ` +
+      `tariff_paused_rate_tyiyn_per_started_minute ` +
+      `FROM rentals WHERE id = '${rentalId}'`,
+  );
+  assert.notEqual(rates, '', 'the rental stores no rates to read');
+  const [driving, paused] = rates.split('|');
+  return { driving: Number(driving), paused: Number(paused) };
+}
+
+/** Puts back the rates moveRentalRates replaced. */
+function restoreRentalRates(rentalId, replaced) {
+  sql(
+    `UPDATE rentals SET ` +
+      `tariff_driving_rate_tyiyn_per_started_minute = ${replaced.driving}, ` +
+      `tariff_paused_rate_tyiyn_per_started_minute = ${replaced.paused} ` +
+      `WHERE id = '${rentalId}'`,
+  );
+}
+
+/**
+ * What a progress costs at the rates of a snapshot: the minutes the answer published of each mode
+ * times the rate of that mode. The multiplication is a check's own arithmetic, so it is done as a
+ * number; nothing a service publishes is read through one.
+ */
+function amountOf(progress, snapshot) {
+  return String(
+    Number(progress.driving_started_minutes) * Number(snapshot.driving_rate_tyiyn_per_started_minute) +
+      Number(progress.paused_started_minutes) * Number(snapshot.paused_rate_tyiyn_per_started_minute),
+  );
+}
+
+/**
+ * One whole number as the answer published it, read from the text of the body rather than from the
+ * parsed one. A value the contract carries as a decimal string is exactly what a check about losing
+ * digits has to read, and a parser is the thing that would lose them.
+ */
+function publishedInteger(body, field) {
+  const published = new RegExp(`"${field}":"([0-9]+)"`).exec(body);
+  assert.notEqual(published, null, `the answer publishes no ${field}: ${body}`);
+  return published[1];
 }
 
 /**

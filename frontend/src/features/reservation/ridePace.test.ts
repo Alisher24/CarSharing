@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
+import type { Progress } from '../../shared/api/current.ts';
 import {
   drivingDuration,
   durationText,
@@ -68,6 +69,29 @@ describe('the progress a ride publishes', () => {
     // exactly, so a value that went through one would lose its last digits here. The microseconds
     // themselves are left out of a riding duration, which is why only the seconds are written.
     assert.equal(durationText('9007199254740995'), '150119987:34');
+  });
+
+  test('keeps every digit of a progress the service computed past two to the fifty-third', () => {
+    // The whole statement as one answer carries it, every value beyond what a double names exactly:
+    // the durations lose no digit, and a length the interface cannot read is written as missing
+    // rather than as a time that never happened.
+    const beyond: Progress = {
+      driving_duration_microseconds: '9007199254740993',
+      driving_started_minutes: '150119987579017',
+      estimated_amount_tyiyn: '900719925474099399',
+      paused_duration_microseconds: '9007199254740994',
+      paused_started_minutes: '150119987579017',
+    };
+
+    assert.equal(drivingDuration(beyond), '9007199254740993');
+    assert.equal(pausedDuration(beyond), '9007199254740994');
+    assert.equal(durationText(drivingDuration(beyond)), '150119987:34');
+    assert.equal(durationText(pausedDuration(beyond)), '150119987:34');
+    // The last digits are still read: one value is a whole number of seconds, the other is that many
+    // seconds and one microsecond, and a value that had passed through a double would name them alike.
+    assert.equal(durationText('9007199254740000000'), '150119987579:00');
+    assert.equal(durationText('9007199254740000001'), '150119987579:00');
+    assert.notEqual(durationText('9007199254739999999'), durationText('9007199254740000000'));
   });
 });
 

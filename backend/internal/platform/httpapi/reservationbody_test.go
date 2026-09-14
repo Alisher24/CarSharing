@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/Alisher24/CarSharing/backend/internal/billing"
 	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/timestamp"
@@ -26,7 +29,7 @@ func frozenTariff() tariffs.Tariff {
 	return tariffs.Tariff{
 		ID:                               "01994342-6ba7-7000-8000-000300000001",
 		Currency:                         "KGS",
-		BillingPolicy:                    "per_mode_started_minute_v1",
+		BillingPolicy:                    billing.PolicyPerModeStartedMinuteV1,
 		DrivingRateTyiynPerStartedMinute: 1234,
 		PausedRateTyiynPerStartedMinute:  321,
 		Version:                          7,
@@ -246,3 +249,58 @@ func TestCancelledRentalIsPublishedAsCancelled(t *testing.T) {
 }
 
 func rentalPointer(rental rentals.Rental) *rentals.Rental { return &rental }
+
+// beyondTheExactDoubleRange is an amount a client that parsed JSON numbers as doubles would round. The
+// contract carries every whole number of a progress as a decimal string, so this value survives the
+// boundary exactly and a reader of it can tell a string from a number.
+const beyondTheExactDoubleRange int64 = 900_719_925_474_099_399
+
+// The five fields of a progress are published as the strings the contract declares, and a value
+// beyond the exact range of a double arrives digit for digit. A field written as a JSON number would
+// unmarshal into a float and would already have lost its last digits in the text, so this checks the
+// type of each field as well as its digits.
+func TestProgressIsPublishedAsExactDecimalStrings(t *testing.T) {
+	published := progressBody(rentals.Progress{
+		DrivingDuration: 60*time.Second + time.Microsecond,
+		PausedDuration:  45 * time.Second,
+		DrivingMinutes:  2,
+		PausedMinutes:   1,
+		AmountTyiyn:     beyondTheExactDoubleRange,
+	})
+	encoded, err := json.Marshal(published)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var fields map[string]any
+	if err = json.Unmarshal(encoded, &fields); err != nil {
+		t.Fatal(err)
+	}
+	if len(fields) != 5 {
+		t.Fatalf("a progress publishes %d fields: %s", len(fields), encoded)
+	}
+	for name, want := range map[string]int64{
+		"driving_duration_microseconds": 60_000_001,
+		"paused_duration_microseconds":  45_000_000,
+		"driving_started_minutes":       2,
+		"paused_started_minutes":        1,
+		"estimated_amount_tyiyn":        beyondTheExactDoubleRange,
+	} {
+		text, isText := fields[name].(string)
+		if !isText {
+			t.Errorf("%s is published as %T rather than as a string", name, fields[name])
+			continue
+		}
+		digits, err := strconv.ParseInt(text, 10, 64)
+		if err != nil {
+			t.Errorf("%s is published as %q", name, text)
+			continue
+		}
+		if digits != want {
+			t.Errorf("%s is published as %d, want %d", name, digits, want)
+		}
+	}
+	if !strings.Contains(string(encoded), `"estimated_amount_tyiyn":"900719925474099399"`) {
+		t.Errorf("the amount beyond the exact double range is published as %s", encoded)
+	}
+}
