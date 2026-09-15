@@ -487,11 +487,20 @@ describe('the privilege a payment transition runs under', () => {
     assert.equal(read.accepted, true, `the application cannot read a demand: ${read.refusal}`);
     const spend = asApplication(`DELETE FROM demo_payment_outcomes WHERE false`);
     assert.equal(spend.accepted, true, `the application cannot spend a demand: ${spend.refusal}`);
+    // The demonstration control sets the outcome of the next attempt through the closed internal API,
+    // which the application process serves, so the write it needs is granted to the application role:
+    // a demand that already exists is updated rather than written a second time, and a ride keeps its
+    // identity while what it asks for changes. What the row is attached to stays unwritable, which is
+    // what keeps one ride from answering for another ride's payment.
     const create = asApplication(
       `INSERT INTO demo_payment_outcomes (rental_id, outcome, set_at)
        SELECT id, 'paid', clock_timestamp() FROM rentals WHERE false`,
     );
-    assert.equal(create.accepted, false, 'the application may create a demand');
+    assert.equal(create.accepted, true, `the application cannot set a demand: ${create.refusal}`);
+    const update = asApplication(`UPDATE demo_payment_outcomes SET outcome = outcome`);
+    assert.equal(update.accepted, true, `the application cannot change a demand: ${update.refusal}`);
+    const move = asApplication(`UPDATE demo_payment_outcomes SET rental_id = rental_id`);
+    assert.equal(move.accepted, false, 'the application may move a demand to another ride');
   });
 });
 

@@ -1,6 +1,6 @@
-import type { EnergySource, PowertrainType, SourceKind, UnavailableReason, Vehicle } from '../../shared/api/catalog';
-import { INTERFACE_LOCALE } from '../../shared/locale';
-import type { VehicleStatus } from './filters';
+import type { EnergySource, PowertrainType, SourceKind, UnavailableReason, Vehicle } from '../../shared/api/catalog.ts';
+import { INTERFACE_LOCALE } from '../../shared/locale.ts';
+import type { VehicleStatus } from './filters.ts';
 
 /** How each powertrain is named in the interface. */
 export const POWERTRAIN_LABELS: Record<PowertrainType, string> = {
@@ -32,6 +32,18 @@ const SOURCE_LABELS: Record<SourceKind, string> = {
   lpg: 'Сжиженный газ',
   cng: 'Сжатый газ',
 };
+
+/** What a source of a kind this build does not know is called. */
+const SOURCE_UNKNOWN = 'неизвестный источник';
+
+/**
+ * What one energy source is called inside a sentence, rather than as the label of a value, which is
+ * how the sources of a vehicle that ran out are listed. A kind this build does not know is answered
+ * as an unknown source, because a name that is not in the table cannot be written in lower case.
+ */
+export function sourceName(kind: SourceKind): string {
+  return (SOURCE_LABELS[kind] ?? SOURCE_UNKNOWN).toLocaleLowerCase(INTERFACE_LOCALE);
+}
 
 const UNIT_LABELS: Record<EnergySource['unit'], string> = {
   wh: 'Вт·ч',

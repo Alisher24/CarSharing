@@ -28,15 +28,31 @@ type Store struct{ pool *pgxpool.Pool }
 
 func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 
+// energyInventory is the inventory of the vehicle the surrounding query reads, aggregated as JSON and
+// scaled to whole millionths because that is how an amount is counted. One declaration serves every
+// reading of a vehicle, so the sources the catalog publishes and the sources the model moves on are
+// the same ones.
+const energyInventory = `
+    SELECT jsonb_agg(
+        jsonb_build_object(
+            'kind', source.source_kind,
+            'remaining', (source.remaining * $1)::bigint,
+            'capacity', (source.capacity * $1)::bigint
+        )
+        ORDER BY source.source_kind
+    ) AS sources
+    FROM vehicle_energy_sources source
+    WHERE source.vehicle_id = vehicle.id`
+
 // publishedVehicles selects one row per published vehicle. The energy inventory arrives as JSON so
-// that a vehicle and its sources are read in one statement, scaled to whole millionths because that
-// is how an amount is counted.
+// that a vehicle and its sources are read in one statement.
 const publishedVehicles = `
 SELECT
     vehicle.id,
     vehicle.model,
     vehicle.powertrain_type,
     vehicle.connected,
+    vehicle.service_required,
     vehicle.version,
     telemetry.confirmed_at,
     ST_X(telemetry.position),
@@ -54,17 +70,7 @@ FROM vehicles vehicle
 JOIN vehicle_telemetry telemetry ON telemetry.vehicle_id = vehicle.id
 LEFT JOIN rentals live_rental
     ON live_rental.vehicle_id = vehicle.id AND live_rental.ended_at IS NULL
-LEFT JOIN LATERAL (
-    SELECT jsonb_agg(
-        jsonb_build_object(
-            'kind', source.source_kind,
-            'remaining', (source.remaining * $1)::bigint,
-            'capacity', (source.capacity * $1)::bigint
-        )
-        ORDER BY source.source_kind
-    ) AS sources
-    FROM vehicle_energy_sources source
-    WHERE source.vehicle_id = vehicle.id
+LEFT JOIN LATERAL (` + energyInventory + `
 ) inventory ON true`
 
 // The catalog is ordered by identifier, which is drawn in creation order, so two readings of an
@@ -169,6 +175,7 @@ func scanVehicle(rows pgx.Rows) (Vehicle, error) {
 		&vehicle.Model,
 		&vehicle.PowertrainType,
 		&vehicle.Connected,
+		&vehicle.ServiceRequired,
 		&vehicle.Version,
 		&vehicle.Telemetry.ConfirmedAt,
 		&vehicle.Telemetry.Position.Longitude,

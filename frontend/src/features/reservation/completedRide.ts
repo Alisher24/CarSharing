@@ -4,12 +4,11 @@ import type { FinishResult, InvoiceView } from '../../shared/api/current.ts';
  * What the browser remembers about a ride it ended: the answer the service gave, which is the invoice
  * of that ride together with the ride it ended.
  *
- * The service publishes no shape for "the ride I finished last" — that is the account screen of a
- * later task — and a finished ride is no longer current, so the panel would otherwise lose the amount
- * the moment the ending is confirmed. The answer is therefore kept where the handler that received it
- * wrote it, for the tab it was received in, and is cleared as soon as the account starts something
- * new. A reload of another tab, or of this one after its storage is cleared, shows no result rather
- * than a wrong one.
+ * The result a person reads is the one the service holds — the notification about the ending and the
+ * invoice that notification names — so this record is not what the panel is shown from. It is the
+ * immediate answer for the finish this tab sent, before that notification has been read, and it is
+ * the only answer the interface holds that names the vehicle of the ride. A record of another account
+ * and one past its window are answered as no ending at all rather than as a wrong one.
  */
 
 /** One stored ending: whose ride it was and what the service answered. */
@@ -24,17 +23,20 @@ export type CompletedRide = {
   finished: FinishResult;
 
   /**
-   * The state of what is owed on the invoice, as the service last published it: the answer that ended
-   * the ride, and the answer to every payment since. It is kept beside the ending rather than derived
-   * from it, because the payment moves while the invoice and the ride never do.
+   * The state of what is owed on the invoice, as the service last published it to this tab: the answer
+   * that ended the ride, and the answer to every payment since. It is kept beside the ending rather
+   * than derived from it, because the payment moves while the invoice and the ride never do.
    *
-   * Nothing else in this build publishes that state: reading an invoice from the service is a later
-   * task, and the signal that a payment changed carries a version but not a status.
+   * What the panel shows is the payment the read of the invoice publishes whenever there is one, so
+   * this is the state a ride is shown from until that read answers.
    */
   payment: InvoiceView;
 };
 
-/** How long an ending is shown. Past it the account screen of a later task is where it belongs. */
+/**
+ * How long the record of an ending answers for. Past its window the ride is shown from what the
+ * service holds about it, which is what a reload and another tab are shown from in any case.
+ */
 export const COMPLETED_RIDE_MILLISECONDS = 24 * 60 * 60 * 1_000;
 
 /** Where the record is kept: the storage of one tab, cleared when that tab is closed. */
@@ -49,8 +51,8 @@ export type CompletionStorage = {
 
 /**
  * storeCompletedRide records the answer a finish produced. A browser that cannot write it — a private
- * window with storage disabled — is not an error: the ending happened, and only the ability to show
- * its result after a reload is lost.
+ * window with storage disabled — is not an error: the ending happened, and only the immediate answer
+ * is lost, since the service's own notification about the ride reports it in any case.
  */
 export function storeCompletedRide(
   owner: string,
@@ -64,7 +66,7 @@ export function storeCompletedRide(
 /**
  * storePayment records the state of a payment the service has just published, in the record of the
  * ending it belongs to. It is written by the handler that received the answer rather than by a render,
- * so a reload of the tab shows the state the service confirmed instead of the one it replaced.
+ * so the ending keeps the state the service confirmed rather than the one it replaced.
  *
  * A record that is not this account's is not touched: another account's ending is not this payment's
  * to describe, and a record that cannot be read is left as it is rather than replaced by a payment

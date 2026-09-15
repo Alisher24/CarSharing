@@ -38,9 +38,10 @@ export type RideCommands = {
  * reservation uses, told a different set of commands: the same key is kept before the request, the
  * same key is presented by a repeat, and the current rental is read again after every answer.
  *
- * A ride that is ended is no longer current, so the answer to that one command is also what the panel
- * shows about it afterwards: the ending is written down by the handler that received it, because a
- * render that React discards must not be what a person's finished ride was remembered by.
+ * A ride that is ended is no longer current, so the answer to that one command is what the panel
+ * shows about it until the service's own notification about the ride has been read: the ending is
+ * written down by the handler that received it, because a render that React discards must not be what
+ * a person's finished ride was remembered by.
  *
  * Closing the tab changes nothing here. The ride lives in the database, and a client that comes back
  * reads it rather than sending a command about it.

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/events"
+	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
 	"github.com/Alisher24/CarSharing/backend/internal/invoices"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -27,7 +28,7 @@ type PayCommand struct {
 // account and the ride are what it locks — the invoice itself is named by the ride — and the decision
 // is taken from the payment as it stands under those locks rather than from what the caller expected.
 func (s *Service) Pay(ctx context.Context, command PayCommand) (Answered, error) {
-	return s.answer(ctx, command.Caller, command.Attempt,
+	return s.answer(ctx, idempotency.ForAccount(command.Caller), command.Attempt,
 		payParticipants(s.pool, command),
 		func(ctx context.Context, moment time.Time) (Outcome, error) {
 			return s.payWithin(ctx, moment, command)

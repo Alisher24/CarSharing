@@ -38,6 +38,12 @@ type Current struct {
 // told so about a vehicle that has actually been released. The transition is the one the sweep
 // performs, reached through the same lock order, so a read and a sweep arriving together produce
 // one transition rather than two.
+//
+// The model of the vehicle is brought to the moment of the read for the same reason. A ride whose
+// sources have run out is over before the answer is written, and the answer is then the one a client
+// can act on: no current rental, and an ending it can open from the report of it. The transition is
+// the one the simulator performs, reached through the same lock order and the same mechanism, so a
+// read and a tick arriving together produce one ending rather than two.
 func (s *Service) Current(ctx context.Context, caller uuid.UUID) (Current, error) {
 	var current Current
 	err := transact(ctx, s.pool, currentParticipants(s.pool, caller),
@@ -53,6 +59,18 @@ func (s *Service) Current(ctx context.Context, caller uuid.UUID) (Current, error
 			current = Current{Moment: moment, Limit: limit}
 			if held == nil {
 				return nil
+			}
+			if held.Riding() {
+				if _, err = s.reconcileVehicle(txCtx, moment, held.VehicleID, held); err != nil {
+					return err
+				}
+				held, err = liveRentalAt(txCtx, s.pool, moment, userLiveRentalSelection, caller)
+				if err != nil {
+					return err
+				}
+				if held == nil {
+					return nil
+				}
 			}
 			// The read fixes a warning the worker missed through the transition the worker performs,
 			// as it already fixes an expiry the worker missed: a person whose worker was stopped

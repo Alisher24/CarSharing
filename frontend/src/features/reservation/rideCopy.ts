@@ -1,5 +1,7 @@
-import type { FinishResult, Progress } from '../../shared/api/current.ts';
+import type { Completion, Progress } from '../../shared/api/current.ts';
+import { sourceName } from '../fleet/fleetCopy.ts';
 import { somText } from '../fleet/money.ts';
+import { bishkekMoment } from './reservationCopy.ts';
 import type { RideMode } from './ridePace.ts';
 
 /**
@@ -81,15 +83,39 @@ export function amountText(progress: Progress): string {
 }
 
 /**
- * What a finished ride cost, as the invoice the service issued states it. The total is the one the
+ * What a completed ride cost, as the invoice the service issued states it. The total is the one the
  * invoice publishes rather than the sum of its lines computed here: an interface that added them up
  * itself could disagree with the amount a person is charged.
  */
-export function invoiceTotalText(finished: FinishResult): string {
-  return somText(finished.invoice.invoice.total_amount_tyiyn) ?? UNREADABLE_VALUE;
+export function invoiceAmountText(totalAmountTyiyn: string): string {
+  return somText(totalAmountTyiyn) ?? UNREADABLE_VALUE;
 }
 
-/** Why a ride ended, in the words the interface shows for the reason the contract carries. */
-export function completionText(finished: FinishResult): string {
-  return COMPLETION_TEXT[finished.rental.completion.reason] ?? COMPLETION_UNKNOWN;
+/**
+ * Why a ride ended, in the words the interface shows for the completion the contract carries. An
+ * ending the vehicle caused names the sources that ran out, in the words the fleet names them by:
+ * which of them was empty is what a person can act on, and the reason alone does not say it.
+ */
+export function completionText(completion: Completion): string {
+  const reason = COMPLETION_TEXT[completion.reason] ?? COMPLETION_UNKNOWN;
+  const sources = exhaustedText(completion);
+  if (sources === undefined) return reason;
+
+  return `${reason}: ${sources}`;
+}
+
+/** The moment a ride ended, in the time zone the service states its days in. */
+export function finishedAtText(endedAt: string): string {
+  return bishkekMoment(endedAt) ?? UNREADABLE_VALUE;
+}
+
+/**
+ * The sources that ran out, listed, or undefined when the ending is not one an empty vehicle caused.
+ * The contract allows the list to be empty, and then there is nothing to add to the reason.
+ */
+function exhaustedText(completion: Completion): string | undefined {
+  if (completion.reason !== 'energy_depleted') return undefined;
+  if (completion.exhausted_sources.length === 0) return undefined;
+
+  return completion.exhausted_sources.map(sourceName).join(', ');
 }

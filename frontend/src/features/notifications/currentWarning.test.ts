@@ -82,6 +82,7 @@ describe('the warning a person is shown', () => {
         invoice_id: '01994342-6ba7-7000-8000-000500000001',
         completion: { reason: 'user_finished' },
         created_at: SERVER_TIME,
+        ended_at: SERVER_TIME,
         version: '1',
         active: true,
       },

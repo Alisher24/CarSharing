@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/events"
+	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 	"github.com/google/uuid"
@@ -26,7 +27,7 @@ type CancelCommand struct {
 // after the deadline records the expiry first and answers that the reservation has run out: a domain
 // refusal never undoes a transition that had already become due.
 func (s *Service) Cancel(ctx context.Context, command CancelCommand) (Answered, error) {
-	return s.answer(ctx, command.Caller, command.Attempt,
+	return s.answer(ctx, idempotency.ForAccount(command.Caller), command.Attempt,
 		cancelParticipants(s.pool, command),
 		func(ctx context.Context, moment time.Time) (Outcome, error) {
 			return s.cancellationWithin(ctx, moment, command)
@@ -186,7 +187,7 @@ func endReservation(ctx context.Context, pool *pgxpool.Pool, due Rental) (bool, 
 // both changes, so the fleet a visitor reads and the account that held the rental hear about the
 // release in the same transaction that made it.
 func announceEnd(ctx context.Context, pool *pgxpool.Pool, held, released Rental) error {
-	version, err := raiseVehicleVersion(ctx, pool, held.VehicleID)
+	version, err := publishVehicleChange(ctx, pool, held.VehicleID, false)
 	if err != nil {
 		return err
 	}

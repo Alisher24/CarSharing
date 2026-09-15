@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import type { InvoiceView, Payment } from '../../shared/api/current.ts';
+import type { Payment } from '../../shared/api/current.ts';
 import {
   PAID_AT,
   PAYMENT_FAILED,
@@ -29,11 +29,6 @@ function payment(status: string): Payment {
     default:
       return { status } as unknown as Payment;
   }
-}
-
-/** One view of an invoice whose payment stands in the given state. */
-function view(status: string): InvoiceView {
-  return { version: '2', payment: payment(status), invoice: { id: 'invoice-1' } } as unknown as InvoiceView;
 }
 
 describe('what each state of a payment is called', () => {
@@ -66,17 +61,17 @@ describe('the moment a settled invoice was paid', () => {
   test('is written in the time zone the service states its days in', () => {
     // The moment of the fixture is 07:31 UTC, which is 13:31 in the zone the service states its days
     // in: a moment written in the browser's own zone would be a different hour.
-    assert.equal(paidAtText(view('paid')), '14 сентября в 13:31');
+    assert.equal(paidAtText(payment('paid')), '14 сентября в 13:31');
   });
 
   test('is missing for a state that carries no moment of settlement', () => {
-    assert.equal(paidAtText(view('pending')), UNREADABLE_VALUE);
-    assert.equal(paidAtText(view('failed')), UNREADABLE_VALUE);
+    assert.equal(paidAtText(payment('pending')), undefined);
+    assert.equal(paidAtText(payment('failed')), undefined);
+    assert.equal(paidAtText(payment('refunded')), undefined);
   });
 
   test('is missing, rather than guessed at, when the moment cannot be read', () => {
-    const unreadable = { ...view('paid'), payment: { status: 'paid', paid_at: 'yesterday' } } as InvoiceView;
-    assert.equal(paidAtText(unreadable), UNREADABLE_VALUE);
+    assert.equal(paidAtText({ status: 'paid', paid_at: 'yesterday' }), UNREADABLE_VALUE);
   });
 });
 

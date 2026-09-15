@@ -3,6 +3,7 @@ package demo
 import (
 	"context"
 
+	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
@@ -11,9 +12,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-// wgs84SRID is the spatial reference every stored coordinate uses.
-const wgs84SRID = 4326
 
 // store writes the demonstration rows. Every statement runs on the querier the context carries, so
 // a whole installation or a whole restoration commits at once or not at all.
@@ -30,7 +28,7 @@ ON CONFLICT (id) DO NOTHING`
 
 func (s store) insertZone(ctx context.Context, zone zones.Zone) error {
 	_, err := s.querier(ctx).Exec(ctx, insertZoneStatement,
-		zone.ID, zone.Name, string(zone.Area), wgs84SRID, zone.Version)
+		zone.ID, zone.Name, string(zone.Area), fleet.WGS84SRID, zone.Version)
 	return err
 }
 
@@ -61,10 +59,15 @@ func (s store) insertTariff(ctx context.Context, tariff tariffs.Tariff) error {
 // vehicleInitialVersion is the public representation version a demonstration vehicle starts at.
 const vehicleInitialVersion = 1
 
+// The route is written with the vehicle rather than only when it is created: a vehicle installed by
+// an earlier build carries none, and the model moves only the vehicles it can name a route for. The
+// update happens only where the stored route is not the declared one, so a repeated seed still
+// changes nothing and a vehicle the demonstration left for a person to book is untouched by it.
 const insertVehicleStatement = `
-INSERT INTO vehicles (id, model, powertrain_type, connected, reporting, version)
-VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (id) DO NOTHING`
+INSERT INTO vehicles (id, model, powertrain_type, connected, reporting, route_id, version)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (id) DO UPDATE SET route_id = EXCLUDED.route_id
+WHERE vehicles.route_id IS DISTINCT FROM EXCLUDED.route_id`
 
 func (s store) insertVehicle(ctx context.Context, vehicle Vehicle) error {
 	_, err := s.querier(ctx).Exec(ctx, insertVehicleStatement,
@@ -73,6 +76,7 @@ func (s store) insertVehicle(ctx context.Context, vehicle Vehicle) error {
 		vehicle.PowertrainType,
 		vehicle.Connected,
 		vehicle.Reporting,
+		string(vehicle.RouteID),
 		vehicleInitialVersion,
 	)
 	return err
@@ -106,7 +110,7 @@ ON CONFLICT (vehicle_id) DO NOTHING`
 
 func (s store) insertTelemetry(ctx context.Context, vehicle Vehicle) error {
 	_, err := s.querier(ctx).Exec(ctx, insertTelemetryStatement,
-		vehicle.ID, vehicle.Position.Longitude, vehicle.Position.Latitude, wgs84SRID,
+		vehicle.ID, vehicle.Position.Longitude, vehicle.Position.Latitude, fleet.WGS84SRID,
 		vehicle.confirmedAgo().Seconds())
 	return err
 }
@@ -278,12 +282,16 @@ func (s store) deleteScenarioRentals(ctx context.Context, vehicleIDs, preparedID
 	return err
 }
 
-// A restored vehicle is published differently: its link, its reserves and the age of its reading are
-// what the catalog shows. Its version is raised rather than set, so putting a vehicle back never
-// makes its sequence move backwards.
+// A restored vehicle is published differently: its link, its reserves, the age of its reading and
+// whether it is in service are what the catalog shows. Its version is raised rather than set, so
+// putting a vehicle back never makes its sequence move backwards.
+//
+// A vehicle is returned to service by the restoration because the scenario states it as one a person
+// may book: a ride that ran out took it out of service, and putting the scenario back is the explicit
+// servicing that answers that.
 const restoreVehicleStatement = `
 UPDATE vehicles
-SET connected = $2, reporting = $3, version = version + 1
+SET connected = $2, reporting = $3, route_id = $4, service_required = false, version = version + 1
 WHERE id = $1
 RETURNING version`
 
@@ -304,7 +312,7 @@ func (s store) restoreVehicle(ctx context.Context, vehicle Vehicle) (int64, erro
 	querier := s.querier(ctx)
 	var version int64
 	if err := querier.QueryRow(ctx, restoreVehicleStatement,
-		vehicle.ID, vehicle.Connected, vehicle.Reporting).Scan(&version); err != nil {
+		vehicle.ID, vehicle.Connected, vehicle.Reporting, string(vehicle.RouteID)).Scan(&version); err != nil {
 		return 0, err
 	}
 	for _, source := range vehicle.Sources {
@@ -315,7 +323,7 @@ func (s store) restoreVehicle(ctx context.Context, vehicle Vehicle) (int64, erro
 		}
 	}
 	_, err := querier.Exec(ctx, restoreTelemetryStatement,
-		vehicle.ID, vehicle.Position.Longitude, vehicle.Position.Latitude, wgs84SRID,
+		vehicle.ID, vehicle.Position.Longitude, vehicle.Position.Latitude, fleet.WGS84SRID,
 		vehicle.confirmedAgo().Seconds())
 	return version, err
 }

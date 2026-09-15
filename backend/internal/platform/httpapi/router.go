@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"net/http"
+	"strings"
 
 	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
 	"github.com/getkin/kin-openapi/openapi3"
@@ -57,6 +58,10 @@ func NewHandler(dependencies Dependencies) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	invoices, err := newInvoiceHandlers(dependencies.Invoices)
+	if err != nil {
+		return nil, err
+	}
 	streaming, err := newStreams(dependencies.Events, dependencies.Sessions)
 	if err != nil {
 		return nil, err
@@ -70,6 +75,7 @@ func NewHandler(dependencies Dependencies) (http.Handler, error) {
 		finishHandlers:       finishes,
 		payHandlers:          payments,
 		notificationHandlers: notifications,
+		invoiceHandlers:      invoices,
 		streams:              streaming,
 	}
 	strict := servedapi.NewStrictHandlerWithOptions(served, nil, strictErrorHandlers())
@@ -94,6 +100,20 @@ func strictErrorHandlers() servedapi.StrictHTTPServerOptions {
 			writeError(w, r, codeInternalError, messageInternalError)
 		},
 	}
+}
+
+// NewSurfaceRouter serves the two surfaces of one process from one listener: the internal operations
+// under their own prefix, and every other path through the public application. The internal surface is
+// not published by the external proxy, which answers every path under its prefix as an unknown
+// resource, so reaching it takes a connection to this process rather than to the application.
+func NewSurfaceRouter(public http.Handler, internal http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, internalPathPrefix) {
+			internal.ServeHTTP(w, r)
+			return
+		}
+		public.ServeHTTP(w, r)
+	})
 }
 
 // servedRouter wraps one implementation in the transport contract the whole served API shares: the

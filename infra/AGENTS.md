@@ -21,7 +21,7 @@ Both are built with the **repository root** as context (`build.context: .` in `c
 `COPY` source is stated from the root (`backend/go.mod`, `frontend/package.json`). A file an image needs
 is added to its Dockerfile, not by widening the context.
 
-- `backend.Dockerfile` compiles the six runnable commands into `/out` in one stage and copies them
+- `backend.Dockerfile` compiles the eight runnable commands into `/out` in one stage and copies them
   into `/usr/local/bin/` of a `scratch` image running as `10001:10001`. Each service then picks one
   with `entrypoint:`. A new command under `backend/cmd/` must be added to the `go build` list here
   **and** given an entrypoint by the service that runs it, or that service starts into "not found".

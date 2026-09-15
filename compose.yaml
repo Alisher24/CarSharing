@@ -53,6 +53,10 @@ services:
       DB_PASSWORD_FILE: /run/secrets/db_app_password
       # The signed cursors of the collection reads this process serves are issued under this key.
       CURSOR_HMAC_KEY_FILE: /run/secrets/cursor_hmac_key
+      # The internal surface is called with one token per capability: the simulator advances the
+      # fleet, and the demonstration control moves a vehicle or decides a payment by hand.
+      SIMULATOR_TOKEN_FILE: /run/secrets/simulator_token
+      DEMO_CONTROL_TOKEN_FILE: /run/secrets/demo_control_token
       # The demonstration telemetry source stands in for vehicles that exist only here, so it runs
       # under this profile and nowhere else.
       APP_ENV: demo
@@ -67,7 +71,7 @@ services:
       RATE_LIMIT_SIGNIN_EMAIL_WINDOW: ${RATE_LIMIT_SIGNIN_EMAIL_WINDOW:-}
       RATE_LIMIT_SIGNIN_ADDRESS_WINDOW: ${RATE_LIMIT_SIGNIN_ADDRESS_WINDOW:-}
       RATE_LIMIT_REGISTRATION_ADDRESS_WINDOW: ${RATE_LIMIT_REGISTRATION_ADDRESS_WINDOW:-}
-    secrets: [db_app_password, cursor_hmac_key]
+    secrets: [db_app_password, cursor_hmac_key, simulator_token, demo_control_token]
     depends_on:
       migrate: { condition: service_completed_successfully }
     healthcheck:
@@ -76,6 +80,27 @@ services:
       timeout: 4s
       retries: 12
       start_period: 5s
+    restart: unless-stopped
+    stop_grace_period: 15s
+
+  # The clock of the simulated fleet: it calls the internal tick operation of the API once a second,
+  # so the model is advanced by a process of its own and stopping it leaves every vehicle standing
+  # exactly where the last tick left it. It reaches the API over the internal network, where the
+  # external proxy does not publish /internal.
+  #
+  # Starting it is a deliberate act, like installing the demonstration: a stack that is merely running
+  # leaves the fleet where the seed or the last restoration put it, and the demonstration is driven by
+  # commands. `docker compose --profile demo up --detach simulator` starts it.
+  simulator:
+    <<: *backend
+    profiles: [demo]
+    entrypoint: [/usr/local/bin/simulator]
+    environment:
+      INTERNAL_API_URL: http://api:8080
+      SIMULATOR_TOKEN_FILE: /run/secrets/simulator_token
+    secrets: [simulator_token]
+    depends_on:
+      api: { condition: service_healthy }
     restart: unless-stopped
     stop_grace_period: 15s
 
@@ -144,6 +169,22 @@ services:
     depends_on:
       migrate: { condition: service_completed_successfully }
 
+  # The demonstration control, run one command at a time: it carries a set-to-value change to the
+  # internal API under the token of its own capability, and changes nothing itself.
+  #
+  #   docker compose --profile demo run --rm democontrol set-energy-remaining \
+  #     --vehicle <id> --source battery --remaining 5
+  democontrol:
+    <<: *backend
+    profiles: [demo]
+    entrypoint: [/usr/local/bin/democontrol]
+    environment:
+      INTERNAL_API_URL: http://api:8080
+      DEMO_CONTROL_TOKEN_FILE: /run/secrets/demo_control_token
+    secrets: [demo_control_token]
+    depends_on:
+      api: { condition: service_healthy }
+
 volumes:
   postgres_data:
 
@@ -154,5 +195,9 @@ secrets:
     file: ./.secrets/db_app_password
   cursor_hmac_key:
     file: ./.secrets/cursor_hmac_key
+  simulator_token:
+    file: ./.secrets/simulator_token
+  demo_control_token:
+    file: ./.secrets/demo_control_token
   demo_user_password:
     file: ./.secrets/demo_user_password

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/events"
+	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -38,6 +39,8 @@ const notificationFields = `
     note.version,
     COALESCE(note.invoice_id::text, ''),
     COALESCE(note.completion_reason, ''),
+    note.exhausted_sources,
+    note.ended_at,
     rental.expires_at`
 
 // notificationColumns reads the notification together with the rental it is about, because a
@@ -113,8 +116,8 @@ func (s *Store) Create(
 
 // Deactivate makes the notification of one rental and kind inactive and moves its version, and
 // reports the stored notification together with whether this call changed it. A rental that never
-// had a notification leaves the table as it is — the answer is then an empty notification and false,
-// because there is none to report — and so does one whose notification is already inactive: a
+// had a notification leaves the table as it is вЂ” the answer is then an empty notification and false,
+// because there is none to report вЂ” and so does one whose notification is already inactive: a
 // warning that was never created does not appear after the fact.
 func (s *Store) Deactivate(ctx context.Context, rentalID string, kind Kind) (Notification, bool, error) {
 	stored, err := readNotification(ctx, s.pool, lockedNotificationOfRentalSelection, rentalID, kind)
@@ -340,7 +343,8 @@ func readNotification(
 }
 
 func scanNotification(rows pgx.Rows, found *Notification) error {
-	return rows.Scan(
+	var exhausted []string
+	err := rows.Scan(
 		&found.ID,
 		&found.UserID,
 		&found.RentalID,
@@ -351,6 +355,13 @@ func scanNotification(rows pgx.Rows, found *Notification) error {
 		&found.Version,
 		&found.InvoiceID,
 		&found.CompletionReason,
+		&exhausted,
+		&found.EndedAt,
 		&found.ExpiresAt,
 	)
+	if err != nil {
+		return err
+	}
+	found.Exhausted = fleet.SourceKinds(exhausted)
+	return nil
 }

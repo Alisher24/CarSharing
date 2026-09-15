@@ -34,7 +34,7 @@ A feature directory holds four kinds of file, and the split is the convention:
 - hooks — `use*.ts` — which own effects, state and the streams;
 - components — `*.tsx` — which receive what they show as props and compute nothing that outlives them.
 
-Exactly one kind of file is unit-tested: 18 `*.test.ts` files, no `*.test.tsx`, and neither jsdom nor
+Exactly one kind of file is unit-tested: 21 `*.test.ts` files, no `*.test.tsx`, and neither jsdom nor
 a testing library is installed. Components and hooks are covered by the browser suite in `tests/e2e/`,
 so a decision worth a test belongs in a pure module. A test opens with `node:test`'s `describe`/`test`
 and `node:assert/strict`, and takes time as an argument (`countdownAt(held, new Date(...))`) rather than
@@ -46,7 +46,7 @@ mocking a clock — nothing in the suite installs fake timers.
   Regenerate it from the repository root with `npm --prefix tools/openapi run generate`; the tree is
   committed and digest-checked by `scripts/check-contracts.mjs`. The hand-written seam above it is one
   wrapper per operation: `catalog.ts`, `current.ts`, `session.ts`, `notifications.ts`, `rides.ts`,
-  `health.ts`. A component never calls a generated SDK function itself, and these wrappers re-export
+  `invoices.ts`, `health.ts`. A component never calls a generated SDK function itself, and these wrappers re-export
   the generated types the rest of the application uses.
 - A wrapper may add the check the wire format does not carry: `health.ts` refuses an answer that is not
   `ok` or whose `server_time` cannot be parsed, and asserts the declared time zone before it reaches

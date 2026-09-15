@@ -57,7 +57,7 @@ func completedRentalBody(outcome rentals.Outcome) (servedapi.CompletedRental, er
 	if err != nil {
 		return servedapi.CompletedRental{}, err
 	}
-	reason, err := completionBody(reasonOf(rental))
+	reason, err := completionBody(reasonOf(rental), rental.Exhausted)
 	if err != nil {
 		return servedapi.CompletedRental{}, err
 	}
@@ -109,7 +109,7 @@ func invoiceViewBody(issued invoices.Invoice) (servedapi.InvoiceView, error) {
 // invoiceBody publishes the immutable invoice: what the ride did, what each mode of it cost, and the
 // total of those two lines.
 func invoiceBody(issued invoices.Invoice) (servedapi.Invoice, error) {
-	reason, err := completionBody(issued.Completion)
+	reason, err := completionBody(issued.Completion, issued.Exhausted)
 	if err != nil {
 		return servedapi.Invoice{}, err
 	}

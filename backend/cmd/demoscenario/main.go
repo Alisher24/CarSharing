@@ -15,6 +15,7 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/demo"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/config"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
+	"github.com/Alisher24/CarSharing/backend/internal/simulation"
 )
 
 // restoreTimeout bounds the whole command, so a restoration waiting on a lock another transaction
@@ -52,7 +53,7 @@ func run() error {
 	}
 	defer pool.Close()
 
-	if err = demo.Restore(ctx, pool); err != nil {
+	if err = demo.Restore(ctx, pool, simulation.NewStore(pool)); err != nil {
 		return err
 	}
 

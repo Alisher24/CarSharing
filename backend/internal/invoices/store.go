@@ -9,6 +9,7 @@ import (
 
 	"github.com/Alisher24/CarSharing/backend/internal/billing"
 	"github.com/Alisher24/CarSharing/backend/internal/completion"
+	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -27,6 +28,10 @@ type Draft struct {
 	UserID     uuid.UUID
 	IssuedAt   time.Time
 	Completion completion.Reason
+
+	// Exhausted is what a ride that ran out of energy states about it: the sources that were empty
+	// when it did. A ride that was ended by a person ran out of nothing and carries none.
+	Exhausted []fleet.SourceKind
 
 	Driving Line
 	Paused  Line
@@ -118,6 +123,7 @@ const invoiceFields = `
     invoice.currency,
     invoice.billing_policy,
     invoice.completion_reason,
+    invoice.exhausted_sources,
     invoice.version,
     invoice.driving_duration_microseconds,
     invoice.driving_billed_started_minutes,
@@ -201,6 +207,7 @@ func (s *Store) insert(ctx context.Context, id string, draft Draft) error {
 		draft.UserID,
 		draft.IssuedAt,
 		draft.Completion,
+		fleet.SourceNames(draft.Exhausted),
 		driving.durationMicroseconds,
 		driving.billedMinutes,
 		driving.rateTyiynPerMinute,
@@ -289,7 +296,7 @@ SELECT EXISTS (
 )`
 
 // issuedVersion is the version an invoice and its payment are written at. The invoice never moves past
-// it — an invoice is immutable — and the payment moves when its state changes.
+// it РІР‚вЂќ an invoice is immutable РІР‚вЂќ and the payment moves when its state changes.
 const issuedVersion int64 = 1
 
 // insertInvoiceStatement writes one invoice for one ride. The currency and the billing policy are
@@ -309,6 +316,7 @@ INSERT INTO invoices (
     currency,
     billing_policy,
     completion_reason,
+    exhausted_sources,
     driving_duration_microseconds,
     driving_billed_started_minutes,
     driving_rate_tyiyn_per_started_minute,
@@ -325,16 +333,17 @@ SELECT $1::uuid,
        rental.tariff_currency,
        rental.tariff_billing_policy,
        $4::text,
-       $5::bigint,
+       $5::text[],
        $6::bigint,
        $7::bigint,
        $8::bigint,
        $9::bigint,
        $10::bigint,
        $11::bigint,
-       $12::bigint
+       $12::bigint,
+       $13::bigint
 FROM rentals rental
-WHERE rental.id = $13::uuid`
+WHERE rental.id = $14::uuid`
 
 // insertPaymentStatement writes the first state of a payment. The moment a settled payment states is
 // the moment its invoice was issued, so a zero invoice is paid from the instant it exists; a payment
@@ -371,7 +380,7 @@ WHERE invoice_id = $1 AND status = $7::text`
 //
 // The transition and the read that answers it are two statements rather than one statement with a
 // returning clause. A statement sees the snapshot its own start fixed, so the read inside it would
-// answer the payment as it stood before the transition wrote it — the answer would describe the state
+// answer the payment as it stood before the transition wrote it РІР‚вЂќ the answer would describe the state
 // the attempt replaced while the row already held the state it reached.
 func (s *Store) Settle(
 	ctx context.Context, invoiceID string, from PaymentStatus, outcome SettleOutcome,
@@ -451,7 +460,7 @@ func (s *Store) read(ctx context.Context, selection string, arguments ...any) (I
 
 // scanInvoice reads one row into an invoice. Every whole number is read into a plain int64 and carried
 // into its own type afterwards: a named type of the same width is not one the driver plans a scan for,
-// and a value it cannot plan for arrives as the zero value rather than as a failure — an invoice of a
+// and a value it cannot plan for arrives as the zero value rather than as a failure РІР‚вЂќ an invoice of a
 // ride that cost nothing is exactly the kind of record nobody would question.
 func scanInvoice(rows pgx.Rows, found *Invoice) error {
 	var (
@@ -462,6 +471,7 @@ func scanInvoice(rows pgx.Rows, found *Invoice) error {
 		pausedMinutes   int64
 		pausedRate      int64
 		total           int64
+		exhausted       []string
 	)
 	err := rows.Scan(
 		&found.ID,
@@ -471,6 +481,7 @@ func scanInvoice(rows pgx.Rows, found *Invoice) error {
 		&found.Currency,
 		&found.BillingPolicy,
 		&found.Completion,
+		&exhausted,
 		&found.Version,
 		&drivingDuration,
 		&drivingMinutes,
@@ -489,6 +500,7 @@ func scanInvoice(rows pgx.Rows, found *Invoice) error {
 	if err != nil {
 		return err
 	}
+	found.Exhausted = fleet.SourceKinds(exhausted)
 	// Which mode a line describes is where it was read rather than what a column states: the contract
 	// fixes the driving line first and the paused one second, so the position of the line is the fact.
 	found.Driving = Line{

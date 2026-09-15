@@ -51,6 +51,32 @@ const DemoUserPasswordFileVariable = "DEMO_USER_PASSWORD_FILE"
 // only the process that serves a paginated operation is given it: the worker signs no cursor.
 const CursorHMACKeyFileVariable = "CURSOR_HMAC_KEY_FILE"
 
+// The files holding the credentials of the internal capabilities. Each capability has a token of its
+// own, so the process that advances the fleet on a tick is not thereby allowed to move a vehicle by
+// hand, and neither token is a person's session.
+const (
+	SimulatorTokenFileVariable   = "SIMULATOR_TOKEN_FILE"
+	DemoControlTokenFileVariable = "DEMO_CONTROL_TOKEN_FILE"
+)
+
+// InternalAPIURLVariable names the address the processes that call the internal API reach it on. One
+// setting serves the simulator and the demonstration control, because the two only ever mean the same
+// API: a second name for it would be a second thing to keep in step.
+const InternalAPIURLVariable = "INTERNAL_API_URL"
+
+// defaultInternalAPIURL is the documented local profile: the API on the loopback address of the
+// machine the process runs on. A deployment names the API it calls.
+const defaultInternalAPIURL = "http://127.0.0.1:8080"
+
+// internalAPIURLFromEnvironment reports the API the internal clients call, applying the default when
+// the setting is absent.
+func internalAPIURLFromEnvironment() string {
+	if value := os.Getenv(InternalAPIURLVariable); value != "" {
+		return value
+	}
+	return defaultInternalAPIURL
+}
+
 // CursorSigningKey reads the key signed cursors are issued under. A file that cannot be read stops
 // the process; a process that was given no file receives nil and no key, which is how a process that
 // issues no cursor says so.
@@ -136,6 +162,12 @@ type Config struct {
 	// start rather than signing with one every installation would share.
 	CursorSigningKey []byte
 
+	// SimulatorToken and DemoControlToken are the credentials the internal operations are called
+	// with. They are empty in a process that was given neither file, and the process that serves the
+	// internal surface refuses to start rather than publishing a route without its credential.
+	SimulatorToken   string
+	DemoControlToken string
+
 	// FinishLanding is the rule an ending ride is judged by. A deployment keeps the rule the product
 	// states; only the demonstration profile may relax it, and the command that installs a
 	// demonstration is what does so.
@@ -169,6 +201,14 @@ func Load() (Config, error) {
 		return cfg, err
 	}
 	cfg.CursorSigningKey, err = CursorSigningKey()
+	if err != nil {
+		return cfg, err
+	}
+	cfg.SimulatorToken, err = secretFromFile(SimulatorTokenFileVariable)
+	if err != nil {
+		return cfg, err
+	}
+	cfg.DemoControlToken, err = secretFromFile(DemoControlTokenFileVariable)
 	if err != nil {
 		return cfg, err
 	}

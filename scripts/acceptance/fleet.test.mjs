@@ -35,6 +35,11 @@ async function readCatalog() {
 before(async () => {
   await waitForReady();
   runSeed();
+  // The fleet is read as the demonstration declares it. A demonstration drives and spends the vehicles
+  // it leaves free for a person to book, so a suite that ran before this one may have left one of them
+  // with less than it was installed with, and the command that puts the demonstration back is what
+  // returns the reserves these checks describe.
+  restoreScenario();
 });
 
 describe('the demonstration fleet a visitor loads', () => {

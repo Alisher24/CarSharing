@@ -20,11 +20,18 @@ wrong home for it.
 
 ## The commands
 
-Seven commands, each one process:
+Nine commands, each one process:
 
-- `api` — serves the HTTP API and holds the database connection the streams read.
+- `api` — serves the HTTP API and holds the database connection the streams read. It serves two
+  surfaces from one listener: the public application, and the internal operations under `/internal`,
+  which the external proxy answers as an unknown resource.
 - `worker` — outbox delivery, the reservation deadline sweep and retention, in a process of its own so
   that either it or the API can be restarted alone, over the same modules.
+- `simulator` — the clock of the modelled fleet: it calls the internal tick operation once a second
+  and changes nothing itself. `-once [-tick-id]` advances the fleet exactly once. It belongs to the
+  demonstration profile, because starting the demonstration is a deliberate act.
+- `democontrol` — one set-to-value command of the demonstration, carried to the internal API under the
+  token of its own capability.
 - `migrate` — goose `up` or `status` under a lock and a two-minute deadline; it refuses any other word.
 - `seed` — installs the demonstration, and refuses to run outside `APP_ENV=demo`.
 - `demoscenario` — puts the prepared scenario back, and refuses to run outside `APP_ENV=demo`.
@@ -40,10 +47,11 @@ Every `main` sets up JSON logging, calls `run() error` and exits 1 on the error;
 ## Wiring
 
 `cmd/api/main.go` is the composition root: `run` loads the configuration, opens the pool, and
-`application(cfg, pool, hub)` builds an `httpapi.Dependencies` value field by field. `NewHandler` then
-derives the handler groups from it and fails at construction when something is missing —
-`router_dependencies_test.go` removes each dependency in turn to prove it. A new feature is wired in
-`application` and nowhere else.
+`assemble(cfg, pool, hub)` builds the public `httpapi.Dependencies` and the internal
+`httpapi.InternalDependencies` field by field and serves both through `httpapi.NewSurfaceRouter`.
+`NewHandler` and `NewInternalHandler` then derive their handler groups from those and fail at
+construction when something is missing — `router_dependencies_test.go` removes each dependency in turn
+to prove it. A new feature is wired in `assemble` and nowhere else.
 
 `internal/platform/config` is the one place the environment is read: a `Config` struct and a single
 `Load`. The rate limits show the expected shape for a new setting — `rateLimitSetting` pairs the

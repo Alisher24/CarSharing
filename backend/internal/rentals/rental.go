@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/completion"
+	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 	"github.com/Alisher24/CarSharing/backend/internal/tariffs"
@@ -33,6 +34,11 @@ type Rental struct {
 
 	// CompletionReason is why the ride ended, which exactly the rentals that have ended carry.
 	CompletionReason *completion.Reason
+
+	// Exhausted is what a ride that ran out of energy states about it: the sources that were empty
+	// when it did, in the order the vehicle's profile uses them. A ride a person ended carries none,
+	// which is what the column states by holding nothing.
+	Exhausted []fleet.SourceKind
 
 	// ZoneID is the service area the vehicle stood in when the reservation was made. It is what a
 	// finish is judged against: the ride may not be ended where the area does not cover it.
@@ -69,6 +75,7 @@ const rentalFields = `
     started_at,
     ended_at,
     completion_reason,
+    exhausted_sources,
     mode_started_at,
     tariff_id,
     tariff_currency,
@@ -90,6 +97,10 @@ WHERE user_id = $1 AND ended_at IS NULL`
 
 	vehicleLiveRentalSelection = rentalColumns + `
 WHERE vehicle_id = $1 AND ended_at IS NULL`
+
+	liveRentalsSelection = rentalColumns + `
+WHERE ended_at IS NULL
+ORDER BY vehicle_id`
 )
 
 // rentalByID reads one rental by its identifier, whatever account it belongs to.
@@ -155,7 +166,8 @@ func readRental(
 }
 
 func scanRental(rows pgx.Rows, found *Rental) error {
-	return rows.Scan(
+	var exhausted []string
+	err := rows.Scan(
 		&found.ID,
 		&found.UserID,
 		&found.VehicleID,
@@ -167,6 +179,7 @@ func scanRental(rows pgx.Rows, found *Rental) error {
 		&found.StartedAt,
 		&found.EndedAt,
 		&found.CompletionReason,
+		&exhausted,
 		&found.ModeStartedAt,
 		&found.Tariff.ID,
 		&found.Tariff.Currency,
@@ -175,4 +188,30 @@ func scanRental(rows pgx.Rows, found *Rental) error {
 		&found.Tariff.PausedRateTyiynPerStartedMinute,
 		&found.Tariff.Version,
 	)
+	if err != nil {
+		return err
+	}
+	found.Exhausted = fleet.SourceKinds(exhausted)
+	return nil
+}
+
+// liveRentals reads every rental that still holds a vehicle, ordered by the vehicle it holds. It is
+// the fleet-wide reading a tick needs: the mode of every vehicle the model moves comes from the one
+// rental that holds it.
+func liveRentals(ctx context.Context, pool *pgxpool.Pool) ([]Rental, error) {
+	rows, err := database.QuerierFrom(ctx, pool).Query(ctx, liveRentalsSelection)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	held := []Rental{}
+	for rows.Next() {
+		var found Rental
+		if err = scanRental(rows, &found); err != nil {
+			return nil, err
+		}
+		held = append(held, found)
+	}
+	return held, rows.Err()
 }
