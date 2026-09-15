@@ -14,7 +14,7 @@ import { expect, test } from '@playwright/test';
 import { closeStream, waitForFrame, watchEventStream } from '../../scripts/acceptance/events.mjs';
 import { moveDeadline } from '../../scripts/acceptance/reservations.mjs';
 import { compose, sql } from '../../scripts/service.mjs';
-import { availableModel, book, CANCEL_ACTION, email, register, signOut, signUp } from './person.mjs';
+import { availableModel, book, CANCEL_ACTION, email, register, SIGN_IN_ACTION, signOut, signUp } from './person.mjs';
 import { restoreScenario } from './scenario.mjs';
 
 /** The bound a committed change must reach a connected client within. */
@@ -227,14 +227,17 @@ test('signing out leaves no warning of the account that read it', async ({ brows
 
   try {
     await page.goto(WITHOUT_RECONCILIATION);
-    await prepareReservation(page, LAST_MINUTE_SECONDS);
+    const { address } = await prepareReservation(page, LAST_MINUTE_SECONDS);
     await expect(page.locator(WARNING)).toBeVisible({ timeout: RECONCILIATION_PATIENCE_MS });
 
-    await signOut(page);
+    // Signing out is done from the cabinet, which is where the account and the way out of it live.
+    await signOut(page, address);
+    await page.goto(WITHOUT_RECONCILIATION);
     await expect(page.locator(WARNING)).toHaveCount(0);
 
     // Nobody signed in means nothing private is read, and the person who registers next reads their
     // own empty collection rather than the warning of the account before them.
+    await page.getByRole('button', { name: SIGN_IN_ACTION }).click();
     await register(page, email('warning-second'));
     await expect(page.locator(WARNING)).toHaveCount(0);
   } finally {

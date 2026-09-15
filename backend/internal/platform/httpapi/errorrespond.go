@@ -29,6 +29,12 @@ func serviceUnavailable(ctx context.Context) servedapi.ApiError {
 	return apiErrorBody(ctx, codeServiceUnavailable, messageServiceUnavailable)
 }
 
+// internalError is the body of an operation's 500: a defect of this server that the operation
+// declares an answer for, rather than one the strict layer discovers while writing a response.
+func internalError(ctx context.Context) servedapi.ApiError {
+	return apiErrorBody(ctx, codeInternalError, messageInternalError)
+}
+
 // loginUnavailable is the sign-in 503, which more than one step of the operation answers with.
 func loginUnavailable(ctx context.Context) servedapi.Login503JSONResponse {
 	return servedapi.Login503JSONResponse{Body: serviceUnavailable(ctx)}

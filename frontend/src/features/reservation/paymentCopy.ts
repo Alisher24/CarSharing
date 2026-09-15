@@ -1,5 +1,5 @@
 import type { Payment } from '../../shared/api/current.ts';
-import { bishkekMoment } from './reservationCopy.ts';
+import { serviceMoment } from '../../shared/locale.ts';
 import { UNREADABLE_VALUE } from './rideCopy.ts';
 
 /**
@@ -78,5 +78,5 @@ export function paymentActionText(payment: Payment): string | undefined {
 export function paidAtText(payment: Payment): string | undefined {
   if (payment.status !== 'paid') return undefined;
 
-  return bishkekMoment(payment.paid_at) ?? UNREADABLE_VALUE;
+  return serviceMoment(payment.paid_at) ?? UNREADABLE_VALUE;
 }

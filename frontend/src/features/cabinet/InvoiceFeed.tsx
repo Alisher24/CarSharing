@@ -1,0 +1,42 @@
+import { Link } from 'react-router';
+import { invoiceAddress } from '../../app/addresses.ts';
+import type { Account } from '../account/useAccount.ts';
+import type { PrivateFeed } from '../events/usePrivateEvents.ts';
+import { INVOICES_ABSENCE, OPEN_INVOICE } from './cabinetCopy.ts';
+import { FeedList } from './FeedList.tsx';
+import { FeedValue } from './FeedValue.tsx';
+import { INVOICE_ISSUED_AT, INVOICE_PAYMENT, invoiceRow, type InvoiceRow } from './invoiceRows.ts';
+import { useInvoiceFeed, type InvoiceRecord } from './useInvoiceFeed.ts';
+
+/**
+ * InvoiceFeed is what the account has been charged, newest first: when each invoice was issued, what
+ * it came to, and where paying it stands. What the charge was made of — the minutes of each mode,
+ * the rates they were priced at — is the card of one invoice, which is the one place a person can
+ * check the interface against the letter they were sent.
+ */
+export function InvoiceFeed({ account, events }: { account: Account; events: PrivateFeed }) {
+  const feed = useInvoiceFeed(account, events);
+
+  return (
+    <FeedList
+      feed={feed}
+      copy={INVOICES_ABSENCE}
+      row={(record: InvoiceRecord) => <InvoiceRowView row={invoiceRow(record.view)} />}
+    />
+  );
+}
+
+function InvoiceRowView({ row }: { row: InvoiceRow }) {
+  return (
+    <>
+      <p className="feed-row-title">{row.total}</p>
+      <dl className="details">
+        <FeedValue term={INVOICE_ISSUED_AT} value={row.issuedAt} />
+        <FeedValue term={INVOICE_PAYMENT} value={row.payment} />
+      </dl>
+      <Link className="feed-row-link" to={invoiceAddress(row.id)}>
+        {OPEN_INVOICE}
+      </Link>
+    </>
+  );
+}

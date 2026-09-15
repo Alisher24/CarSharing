@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchNotifications, markNotificationRead } from '../../shared/api/notifications.ts';
 import { useResource, type ResourceRead } from '../../shared/api/useResource.ts';
-import type { Account } from '../account/useAccount.ts';
+import { csrfTokenOf, sessionOf, type Account } from '../account/useAccount.ts';
 import { createReadCoordinator, type ReadCoordinator } from '../events/coordinator.ts';
 import { usePrivateCycle } from '../events/privateCycle.ts';
 import type { DocumentKind } from '../events/readCycle.ts';
@@ -41,8 +41,8 @@ export type Notifications = {
  * arrives. Signed out, the reader reads nothing at all and no request is made.
  */
 export function useNotifications(account: Account, events: PrivateFeed): Notifications {
-  const session = account.state === 'signed-in' ? account.snapshot.user.id : undefined;
-  const csrfToken = account.state === 'signed-in' ? account.snapshot.csrf_token : undefined;
+  const session = sessionOf(account);
+  const csrfToken = csrfTokenOf(account);
 
   const coordinator = useMemo(() => coordinatorFor(session), [session]);
   const read = useMemo(

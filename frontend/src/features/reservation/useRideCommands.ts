@@ -1,8 +1,9 @@
-import type { Account } from '../account/useAccount.ts';
+import { useCallback, useEffect, useState } from 'react';
+import { csrfTokenOf, sessionOf, type Account } from '../account/useAccount.ts';
 import type { CurrentRental } from './useCurrentRental.ts';
+import type { FinishResult } from '../../shared/api/current.ts';
 import { finishRide, pauseRide, resumeRide, startRide } from '../../shared/api/rides.ts';
 import { useCommandSender, type CommandAnswer } from './commandSender.ts';
-import { storeCompletedRide } from './completedRide.ts';
 import type { UnfinishedCommand } from './unfinishedCommand.ts';
 import type { CommandPhase } from './commandPhase.ts';
 
@@ -13,6 +14,14 @@ export type RideCommands = {
 
   /** The command a reload left unanswered, while its repeat window is still open. */
   repeatable: UnfinishedCommand | undefined;
+
+  /**
+   * What the service answered the finish this tab sent. It is held in memory for the moment between
+   * that answer and the report of the same ending arriving from the service, so a person reads the
+   * truth this tab was already told rather than an empty panel. A reload in that moment reads the
+   * report instead, which the same transaction wrote.
+   */
+  finished: FinishResult | undefined;
 
   /** Starts the ride the reservation is waiting for. */
   begin: (rentalId: string) => void;
@@ -38,28 +47,34 @@ export type RideCommands = {
  * reservation uses, told a different set of commands: the same key is kept before the request, the
  * same key is presented by a repeat, and the current rental is read again after every answer.
  *
- * A ride that is ended is no longer current, so the answer to that one command is what the panel
- * shows about it until the service's own notification about the ride has been read: the ending is
- * written down by the handler that received it, because a render that React discards must not be what
- * a person's finished ride was remembered by.
- *
  * Closing the tab changes nothing here. The ride lives in the database, and a client that comes back
  * reads it rather than sending a command about it.
  */
 export function useRideCommands(account: Account, current: CurrentRental): RideCommands {
-  const owner = account.state === 'signed-in' ? account.snapshot.user.id : undefined;
-  const csrfToken = account.state === 'signed-in' ? account.snapshot.csrf_token : undefined;
+  const owner = sessionOf(account);
+  const [finished, setFinished] = useState<FinishResult | undefined>(undefined);
+
+  // What this tab was told about an ending belongs to the account that rode: the next one starts
+  // with nothing of the previous one on screen.
+  useEffect(() => setFinished(undefined), [owner]);
+
+  const send = useCallback(
+    (command: UnfinishedCommand, credentials: { csrfToken: string; key: string }) =>
+      rideCommand(command, credentials, setFinished),
+    [],
+  );
 
   const { phase, repeatable, start, repeat, settle } = useCommandSender({
     owner,
-    csrfToken,
+    csrfToken: csrfTokenOf(account),
     refresh: current.retry,
-    send: (command, credentials) => rideCommand(command, credentials, owner),
+    send,
   });
 
   return {
     phase,
     repeatable,
+    finished,
     begin: (rentalId) => void start('start', { rentalId }),
     hold: (rentalId) => void start('pause', { rentalId }),
     carryOn: (rentalId) => void start('resume', { rentalId }),
@@ -73,7 +88,7 @@ export function useRideCommands(account: Account, current: CurrentRental): RideC
 async function rideCommand(
   command: UnfinishedCommand,
   credentials: { csrfToken: string; key: string },
-  owner: string | undefined,
+  keep: (finished: FinishResult) => void,
 ): Promise<CommandAnswer> {
   const rentalId = command.parameters.rentalId ?? '';
   switch (command.action) {
@@ -84,26 +99,24 @@ async function rideCommand(
     case 'resume':
       return resumeRide(rentalId, credentials);
     case 'finish':
-      return finishedRide(rentalId, credentials, owner);
+      return finishedRide(rentalId, credentials, keep);
     default:
       return { outcome: 'unknown' };
   }
 }
 
 /**
- * finishedRide ends the ride and keeps the answer when the service confirmed it. The record is written
- * here, where the answer arrived, rather than by the render that shows it: what a person sees after a
- * reload has to be something a handler wrote down.
+ * finishedRide ends the ride and keeps the answer when the service confirmed it. The answer is kept
+ * by the handler that received it rather than by the render that shows it, because a render React
+ * discards must not leave a value behind that no screen ever showed.
  */
 async function finishedRide(
   rentalId: string,
   credentials: { csrfToken: string; key: string },
-  owner: string | undefined,
+  keep: (finished: FinishResult) => void,
 ): Promise<CommandAnswer> {
   const answer = await finishRide(rentalId, credentials);
-  if (answer.outcome === 'done' && owner !== undefined) {
-    storeCompletedRide(owner, answer.answer, Date.now());
-  }
+  if (answer.outcome === 'done') keep(answer.answer);
 
   return answer;
 }

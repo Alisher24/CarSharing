@@ -42,9 +42,6 @@ type ReservationPanelProps = {
   /** What the private read answered. */
   resource: Resource<CurrentSnapshot | undefined>;
 
-  /** The account the panel belongs to, which the record of an ending is kept apart by. */
-  owner: string | undefined;
-
   /** The account itself, which the payment of an ending needs the session of. */
   account: Account;
 
@@ -68,12 +65,12 @@ type ReservationPanelProps = {
  * A ride that is over shows what it cost, why it ended, when it ended and where the payment of that
  * charge stands. That result is read from the answers the service holds — the notification about the
  * ending and the invoice it names — so it is the same on the screen that ended the ride, after a
- * reload and in a tab that was never told anything. Without any of those the panel shows the day's
- * allowance, which is not something to infer from having no rental.
+ * reload and in a tab that was never told anything; the history in the cabinet is where a ride older
+ * than the last one is read. Without any of those the panel shows the day's allowance, which is not
+ * something to infer from having no rental.
  */
 export function ReservationPanel({
   resource,
-  owner,
   account,
   reservations,
   ride,
@@ -82,7 +79,7 @@ export function ReservationPanel({
 }: ReservationPanelProps) {
   const snapshot = loadedValue(resource);
   const paid = usePayment(account);
-  const result = useCompletedRideResult({ owner, resource, ride, notifications, paid });
+  const result = useCompletedRideResult({ ride, notifications, paid });
   if (snapshot === undefined) return null;
 
   const rental = currentRental(snapshot);

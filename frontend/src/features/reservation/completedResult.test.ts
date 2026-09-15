@@ -6,16 +6,14 @@ import type {
   NotificationCollection,
   RentalCompletedNotification,
 } from '../../shared/api/notifications.ts';
-import type { CompletedRide } from './completedRide.ts';
 import {
   completedNotification,
   completedResult,
+  finishedResult,
   invoiceWorthReading,
-  recordedResult,
   shownResult,
 } from './completedResult.ts';
 
-const OWNER = '01994342-6ba7-7000-8000-00000000000a';
 const RENTAL = '01994342-6ba7-7000-8000-000000000001';
 const OTHER_RENTAL = '01994342-6ba7-7000-8000-0000000000f1';
 const INVOICE = '01994342-6ba7-7000-8000-000000000003';
@@ -96,8 +94,8 @@ function paid(): Payment {
   return { status: 'paid', paid_at: '2026-09-14T07:11:00.123456Z' };
 }
 
-/** The answer one finish gave, of which the record of a ride this tab ended is made. */
-function finished(rentalId = RENTAL, total = '2789'): FinishResult {
+/** The answer one finish gave, which is what a tab that ended the ride itself was told. */
+function finished(rentalId = RENTAL, total = '2789', payment: Payment = pending()): FinishResult {
   return {
     server_time: CREATED_AT,
     rental: {
@@ -108,18 +106,8 @@ function finished(rentalId = RENTAL, total = '2789'): FinishResult {
       completed_at: ENDED_AT,
       invoice_id: INVOICE,
     },
-    invoice: invoiceView(INVOICE, total, pending()),
+    invoice: invoiceView(INVOICE, total, payment),
   } as unknown as FinishResult;
-}
-
-/** What this tab wrote when it ended the ride of the fixtures, with the payment it last published. */
-function recordOf(payment: Payment = pending(), rentalId = RENTAL, total = '2789'): CompletedRide {
-  return {
-    owner: OWNER,
-    receivedAt: 1_000,
-    finished: finished(rentalId, total),
-    payment: invoiceView(INVOICE, total, payment),
-  };
 }
 
 describe('the notification a completed ride is read from', () => {
@@ -174,8 +162,8 @@ describe('the result of a completed ride', () => {
 });
 
 describe('the result of a ride this tab ended itself', () => {
-  test('names the vehicle and states the payment the service published beside the ending', () => {
-    assert.deepEqual(recordedResult(recordOf(paid())), {
+  test('names the vehicle and states the invoice the ending was answered with', () => {
+    assert.deepEqual(finishedResult(finished(RENTAL, '2789', paid())), {
       rentalId: RENTAL,
       vehicle: MODEL,
       completion: { reason: 'user_finished' },
@@ -189,24 +177,24 @@ describe('the result the panel shows', () => {
   const published = completedResult(completionNotice(NOTICE), invoiceView(INVOICE, '2789', paid()));
 
   test('is what the service published whenever there is any of it', () => {
-    const shown = shownResult(published, recordOf(pending()));
+    const shown = shownResult(published, finished());
 
-    assert.equal(shown?.charge?.payment.status, 'paid', 'the record replaced the state the service published');
+    assert.equal(shown?.charge?.payment.status, 'paid', 'the finish answer replaced what the service published');
   });
 
-  test('names the vehicle the record of the same ride holds, which no published answer carries', () => {
-    assert.equal(shownResult(published, recordOf(pending()))?.vehicle, MODEL);
+  test('names the vehicle the finish of the same ride named, which no published answer carries', () => {
+    assert.equal(shownResult(published, finished())?.vehicle, MODEL);
   });
 
-  test('names no vehicle out of a record of another ride', () => {
-    const shown = shownResult(published, recordOf(pending(), OTHER_RENTAL));
+  test('names no vehicle out of the finish of another ride', () => {
+    const shown = shownResult(published, finished(OTHER_RENTAL));
 
     assert.equal(shown?.vehicle, undefined);
     assert.equal(shown?.rentalId, RENTAL);
   });
 
-  test('is the record while the notification about that ride has not been read yet', () => {
-    const shown = shownResult(undefined, recordOf(pending()));
+  test('is the finish answer while the report of that ride has not been read yet', () => {
+    const shown = shownResult(undefined, finished());
 
     assert.equal(shown?.vehicle, MODEL);
     assert.equal(shown?.charge?.payment.status, 'pending');

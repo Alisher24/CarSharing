@@ -1,7 +1,7 @@
 import type { Completion, Progress } from '../../shared/api/current.ts';
 import { sourceName } from '../fleet/fleetCopy.ts';
 import { somText } from '../fleet/money.ts';
-import { bishkekMoment } from './reservationCopy.ts';
+import { serviceMoment } from '../../shared/locale.ts';
 import type { RideMode } from './ridePace.ts';
 
 /**
@@ -106,7 +106,7 @@ export function completionText(completion: Completion): string {
 
 /** The moment a ride ended, in the time zone the service states its days in. */
 export function finishedAtText(endedAt: string): string {
-  return bishkekMoment(endedAt) ?? UNREADABLE_VALUE;
+  return serviceMoment(endedAt) ?? UNREADABLE_VALUE;
 }
 
 /**

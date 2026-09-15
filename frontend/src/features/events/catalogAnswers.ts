@@ -1,4 +1,5 @@
 import type { FleetSnapshot, Tariff, Zone } from '../../shared/api/catalog.ts';
+import { answersOf } from './documentAnswers.ts';
 import type { AnswerHandlers, DocumentKind } from './readCycle.ts';
 import { mergeFleetSnapshot, updatesFleetReading, type FleetReading } from './fleetSnapshot.ts';
 import { versionsOf, type Versioned } from './observedResource.ts';
@@ -12,26 +13,16 @@ export type CatalogSession = {
 /**
  * catalogAnswers builds the answers of the catalog's coordinator. Each one states which session it
  * belongs to and what storing it means; how many answers may still arrive is the coordinator's
- * business. The private documents are answered by nobody here: the catalog reads what a visitor
- * reads, and the reservation of the signed-in person and the notifications addressed to them have
- * their own readers.
+ * business. The private documents are named by nobody here: the catalog reads what a visitor reads,
+ * and the rentals, notifications and invoices of the signed-in person have their own readers.
  */
 export function catalogAnswers(catalog: CatalogSession): Record<DocumentKind, AnswerHandlers> {
-  return {
+  return answersOf({
     vehicles: fleetAnswers(catalog),
     zones: listAnswers<Zone>(catalog.session),
     tariffs: listAnswers<Tariff>(catalog.session),
-    current: notReadHere,
-    notifications: notReadHere,
-  };
+  });
 }
-
-// A document this coordinator does not read answers nothing, so a signal that names one is left to
-// the reader that holds it.
-const notReadHere: AnswerHandlers = {
-  accepts: () => false,
-  observe: () => undefined,
-};
 
 // The fleet is the one resource whose answer can say nothing new: every vehicle in it can be a
 // version the snapshot already holds, and freshness is measured against the moment the read was

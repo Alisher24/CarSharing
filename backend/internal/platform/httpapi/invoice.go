@@ -8,29 +8,39 @@ import (
 
 	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
 	"github.com/Alisher24/CarSharing/backend/internal/invoices"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/cursor"
 	"github.com/google/uuid"
 )
 
-// InvoiceReads is what reading one invoice of the caller needs: the immutable invoice with the state
-// of its payment, or an answer that this account holds no such invoice.
+// InvoiceReads is what reading the caller's own invoices needs: one of them by its identifier, and
+// one page of them newest first. Each answers the immutable invoice together with the state of its
+// payment, and an invoice this account does not hold is reported as absent.
 type InvoiceReads interface {
 	ByID(ctx context.Context, owner uuid.UUID, id string) (invoices.Invoice, error)
+	ReadPage(ctx context.Context, owner uuid.UUID, after *invoices.Position, limit int) (invoices.Page, error)
 }
 
-// invoiceHandlers answers the read of one invoice.
+// invoiceHandlers answers the reads of the caller's own invoices: one of them, and the collection
+// they are listed in.
 //
 // An invoice is read by an account that did not necessarily cause it: a ride the service ended because
 // its sources ran out produces an invoice nobody asked for, and the account that rode it opens the
 // result from the report of the ending. That is why this read exists, and why it answers the invoice
 // together with the state of its payment: a payment that moved after the result was first shown must
 // be readable again rather than remembered.
-type invoiceHandlers struct{ invoices InvoiceReads }
+type invoiceHandlers struct {
+	invoices InvoiceReads
+	cursors  *cursor.Signer
+}
 
-func newInvoiceHandlers(reads InvoiceReads) (invoiceHandlers, error) {
+func newInvoiceHandlers(reads InvoiceReads, cursors *cursor.Signer) (invoiceHandlers, error) {
 	if reads == nil {
 		return invoiceHandlers{}, fmt.Errorf("%w: invoice reads", ErrIncompleteApplication)
 	}
-	return invoiceHandlers{invoices: reads}, nil
+	if cursors == nil {
+		return invoiceHandlers{}, fmt.Errorf("%w: cursor signer", ErrIncompleteApplication)
+	}
+	return invoiceHandlers{invoices: reads, cursors: cursors}, nil
 }
 
 // GetInvoice answers the invoice of one ride the caller holds.

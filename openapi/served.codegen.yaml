@@ -32,6 +32,11 @@ output-options:
     # The read of one invoice of the account, which is how the result of an ending the account did not
     # send is opened again after a reload or in another tab.
     - getInvoice
+    # The two collections the cabinet is made of: the rides the account has finished, and the invoices
+    # they were charged by. Each is paged by a cursor of its own and ordered by its own moment, so the
+    # cabinet reads two independent collections rather than one joined history.
+    - getRides
+    - getInvoices
     # The two streams are served here too: the boundary validates them against the contract, and the
     # generated streaming response writes the frames as they are produced.
     - getPublicEvents

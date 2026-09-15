@@ -1,4 +1,5 @@
 import type { CurrentSnapshot, Rental } from '../../shared/api/current.ts';
+import { answersOf } from '../events/documentAnswers.ts';
 import type { AnswerHandlers, DocumentKind } from '../events/readCycle.ts';
 import { versionsOf } from '../events/observedResource.ts';
 import { isNewerTimestamp } from '../events/version.ts';
@@ -10,31 +11,18 @@ export type CurrentSession = {
 };
 
 /**
- * currentAnswers builds the answers of the coordinator that reads the account's own rental. The
- * public resources are answered by nobody here: a private read never publishes them, so a signal
+ * currentAnswers builds the answers of the coordinator that reads the account's own rental in force.
+ * The public resources are answered by nobody here: a private read never publishes them, so a signal
  * about one is left to the catalog that reads it.
  *
- * The notifications addressed to the same account are read by their own coordinator rather than by
- * this one: a page of notifications is not a snapshot of the reservation, it is ordered and versioned
- * by entry rather than by the moment it was computed at, and a signal about a notification must not
- * decide when the reservation is read — nor the other way round.
+ * The notifications addressed to the same account, its invoices and the history of the rides it has
+ * finished are read by coordinators of their own rather than by this one: each of those is ordered
+ * and versioned by entry rather than by the moment a snapshot was computed at, and a signal about
+ * one must not decide when the rental in force is read — nor the other way round.
  */
 export function currentAnswers(state: CurrentSession): Record<DocumentKind, AnswerHandlers> {
-  return {
-    vehicles: notReadHere,
-    zones: notReadHere,
-    tariffs: notReadHere,
-    current: currentAnswer(state),
-    notifications: notReadHere,
-  };
+  return answersOf({ rentals: currentAnswer(state) });
 }
-
-// A document this coordinator does not read answers nothing: a stream that named one is answered by
-// the catalog, which is the client that holds it.
-const notReadHere: AnswerHandlers = {
-  accepts: () => false,
-  observe: () => undefined,
-};
 
 /**
  * The answer of the private resource. An answer is stored only when it was computed at a later

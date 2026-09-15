@@ -1,19 +1,18 @@
-import type { Completion, InvoiceView, Payment } from '../../shared/api/current.ts';
+import type { Completion, FinishResult, InvoiceView, Payment } from '../../shared/api/current.ts';
 import type {
   Notification,
   NotificationCollection,
   RentalCompletedNotification,
 } from '../../shared/api/notifications.ts';
-import type { CompletedRide } from './completedRide.ts';
-
 /**
  * What a person is shown about a ride that ended: why it ended, the moment it actually ended, what it
  * cost and where paying for it stands.
  *
  * The result is read from the account's own notifications and from the invoice the completion names,
- * so it is the same on the screen that ended the ride, after a reload and in another tab. The record
- * this tab wrote is only what the result is shown from before the service's own notification has been
- * read, and the vehicle is named by that record alone.
+ * so it is the same on the screen that ended the ride, after a reload and in another tab. The answer
+ * to a finish this tab sent is only what the result is shown from in the moment before the service's
+ * own report of that ending has been read, and the vehicle is named by that answer alone: the feed of
+ * finished rides is where a vehicle is named once the panel is no longer showing the ride.
  */
 
 /** What one completed ride cost and how it is being paid for, as the invoice issued for it states. */
@@ -33,7 +32,7 @@ export type CompletedRideResult = {
   /** The ride the result is about, which is what the record of this tab is matched against. */
   rentalId: string;
 
-  /** The vehicle of the ride, when the answer this tab received named one. */
+  /** The vehicle of the ride, when the answer to a finish this tab sent named one. */
   vehicle?: string;
 
   /** Why the ride ended, with the sources that ran out when an empty one ended it. */
@@ -83,39 +82,38 @@ export function completedResult(
 }
 
 /**
- * recordedResult is the result as the record of a ride this tab ended states it. It is the immediate
- * answer for a finish this tab sent, before the notification about that ride has been read, and it
- * carries the two things no other answer the interface reads publishes: the vehicle, and the state of
- * a payment the service has since moved.
+ * finishedResult is the result as the answer to a finish this tab sent states it. It is the whole
+ * truth about that ending — the ride, the vehicle, and the invoice as it was issued — and it answers
+ * for the moment between that answer and the service's own report of the same ending.
  */
-export function recordedResult(record: CompletedRide): CompletedRideResult {
+export function finishedResult(finished: FinishResult): CompletedRideResult {
   return {
-    rentalId: record.finished.rental.id,
-    vehicle: record.finished.rental.vehicle.model,
-    completion: record.finished.rental.completion,
-    endedAt: record.finished.rental.completed_at,
+    rentalId: finished.rental.id,
+    vehicle: finished.rental.vehicle.model,
+    completion: finished.rental.completion,
+    endedAt: finished.rental.completed_at,
     charge: {
-      invoiceId: record.payment.invoice.id,
-      totalAmountTyiyn: record.payment.invoice.total_amount_tyiyn,
-      payment: record.payment.payment,
+      invoiceId: finished.invoice.invoice.id,
+      totalAmountTyiyn: finished.invoice.invoice.total_amount_tyiyn,
+      payment: finished.invoice.payment,
     },
   };
 }
 
 /**
  * shownResult is the result the panel shows. What the service published wins whenever there is any of
- * it: a record of the ride the service itself reported is a memory of this tab, and the service's own
- * answer is what a person is charged by. The record answers while there is nothing published yet, and
- * it names the vehicle even then, because the completion notification does not carry it.
+ * it: the answer to a finish is a memory of this tab, and the service's own answer is what a person
+ * is charged by. The answer to the finish shows while there is nothing published yet, and it names
+ * the vehicle even afterwards, because the report of a completed ride does not carry one.
  */
 export function shownResult(
   published: CompletedRideResult | undefined,
-  record: CompletedRide | undefined,
+  finished: FinishResult | undefined,
 ): CompletedRideResult | undefined {
-  if (published !== undefined) return withNamedVehicle(published, record);
-  if (record === undefined) return undefined;
+  if (published !== undefined) return withNamedVehicle(published, finished);
+  if (finished === undefined) return undefined;
 
-  return recordedResult(record);
+  return finishedResult(finished);
 }
 
 /**
@@ -146,10 +144,10 @@ function chargeOf(invoiceId: string, invoice: InvoiceView | undefined): Complete
   return { invoiceId, totalAmountTyiyn: invoice.invoice.total_amount_tyiyn, payment: invoice.payment };
 }
 
-/** The published result with the vehicle the record names for the same ride, when it names one. */
-function withNamedVehicle(published: CompletedRideResult, record: CompletedRide | undefined): CompletedRideResult {
-  if (record === undefined) return published;
-  if (record.finished.rental.id !== published.rentalId) return published;
+/** The published result with the vehicle a finish this tab sent named, when it named the same ride. */
+function withNamedVehicle(published: CompletedRideResult, finished: FinishResult | undefined): CompletedRideResult {
+  if (finished === undefined) return published;
+  if (finished.rental.id !== published.rentalId) return published;
 
-  return { ...published, vehicle: record.finished.rental.vehicle.model };
+  return { ...published, vehicle: finished.rental.vehicle.model };
 }

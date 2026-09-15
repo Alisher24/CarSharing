@@ -11,6 +11,7 @@ import {
   availableModel,
   BOOK_ACTION,
   book,
+  CABINET_ACTION,
   CANCEL_ACTION,
   CONFIRM_ACTION,
   email,
@@ -127,13 +128,15 @@ test('the panel comes back after a reload and outlives every panel around it', a
       timeout: RECONCILIATION_PATIENCE_MS,
     });
 
-    // Closing the card and opening the account panel are not reasons to lose sight of a reservation
-    // that is running.
+    // Closing the card and walking to the cabinet and back are not reasons to lose sight of a
+    // reservation that is running: the reservation lives above every screen, and the map shows the
+    // same one when a person returns to it.
     await openVehicle(page, model);
     await page.locator('.vehicle-card-close').click();
     await expect(page.locator('.vehicle-card')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Вход' }).click();
-    await expect(page.locator('.account')).toBeVisible();
+    await page.getByRole('link', { name: CABINET_ACTION }).click();
+    await expect(page.locator('.cabinet')).toBeVisible();
+    await page.goBack();
     await expect(page.locator('.reservation-panel-time')).toContainText('Осталось');
   } finally {
     await context.close();

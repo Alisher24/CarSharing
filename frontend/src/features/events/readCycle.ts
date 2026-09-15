@@ -1,12 +1,22 @@
 import type { ObservedVersions } from './changes.ts';
 
+/** A resource every visitor may read, which the public catalog keeps up to date. */
+export type PublicDocumentKind = 'vehicles' | 'zones' | 'tariffs';
+
+/**
+ * A resource that belongs to one account. It is the address a private change signal carries rather
+ * than the name of a screen: the rentals of an account are one address, read both by the panel that
+ * shows the rental in force and by the feed that lists the ones that have finished.
+ */
+export type PrivateDocumentKind = 'rentals' | 'notifications' | 'invoices';
+
 /**
  * One resource a reader keeps up to date, which is what a change signal and a ready frame address.
- * The catalog reads the public ones; the reservation of the signed-in person and the notifications
- * addressed to them are private, and each is read by its own reader. A coordinator states what it
- * does with every document, so one that belongs to another reader is named rather than left out.
+ * The catalog reads the public ones; each private one is read by the readers that hold it, and a
+ * coordinator states what it does with every document, so one that belongs to another reader is
+ * named rather than left out.
  */
-export type DocumentKind = 'vehicles' | 'zones' | 'tariffs' | 'current' | 'notifications';
+export type DocumentKind = PublicDocumentKind | PrivateDocumentKind;
 
 /**
  * What one resource does with a REST answer. The handlers are asked twice about one answer: once

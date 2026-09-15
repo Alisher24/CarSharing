@@ -58,7 +58,11 @@ func NewHandler(dependencies Dependencies) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	invoices, err := newInvoiceHandlers(dependencies.Invoices)
+	rideCollection, err := newRideCollectionHandlers(dependencies.Reservations, dependencies.Cursors)
+	if err != nil {
+		return nil, err
+	}
+	invoices, err := newInvoiceHandlers(dependencies.Invoices, dependencies.Cursors)
 	if err != nil {
 		return nil, err
 	}
@@ -67,16 +71,17 @@ func NewHandler(dependencies Dependencies) (http.Handler, error) {
 		return nil, err
 	}
 	served := server{
-		health:               health{probe: dependencies.Probe},
-		accounts:             accounts,
-		catalogHandlers:      handlers,
-		reservationHandlers:  reservations,
-		rideHandlers:         rides,
-		finishHandlers:       finishes,
-		payHandlers:          payments,
-		notificationHandlers: notifications,
-		invoiceHandlers:      invoices,
-		streams:              streaming,
+		health:                 health{probe: dependencies.Probe},
+		accounts:               accounts,
+		catalogHandlers:        handlers,
+		reservationHandlers:    reservations,
+		rideHandlers:           rides,
+		finishHandlers:         finishes,
+		payHandlers:            payments,
+		notificationHandlers:   notifications,
+		rideCollectionHandlers: rideCollection,
+		invoiceHandlers:        invoices,
+		streams:                streaming,
 	}
 	strict := servedapi.NewStrictHandlerWithOptions(served, nil, strictErrorHandlers())
 	policy := Policy{

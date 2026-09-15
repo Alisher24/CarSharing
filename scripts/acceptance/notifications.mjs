@@ -3,10 +3,9 @@
 // actually did. A check that must reach a collection of a known shape writes its notifications
 // directly, because the deadline that decides a warning is placed relative to the clock of the
 // database rather than waited for.
-import { createHmac } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { call } from './client.mjs';
+import { CURSOR_ALPHABET } from './cursors.mjs';
 import { insertRentalReturning } from './rentalrows.mjs';
 import { endSuiteReservations, newAccount, sql } from './reservations.mjs';
 
@@ -14,22 +13,6 @@ export const NOTIFICATIONS_PATH = '/api/v1/me/notifications';
 
 /** Every account this suite registers carries this prefix, which is also how its rows are found. */
 const ACCOUNT_PREFIX = 'notifications';
-
-/** The file the stack mounts the cursor signing key from, which a check signs a cursor with. */
-const CURSOR_KEY_FILE = '.secrets/cursor_hmac_key';
-
-/**
- * How many characters of a cursor are its signature: SHA-256 without padding, in the alphabet the
- * contract declares. The rest of the cursor is the payload it covers.
- */
-const SIGNATURE_LENGTH = 43;
-
-/** signPayload renders one payload as a cursor, signed with the key the stack mounted. */
-function signPayload(payload) {
-  const encoded = Buffer.from(payload).toString('base64url');
-  const signature = createHmac('sha256', readCursorKey()).update(encoded).digest('base64url');
-  return `${signature}${encoded}`;
-}
 
 /** One page of the caller's own notifications, as the request states it. */
 export function notificationsOf(account, query = '') {
@@ -44,36 +27,6 @@ export function markRead(notificationId, account, options = {}) {
     csrfToken: account.csrfToken,
     ...options,
   });
-}
-
-/**
- * issueCursor signs a cursor the way the service does, for the checks that present one the running
- * API never issued: another operation, another owner, or a payload edited after it was signed. The
- * key is the one the stack mounted, so a cursor this helper signs is accepted unless the rule under
- * test is the one that refuses it.
- */
-export function issueCursor(scope, { createdAt, id }) {
-  return signPayload(
-    JSON.stringify({
-      v: 1,
-      t: createdAt,
-      id,
-      op: scope.operation,
-      sub: scope.owner,
-      q: scope.params ?? {},
-    }),
-  );
-}
-
-/** Edits one character of a cursor's payload, leaving the signature it was issued with. */
-export function tamper(cursor) {
-  return cursor.slice(0, -1) + (cursor.endsWith('A') ? 'B' : 'A');
-}
-
-/** The position a cursor names, which a check signs again under the scope it presents it with. */
-export function positionOf(cursor) {
-  const payload = JSON.parse(Buffer.from(cursor.slice(SIGNATURE_LENGTH), 'base64url').toString('utf8'));
-  return { createdAt: payload.t, id: payload.id };
 }
 
 /**
@@ -138,7 +91,7 @@ export function storedStage(rentalId) {
 export async function firstCursorOf(account) {
   const answer = await notificationsOf(account, '?limit=1');
   assert.equal(answer.status, 200, answer.text);
-  assert.match(answer.json.next_cursor, /^[A-Za-z0-9_-]+$/, 'the collection offered no cursor');
+  assert.match(answer.json.next_cursor, CURSOR_ALPHABET, 'the collection offered no cursor');
   return answer.json.next_cursor;
 }
 
@@ -170,13 +123,9 @@ export async function endSuiteNotifications() {
 }
 
 export { sql };
+export { issueCursor, positionOf, tamper } from './cursors.mjs';
 
 /** One vehicle of the prepared demonstration, which a written rental only has to name. */
 function anyVehicle() {
   return sql('SELECT id FROM vehicles ORDER BY id LIMIT 1');
-}
-
-/** The signing key the stack mounted, read from the file local setup wrote. */
-function readCursorKey() {
-  return readFileSync(CURSOR_KEY_FILE, 'utf8').trim();
 }

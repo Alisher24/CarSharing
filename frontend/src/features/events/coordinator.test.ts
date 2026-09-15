@@ -17,8 +17,9 @@ function coordinator(session = 'session-1'): ReadCoordinator {
     vehicles: plainHandlers(),
     zones: plainHandlers(),
     tariffs: plainHandlers(),
-    current: plainHandlers(),
+    rentals: plainHandlers(),
     notifications: plainHandlers(),
+    invoices: plainHandlers(),
   } satisfies Record<DocumentKind, AnswerHandlers>;
 
   return createReadCoordinator(session, handlers);
