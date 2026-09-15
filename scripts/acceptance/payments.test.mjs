@@ -430,20 +430,32 @@ describe('a payment in a race with a new reservation', () => {
 describe('the amount a payment publishes', () => {
   test('keeps every digit of an amount no floating-point number can hold', async () => {
     const { account, invoiceId } = await pricedRide('beyond-2-53');
-    const answer = await pay(invoiceId, newCommandKey(), account);
-    assert.equal(answer.status, 200, answer.text);
 
-    // Two begun driving minutes at that rate are 18014398509481986 tyiyn, which no double holds: read as
-    // a number the answer would arrive as a rounded neighbour. The digits are therefore taken from the
-    // text of the answer and the product is proven with BigInt.
-    const driving = answer.json.invoice.invoice.lines[0];
+    // The service owes this invoice an attempt of its own, and it may be delivering that attempt as the
+    // check pays: the contract refuses a payment of an invoice whose first attempt is still running, and
+    // a refusal is stored against the key that met it. The command is therefore sent again under a key
+    // of its own until the service has finished with the invoice, because the key that met the refusal
+    // reproduces that refusal rather than paying.
+    const settled = await until(async () => {
+      const answer = await pay(invoiceId, newCommandKey(), account);
+      assert.ok(
+        answer.status === 200 || answer.json.code === 'PAYMENT_IN_PROGRESS',
+        `paying answered ${answer.status}: ${answer.text}`,
+      );
+      return answer.status === 200 ? answer : undefined;
+    }, `the invoice ${invoiceId} was never settled by the service or paid by the check`);
+
+    // Two begun driving minutes at that rate, which no double holds: read as a number the answer would
+    // arrive as a rounded neighbour. The digits are therefore taken from the text of the answer and the
+    // product is proven with BigInt.
+    const driving = settled.json.invoice.invoice.lines[0];
     const minutes = BigInt(driving.billed_started_minutes);
     const rate = BigInt(driving.rate_tyiyn_per_started_minute);
     assert.equal(rate, BigInt(BEYOND_THE_EXACT_DOUBLE_RANGE), 'the check did not move the rate');
     assert.equal(minutes, 2n, `the check gave the driving mode ${minutes} begun minutes`);
 
-    const expected = minutes * rate + BigInt(answer.json.invoice.invoice.lines[1].amount_tyiyn);
-    const published = publishedInteger(answer.text, 'total_amount_tyiyn');
+    const expected = minutes * rate + BigInt(settled.json.invoice.invoice.lines[1].amount_tyiyn);
+    const published = publishedInteger(settled.text, 'total_amount_tyiyn');
     assert.equal(published, expected.toString(), 'the published digits are not the product');
     assert.ok(
       BigInt(published) > BigInt(Number.MAX_SAFE_INTEGER),

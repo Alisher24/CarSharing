@@ -12,9 +12,11 @@ const (
 	PowertrainGas      PowertrainType = "gas"
 )
 
-// Profile is the powertrain's energy layout: the source kinds a vehicle of this powertrain carries.
-// Every kind a profile lists can move the vehicle on its own, which is what makes its reserve count
-// towards the start threshold on its own.
+// Profile is the powertrain's energy layout: the source kinds a vehicle of this powertrain carries,
+// in the order it uses them. The first kind that still holds a reserve is the one the vehicle moves
+// on, so this list is both what the vehicle carries and which of them it burns first. Every kind a
+// profile lists can move the vehicle on its own, which is what makes its reserve count towards the
+// start threshold on its own.
 type Profile struct {
 	PowertrainType PowertrainType
 	Sources        []SourceKind
@@ -28,7 +30,7 @@ var profiles = []Profile{
 	{PowertrainType: PowertrainGasoline, Sources: []SourceKind{SourceGasoline}},
 	{PowertrainType: PowertrainDiesel, Sources: []SourceKind{SourceDiesel}},
 	{PowertrainType: PowertrainHybrid, Sources: []SourceKind{SourceBattery, SourceGasoline}},
-	{PowertrainType: PowertrainGas, Sources: []SourceKind{SourceGasoline, SourceLPG}},
+	{PowertrainType: PowertrainGas, Sources: []SourceKind{SourceLPG, SourceGasoline}},
 }
 
 var profileByPowertrain = indexProfiles(profiles)
