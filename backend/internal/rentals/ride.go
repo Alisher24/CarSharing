@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/events"
+	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -45,7 +46,7 @@ func (s *Service) Ride(ctx context.Context, kind RideKind, command RideCommand) 
 	if !known {
 		return Answered{}, errors.New("the ride command is not one the module knows")
 	}
-	return s.answer(ctx, command.Caller, command.Attempt,
+	return s.answer(ctx, idempotency.ForAccount(command.Caller), command.Attempt,
 		rideParticipants(s.pool, command),
 		func(ctx context.Context, moment time.Time) (Outcome, error) {
 			return s.rideWithin(ctx, transition, moment, command)
@@ -100,6 +101,17 @@ func (s *Service) rideWithin(
 	if errors.Is(err, ErrRentalNotFound) {
 		return refused(moment, Refusal{Kind: RentalNotFound}), nil
 	}
+	if err != nil {
+		return Outcome{}, err
+	}
+
+	// The model is brought to the moment of the command before the transition is judged. A ride whose
+	// sources have run out is over whatever this command was going to do with it, which is what keeps
+	// a pause or a continuation from reopening a ride the model has already ended.
+	if _, err = s.reconcileVehicle(ctx, moment, target.VehicleID, &target); err != nil {
+		return Outcome{}, err
+	}
+	target, err = rentalByIDFor(ctx, s.pool, command.Caller, command.RentalID)
 	if err != nil {
 		return Outcome{}, err
 	}
@@ -186,7 +198,7 @@ func (s *Service) ridePrepared(
 // changes, so the catalog a visitor reads and the account that holds the ride hear about the mode it
 // entered in the transaction that entered it.
 func announceRide(ctx context.Context, pool *pgxpool.Pool, moved Rental) error {
-	version, err := raiseVehicleVersion(ctx, pool, moved.VehicleID)
+	version, err := publishVehicleChange(ctx, pool, moved.VehicleID, false)
 	if err != nil {
 		return err
 	}

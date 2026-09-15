@@ -81,6 +81,7 @@ export function App() {
         account={account}
         reservations={reservations}
         ride={ride}
+        notifications={notifications}
         onShowVehicle={select}
       />
       <ReservationWarning current={current.resource} notifications={notifications} />

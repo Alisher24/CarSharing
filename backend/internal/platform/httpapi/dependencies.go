@@ -42,6 +42,10 @@ type Dependencies struct {
 	// of them.
 	Notifications Notifications
 
+	// Invoices is the account's own invoices: the read of one of them, which is how the result of an
+	// ending the account did not send is opened again.
+	Invoices InvoiceReads
+
 	// Cursors signs the position a paginated operation hands back for its next page. It is required
 	// by every operation that publishes one, so an application that serves such an operation cannot
 	// be assembled without the key it signs with.
@@ -69,5 +73,6 @@ type server struct {
 	finishHandlers
 	payHandlers
 	notificationHandlers
+	invoiceHandlers
 	streams
 }

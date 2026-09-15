@@ -5,15 +5,10 @@ import (
 	"errors"
 	"time"
 
-	"github.com/Alisher24/CarSharing/backend/internal/billing"
 	"github.com/Alisher24/CarSharing/backend/internal/completion"
-	"github.com/Alisher24/CarSharing/backend/internal/events"
-	"github.com/Alisher24/CarSharing/backend/internal/invoices"
-	"github.com/Alisher24/CarSharing/backend/internal/notifications"
-	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
+	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // FinishCommand ends one ride of one account, whoever asks. Whether the caller may end it is decided
@@ -33,7 +28,7 @@ type FinishCommand struct {
 // answered with that attempt's ending rather than written over, which is what makes two finishes of
 // one ride produce one completed rental and one invoice.
 func (s *Service) Finish(ctx context.Context, command FinishCommand) (Answered, error) {
-	return s.answer(ctx, command.Caller, command.Attempt,
+	return s.answer(ctx, idempotency.ForAccount(command.Caller), command.Attempt,
 		rideParticipants(s.pool, RideCommand{Caller: command.Caller, RentalID: command.RentalID}),
 		func(ctx context.Context, moment time.Time) (Outcome, error) {
 			return s.finishWithin(ctx, moment, command)
@@ -48,6 +43,20 @@ func (s *Service) finishWithin(
 	if errors.Is(err, ErrRentalNotFound) {
 		return refused(moment, Refusal{Kind: RentalNotFound}), nil
 	}
+	if err != nil {
+		return Outcome{}, err
+	}
+
+	// The model is brought to the moment of the command before anything is judged. A ride whose
+	// sources have run out is over whatever this command was going to say about it, and a command
+	// that arrives after it did not end the ride: it found one already ended, and the reason and the
+	// moment are the ones the model ran it out at. A ride that runs out at the very moment of the
+	// command is answered the same way, which is what gives depletion priority over a finish of the
+	// same instant.
+	if _, err = s.reconcileVehicle(ctx, moment, target.VehicleID, &target); err != nil {
+		return Outcome{}, err
+	}
+	target, err = rentalByIDFor(ctx, s.pool, command.Caller, command.RentalID)
 	if err != nil {
 		return Outcome{}, err
 	}
@@ -69,7 +78,7 @@ func (s *Service) finishWithin(
 	if refusal != nil {
 		return refused(moment, *refusal), nil
 	}
-	return s.endRide(ctx, moment, target)
+	return s.endRide(ctx, moment, target, Ending{Reason: finishReason, EndedAt: moment})
 }
 
 // finishPrepared reports what a finish requires of the vehicle before it may end the ride. Nothing is
@@ -99,183 +108,6 @@ func (s *Service) storedEnding(ctx context.Context, moment time.Time, target Ren
 	return Outcome{Rental: target, Vehicle: vehicle, Moment: moment, Invoice: issued}, nil
 }
 
-// endRide closes the ride and writes everything the ending owes, in the transaction the command
-// already holds: the interval that was open, the stage and the moment the ride ended, the reason it
-// ended, the invoice of what it cost, the report of it and the signals of the changes it made.
-func (s *Service) endRide(ctx context.Context, moment time.Time, target Rental) (Outcome, error) {
-	ended, err := completeRental(ctx, s.pool, target, moment)
-	if err != nil {
-		return Outcome{}, err
-	}
-	if err = closeOpenSegment(ctx, s.pool, ended.ID, moment); err != nil {
-		return Outcome{}, err
-	}
-
-	priced, err := priceRide(ctx, s.pool, ended)
-	if err != nil {
-		return Outcome{}, err
-	}
-	issued, err := s.invoices.Issue(ctx, invoiceDraft(ended, priced, moment))
-	if err != nil {
-		return Outcome{}, err
-	}
-	if err = s.completions.Record(ctx, ended.UserID, ended.ID, notifications.Completion{
-		InvoiceID: issued.ID,
-		Reason:    issued.Completion,
-	}, moment); err != nil {
-		return Outcome{}, err
-	}
-	if err = announceFinish(ctx, s.pool, ended, issued); err != nil {
-		return Outcome{}, err
-	}
-
-	vehicle, err := s.vehicles.VehicleAt(ctx, ended.VehicleID, moment)
-	if err != nil {
-		return Outcome{}, err
-	}
-	return Outcome{Rental: ended, Vehicle: vehicle, Moment: moment, Invoice: issued}, nil
-}
-
 // finishReason is why this build ends a ride when a person ends it. The other reason the contract
-// publishes belongs to the transition that ends a ride the service decides to end.
+// publishes belongs to the model that runs a ride out.
 const finishReason = completion.UserFinished
-
-// completeRentalStatement writes the end of one ride. The stages it applies to are part of the
-// statement, so a rental another transaction has ended is reported as unmoved rather than written
-// over, and the moment the ending transaction fixed is the moment the ride ended. A ride that is over
-// is in no mode, so it releases the moment its current mode began, exactly as an ended reservation
-// does.
-const completeRentalStatement = `
-UPDATE rentals
-SET stage = $2::text,
-    ended_at = $3,
-    mode_started_at = NULL,
-    completion_reason = $4::text,
-    version = version + 1
-WHERE id = $1 AND stage = ANY($5::text[])
-RETURNING` + rentalFields
-
-// errRentalNotEnded reports a rental that no longer stood in a stage a finish applies to. The stage is
-// read under the lock of the same transaction, so this is a defect of that reading rather than a
-// refusal a client caused.
-var errRentalNotEnded = errors.New("the rental was not a ride that could be ended")
-
-// completeRental writes one ending. It is the only place a rental reaches the completed stage, so the
-// reason, the moment and the release of the vehicle are written together or not at all.
-func completeRental(
-	ctx context.Context, pool *pgxpool.Pool, target Rental, moment time.Time,
-) (Rental, error) {
-	rows, err := database.QuerierFrom(ctx, pool).Query(ctx, completeRentalStatement,
-		target.ID, string(stage.Completed), moment, string(finishReason), rideStages)
-	if err != nil {
-		return Rental{}, err
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		if err = rows.Err(); err != nil {
-			return Rental{}, err
-		}
-		return Rental{}, errRentalNotEnded
-	}
-	var ended Rental
-	if err = scanRental(rows, &ended); err != nil {
-		return Rental{}, err
-	}
-	return ended, rows.Err()
-}
-
-// rideStages are the stages a ride that has begun stands in, which is what a finish applies to: a
-// reservation is given back or runs out rather than being finished.
-var rideStages = []string{string(stage.Active), string(stage.Paused)}
-
-// priceRide computes what a ride costs by the moment it ended. That moment is the one the ending
-// stored rather than the moment the answer is given: reading the intervals to a later moment would
-// count the time the transaction itself took, and an invoice must state what the ride took rather
-// than how long the service spent writing it down.
-func priceRide(ctx context.Context, pool *pgxpool.Pool, ended Rental) (billing.Charge, error) {
-	if ended.EndedAt == nil {
-		return billing.Charge{}, errRentalNotEnded
-	}
-	durations, err := readModeDurations(ctx, pool, ended.ID, *ended.EndedAt)
-	if err != nil {
-		return billing.Charge{}, err
-	}
-	return ended.priceOf(durations)
-}
-
-// invoiceDraft is what the invoices module is told about one finished ride. The lines are read from the
-// charge in the unit an invoice stores, and the currency and the policy are copied from the rental by
-// the statement, so a caller cannot hand an invoice a price list its ride never had.
-func invoiceDraft(ended Rental, priced billing.Charge, moment time.Time) invoices.Draft {
-	driving, paused := priced.Lines()
-	return invoices.Draft{
-		RentalID:   ended.ID,
-		UserID:     ended.UserID,
-		IssuedAt:   moment,
-		Completion: finishReason,
-		Driving:    invoices.LineOf(driving),
-		Paused:     invoices.LineOf(paused),
-		TotalTyiyn: priced.TotalTyiyn,
-	}
-}
-
-// announceFinish records every change the ending made: the rental that reached its last stage, the
-// vehicle that stopped being held and is therefore free again in the catalog, the invoice that was
-// issued, and the work a worker must still deliver.
-//
-// The deliveries an ending owes are two: the attempt at the payment of the invoice and the letter that
-// carries it. The attempt is recorded only for an invoice that is still waiting for one — a ride that
-// cost nothing is settled by the moment its invoice was issued — and that question is asked of the
-// state the invoice was stored with rather than of a second comparison of its amount with zero.
-//
-// The delivery of the letter is the one the contract describes and no process of this build sends yet.
-// The task is recorded anyway: the queue keeps a kind whose delivery is not declared, so the letter is
-// owed from the moment the ride ends rather than from the moment somebody remembers it.
-func announceFinish(ctx context.Context, pool *pgxpool.Pool, ended Rental, issued invoices.Invoice) error {
-	version, err := raiseVehicleVersion(ctx, pool, ended.VehicleID)
-	if err != nil {
-		return err
-	}
-	if err = events.Record(ctx, pool,
-		events.Signal{Kind: events.RentalChanged, ResourceID: ended.ID,
-			Version: ended.Version, Recipient: ended.UserID},
-		events.Signal{Kind: events.VehicleChanged, ResourceID: ended.VehicleID, Version: version},
-		events.Signal{Kind: events.InvoiceChanged, ResourceID: issued.ID,
-			Version: issued.Version, Recipient: ended.UserID},
-	); err != nil {
-		return err
-	}
-	if err = recordPaymentAttempt(ctx, pool, ended, issued); err != nil {
-		return err
-	}
-	return events.Record(ctx, pool, events.Signal{
-		Kind:       invoiceIssuedTask,
-		ResourceID: issued.ID,
-		Version:    ended.Version,
-		Recipient:  ended.UserID,
-	})
-}
-
-// recordPaymentAttempt owes one attempt at the invoice of a ride that has ended, unless nothing is owed
-// on it. The task names the invoice as its resource and the ride as the version it was recorded at, and
-// it is addressed to the account that rode: the attempt belongs to one payment rather than to the
-// installation.
-func recordPaymentAttempt(
-	ctx context.Context, pool *pgxpool.Pool, ended Rental, issued invoices.Invoice,
-) error {
-	if issued.Payment != invoices.PendingPayment {
-		return nil
-	}
-	return events.Record(ctx, pool, events.Signal{
-		Kind:       paymentAttemptTask,
-		ResourceID: issued.ID,
-		Version:    ended.Version,
-		Recipient:  ended.UserID,
-	})
-}
-
-// invoiceIssuedTask names the durable work an ending owes: the letter with the invoice and the reason
-// the ride ended. It is named here, beside the ending that records it, and the process that delivers
-// it declares the same kind where the deliveries of the queue are assembled.
-const invoiceIssuedTask events.Kind = "invoice.issued"

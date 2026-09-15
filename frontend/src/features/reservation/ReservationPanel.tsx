@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { isLiveRental, type CurrentSnapshot, type Rental, type ReservedRental } from '../../shared/api/current.ts';
 import type { Resource } from '../../shared/api/Resource.ts';
 import { loadedValue } from '../../shared/api/Resource.ts';
 import type { Account } from '../account/useAccount.ts';
+import type { Notifications } from '../notifications/useNotifications.ts';
 import { commandText } from './commandPhase.ts';
-import { completedRide, type CompletedRide } from './completedRide.ts';
+import type { CompletedRideResult } from './completedResult.ts';
 import type { Countdown, ServerClock } from './countdown.ts';
 import { FinishedRideView } from './FinishedRideView.tsx';
 import {
@@ -31,8 +32,9 @@ import { RideView } from './RideView.tsx';
 import { START_ACTION } from './rideCopy.ts';
 import { TariffRates } from './TariffRates.tsx';
 import { withinRepeatWindow, type UnfinishedCommand } from './unfinishedCommand.ts';
+import { useCompletedRideResult } from './useCompletedRideResult.ts';
 import { useCountdown } from './useCountdown.ts';
-import { usePayment } from './usePayment.ts';
+import { usePayment, type Payment } from './usePayment.ts';
 import type { Reservations } from './useReservations.ts';
 import type { RideCommands } from './useRideCommands.ts';
 
@@ -50,6 +52,9 @@ type ReservationPanelProps = {
 
   ride: RideCommands;
 
+  /** What the account was told, which is where a ride the service ended is reported. */
+  notifications: Notifications;
+
   /** What the panel asks the application to do with a vehicle that is held. */
   onShowVehicle: (vehicleId: string) => void;
 };
@@ -58,11 +63,13 @@ type ReservationPanelProps = {
  * ReservationPanel is what a person reads about their own rental above the map. It is permanent while
  * somebody is signed in: a reservation shows the vehicle, the time left, the frozen rates, the
  * cancellation and the control that starts the ride, and a ride that has started shows its mode, its
- * durations and what it has cost so far. A ride that has just ended shows what it cost, why, and where
- * the payment of that charge stands, which is read from the answers the service gave rather than from
- * the account's current state: the service publishes no shape for "the ride I finished last" yet.
- * Without any of those it shows the day's allowance, which is not something to infer from having no
- * rental.
+ * durations and what it has cost so far.
+ *
+ * A ride that is over shows what it cost, why it ended, when it ended and where the payment of that
+ * charge stands. That result is read from the answers the service holds — the notification about the
+ * ending and the invoice it names — so it is the same on the screen that ended the ride, after a
+ * reload and in a tab that was never told anything. Without any of those the panel shows the day's
+ * allowance, which is not something to infer from having no rental.
  */
 export function ReservationPanel({
   resource,
@@ -70,11 +77,12 @@ export function ReservationPanel({
   account,
   reservations,
   ride,
+  notifications,
   onShowVehicle,
 }: ReservationPanelProps) {
   const snapshot = loadedValue(resource);
-  const finished = useCompletedRide(owner, resource, ride);
   const paid = usePayment(account);
+  const result = useCompletedRideResult({ owner, resource, ride, notifications, paid });
   if (snapshot === undefined) return null;
 
   const rental = currentRental(snapshot);
@@ -83,21 +91,15 @@ export function ReservationPanel({
   return (
     <section className="reservation-panel" aria-label={PANEL_HEADING}>
       <h2 className="reservation-panel-heading">{PANEL_HEADING}</h2>
-      {rental === undefined ? (
-        finished === undefined ? (
-          <p className="reservation-panel-empty">{NOTHING_CURRENT}</p>
-        ) : (
-          <FinishedRideView finished={finished.finished} payment={finished.payment} paid={paid} />
-        )
-      ) : (
-        <CurrentRental
-          rental={rental}
-          reservations={reservations}
-          ride={ride}
-          clock={clock}
-          onShowVehicle={onShowVehicle}
-        />
-      )}
+      <CurrentState
+        rental={rental}
+        result={result}
+        paid={paid}
+        reservations={reservations}
+        ride={ride}
+        clock={clock}
+        onShowVehicle={onShowVehicle}
+      />
       <p className="reservation-panel-limit">{limitText(snapshot)}</p>
       <UnknownCommand held={repeatableOf(reservations, ride)} onRepeat={repeatOf(reservations, ride)} />
     </section>
@@ -105,25 +107,41 @@ export function ReservationPanel({
 }
 
 /**
- * useCompletedRide reads the ending this account may still be shown, from the record the handler of the
- * finish command wrote. It is read when the account changes and whenever a rental stops being current,
- * so the summary appears on the answer that ended the ride and on a reload of the same tab, and it is
- * cleared as soon as the account starts something new.
+ * CurrentState is what the panel shows about the account: the rental in force, the ride that ended
+ * last, or the statement that nothing is current. Which of them it is comes from the answer the
+ * service gave rather than from what the interface last asked for.
  */
-function useCompletedRide(
-  owner: string | undefined,
-  resource: Resource<CurrentSnapshot | undefined>,
-  ride: RideCommands,
-): CompletedRide | undefined {
-  const [finished, setFinished] = useState<CompletedRide | undefined>(undefined);
+function CurrentState({
+  rental,
+  result,
+  paid,
+  reservations,
+  ride,
+  clock,
+  onShowVehicle,
+}: {
+  rental: Rental | undefined;
+  result: CompletedRideResult | undefined;
+  paid: Payment;
+  reservations: Reservations;
+  ride: RideCommands;
+  clock: ServerClock;
+  onShowVehicle: (vehicleId: string) => void;
+}) {
+  if (rental !== undefined) {
+    return (
+      <CurrentRental
+        rental={rental}
+        reservations={reservations}
+        ride={ride}
+        clock={clock}
+        onShowVehicle={onShowVehicle}
+      />
+    );
+  }
+  if (result !== undefined) return <FinishedRideView result={result} paid={paid} />;
 
-  const rentalId = currentRental(loadedValue(resource))?.id;
-  const settled = ride.phase.state === 'done' && ride.phase.action === 'finish';
-  useEffect(() => {
-    setFinished(completedRide(owner, Date.now()));
-  }, [owner, resource, rentalId, settled]);
-
-  return finished;
+  return <p className="reservation-panel-empty">{NOTHING_CURRENT}</p>;
 }
 
 /**

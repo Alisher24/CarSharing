@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -66,9 +65,9 @@ func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 // by the statement timeout set around this statement, so a stuck attempt answers busy rather than
 // holding the request open.
 const claimStatement = `
-INSERT INTO idempotency_requests (user_id, command_key, fingerprint)
-VALUES ($1, $2, $3)
-ON CONFLICT (user_id, command_key) DO NOTHING`
+INSERT INTO idempotency_requests (owner, user_id, command_key, fingerprint)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (owner, command_key) DO NOTHING`
 
 // boundClaimStatement bounds the wait of the claim below. A statement timeout covers the whole
 // statement including any wait for a competing insert to finish, and it is set through the function
@@ -82,7 +81,7 @@ const unboundClaimStatement = `SELECT set_config('statement_timeout', '0', true)
 const storedResultStatement = `
 SELECT fingerprint, status_code, body
 FROM idempotency_requests
-WHERE user_id = $1 AND command_key = $2`
+WHERE owner = $1 AND command_key = $2`
 
 // Claim takes the key of a command for this attempt, or reports the answer the key already holds.
 //
@@ -90,14 +89,14 @@ WHERE user_id = $1 AND command_key = $2`
 // that transaction commits, which is what makes a competing attempt wait for the change rather than
 // repeat it, and what leaves no claimed key behind when the change is rolled back.
 func (s *Store) Claim(
-	ctx context.Context, userID uuid.UUID, key Key, fingerprint Fingerprint,
+	ctx context.Context, owner Owner, key Key, fingerprint Fingerprint,
 ) (Claim, error) {
 	querier := database.QuerierFrom(ctx, s.pool)
 	if _, err := querier.Exec(ctx, boundClaimStatement, strconv.FormatInt(ClaimWait.Milliseconds(), 10)); err != nil {
 		return Claim{}, err
 	}
 
-	taken, err := querier.Exec(ctx, claimStatement, userID, string(key), string(fingerprint))
+	taken, err := querier.Exec(ctx, claimStatement, owner.name, owner.storedSender(), string(key), string(fingerprint))
 	if err != nil && waitTimedOut(err) {
 		return Claim{}, ErrInProgress
 	}
@@ -112,18 +111,18 @@ func (s *Store) Claim(
 	if taken.RowsAffected() == 1 {
 		return Claim{Owns: true}, nil
 	}
-	return s.stored(ctx, userID, key, fingerprint)
+	return s.stored(ctx, owner, key, fingerprint)
 }
 
 // stored reads the answer the key already holds. The row becomes visible to another transaction only
 // once it has committed together with the change, so its result is always there to be read.
 func (s *Store) stored(
-	ctx context.Context, userID uuid.UUID, key Key, fingerprint Fingerprint,
+	ctx context.Context, owner Owner, key Key, fingerprint Fingerprint,
 ) (Claim, error) {
 	var stored Fingerprint
 	var answer Result
 	err := database.QuerierFrom(ctx, s.pool).QueryRow(ctx, storedResultStatement,
-		userID, string(key)).Scan(&stored, &answer.Status, &answer.Body)
+		owner.name, string(key)).Scan(&stored, &answer.Status, &answer.Body)
 	if err != nil {
 		return Claim{}, err
 	}
@@ -142,14 +141,14 @@ SET status_code = $3,
     body = $4,
     completed_at = clock_timestamp(),
     retain_until = clock_timestamp() + make_interval(secs => $5)
-WHERE user_id = $1 AND command_key = $2`
+WHERE owner = $1 AND command_key = $2`
 
 // Complete stores the answer of a command this attempt owns, inside the transaction that made the
 // change. A command that decided nothing because it was refused stores the refusal the same way: a
 // repeat of a refusal reproduces the refusal rather than deciding the command again.
-func (s *Store) Complete(ctx context.Context, userID uuid.UUID, key Key, answer Result) error {
+func (s *Store) Complete(ctx context.Context, owner Owner, key Key, answer Result) error {
 	_, err := database.QuerierFrom(ctx, s.pool).Exec(ctx, completeStatement,
-		userID, string(key), answer.Status, string(answer.Body), Retention.Seconds())
+		owner.name, string(key), answer.Status, string(answer.Body), Retention.Seconds())
 	return err
 }
 

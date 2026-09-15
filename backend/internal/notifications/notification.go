@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/completion"
+	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/google/uuid"
 )
 
@@ -39,10 +40,14 @@ type Notification struct {
 	// copy of it could disagree with the rental.
 	ExpiresAt time.Time
 
-	// InvoiceID and CompletionReason are what the report of a finished ride tells about: the invoice
-	// the ride produced and why it ended. A warning about a reservation states neither.
+	// InvoiceID, CompletionReason, Exhausted and EndedAt are what the report of a finished ride tells
+	// about: the invoice the ride produced, why it ended, which sources were empty when it did and
+	// when it did. A warning about a reservation states none of them, and its ending is absent rather
+	// than the zero instant, which is a moment of the year one and not a missing one.
 	InvoiceID        string
 	CompletionReason completion.Reason
+	Exhausted        []fleet.SourceKind
+	EndedAt          *time.Time
 
 	// Active is whether what the notification tells about is still in force. Marking a notification
 	// read does not change it: having acknowledged a warning is a different fact from the warning

@@ -1,7 +1,12 @@
 import { getNotifications, readNotification } from './generated/sdk.gen';
 import type { NotificationCollection } from './generated/types.gen';
 
-export type { Notification, NotificationCollection, ReservationExpiringNotification } from './generated/types.gen';
+export type {
+  Notification,
+  NotificationCollection,
+  RentalCompletedNotification,
+  ReservationExpiringNotification,
+} from './generated/types.gen';
 
 // The collection of one account is private: the browser sends the session cookie, and the token of
 // the session authorizes the read that changes one notification.

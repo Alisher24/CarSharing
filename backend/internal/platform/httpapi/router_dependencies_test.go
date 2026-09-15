@@ -8,6 +8,7 @@ import (
 
 	"github.com/Alisher24/CarSharing/backend/internal/auth"
 	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
+	"github.com/Alisher24/CarSharing/backend/internal/invoices"
 	"github.com/Alisher24/CarSharing/backend/internal/notifications"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/cursor"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/sessions"
@@ -38,6 +39,7 @@ func TestIncompleteApplicationIsRefusedAtConstruction(t *testing.T) {
 		{"reservation commands", func(d *Dependencies) { d.Reservations = fixedReservations{} }},
 		{"notification operations", func(d *Dependencies) { d.Notifications = fixedNotifications{} }},
 		{"cursor signer", func(d *Dependencies) { d.Cursors = mustTestSigner(t) }},
+		{"invoice reads", func(d *Dependencies) { d.Invoices = fixedInvoices{} }},
 		{"event streams", func(d *Dependencies) { d.Events = fixedStreams{} }},
 	}
 
@@ -119,6 +121,12 @@ func (fixedNotifications) MarkRead(
 	context.Context, uuid.UUID, string,
 ) (notifications.Result, error) {
 	return notifications.Result{}, nil
+}
+
+type fixedInvoices struct{}
+
+func (fixedInvoices) ByID(context.Context, uuid.UUID, string) (invoices.Invoice, error) {
+	return invoices.Invoice{}, nil
 }
 
 // mustTestSigner is a signer holding a key long enough to sign, which the dependency test only

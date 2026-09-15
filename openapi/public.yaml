@@ -4779,7 +4779,7 @@ paths:
     get:
       operationId: getInvoice
       summary: get Invoice
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-body-limit: 65536
       description: No request body is permitted, including an empty JSON object.
       parameters:
@@ -7051,6 +7051,7 @@ components:
         - type
         - invoice_id
         - completion
+        - ended_at
       properties:
         id:
           $ref: ./components/identifiers.yaml#/components/schemas/ResourceId
@@ -7072,6 +7073,12 @@ components:
           $ref: ./components/identifiers.yaml#/components/schemas/ResourceId
         completion:
           $ref: '#/components/schemas/Completion'
+        ended_at:
+          allOf:
+            - $ref: ./components/common.yaml#/components/schemas/Timestamp
+          description: >-
+            The moment the ride ended, which is not the moment this notification was written: a ride that
+            ran out at noon and was noticed at ten past is reported at ten past about noon.
     Notification:
       oneOf:
         - $ref: '#/components/schemas/ReservationExpiringNotification'

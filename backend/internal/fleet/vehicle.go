@@ -18,6 +18,10 @@ type Vehicle struct {
 	// however recent its last reading was.
 	Connected bool
 
+	// ServiceRequired is whether the vehicle has been taken out of service. A ride that ran out of
+	// energy sets it, and only an explicit servicing clears it.
+	ServiceRequired bool
+
 	Telemetry Telemetry
 
 	// ServiceZoneID is the service area whose boundary covers the last confirmed position, boundary
@@ -90,11 +94,18 @@ func (v Vehicle) FitToStart() bool {
 // the reason a start is refused is asked of the vehicle itself, in the vocabulary the catalog
 // publishes. FitToStart is the rule a start and a free vehicle are both judged by, and the reason it
 // answers with is the catalog's own word for it.
+//
+// A vehicle taken out of service is refused whatever it holds: a refilled tank does not undo the ride
+// that ran out, which is why this reason is stated beside the energy rather than through it.
 func (v Vehicle) StartRefusalReasons() []UnavailableReason {
-	if v.FitToStart() {
-		return nil
+	var reasons []UnavailableReason
+	if !v.FitToStart() {
+		reasons = append(reasons, InsufficientEnergy)
 	}
-	return []UnavailableReason{InsufficientEnergy}
+	if v.ServiceRequired {
+		reasons = append(reasons, ServiceRequired)
+	}
+	return reasons
 }
 
 // unavailabilityCheck is one condition that keeps a free vehicle from being rented.
@@ -125,6 +136,10 @@ var unavailabilityChecks = []unavailabilityCheck{
 	{
 		reason:  OutsideServiceZone,
 		applies: func(vehicle Vehicle, _ time.Time) bool { return !vehicle.InsideServiceZone() },
+	},
+	{
+		reason:  ServiceRequired,
+		applies: func(vehicle Vehicle, _ time.Time) bool { return vehicle.ServiceRequired },
 	},
 }
 

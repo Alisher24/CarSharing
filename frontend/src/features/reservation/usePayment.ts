@@ -22,10 +22,10 @@ export type Payment = {
  * settled. It is the sender the finished ride uses, told a different command: the same key is kept
  * before the request and the same answer is applied where it arrives.
  *
- * The answer is written into the record of the ending rather than into a state of its own, so a reload
- * of the tab shows the payment the service confirmed instead of the one it replaced. Nothing is read
- * again after the answer: the contract publishes no read of an invoice, and the answer to the payment
- * is the state of it.
+ * The answer is written into the record of the ending rather than into a state of its own, so the
+ * ending keeps the state this tab was told. What the panel shows is the state the read of the invoice
+ * publishes, which that same panel asks for again once this answer arrives: what is settled here is
+ * the command, not the state of the invoice.
  *
  * Every ask carries a new key. A repeat of the key of a refused attempt would answer that stored
  * refusal, which is a repeat of the answer rather than another payment.

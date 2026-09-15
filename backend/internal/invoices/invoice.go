@@ -9,6 +9,7 @@ import (
 
 	"github.com/Alisher24/CarSharing/backend/internal/billing"
 	"github.com/Alisher24/CarSharing/backend/internal/completion"
+	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/google/uuid"
 )
 
@@ -50,7 +51,13 @@ type Invoice struct {
 	Currency      string
 	BillingPolicy string
 	Completion    completion.Reason
-	Version       int64
+
+	// Exhausted is what a ride that ran out of energy states about it: the sources that were empty
+	// when it did, in the order the vehicle's profile uses them. A ride that was ended by a person
+	// carries none, which is what the column states by holding nothing.
+	Exhausted []fleet.SourceKind
+
+	Version int64
 
 	Driving Line
 	Paused  Line

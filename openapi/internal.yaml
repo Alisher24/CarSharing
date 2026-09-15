@@ -17,7 +17,7 @@ paths:
     post:
       operationId: simulationTick
       summary: simulation Tick
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-body-limit: 262144
       description: >-
         Atomically acquire one database timestamp, advance all simulation states and save tick ID, processed
@@ -236,7 +236,7 @@ paths:
     post:
       operationId: applyDemoAction
       summary: apply Demo Action
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-body-limit: 262144
       description: >-
         Set-to-value operations use server time and replay the saved result for action_id; changed payload
@@ -328,15 +328,20 @@ paths:
                     message: Request could not be completed
                     request_id: example-request-1
         '409':
-          description: IDEMPOTENCY_CONFLICT, IDEMPOTENCY_IN_PROGRESS
+          description: IDEMPOTENCY_CONFLICT, IDEMPOTENCY_IN_PROGRESS, VEHICLE_IN_USE, SOURCE_NOT_CARRIED, SOURCE_CAPACITY_EXCEEDED
           x-error-codes:
             - IDEMPOTENCY_CONFLICT
             - IDEMPOTENCY_IN_PROGRESS
+            - VEHICLE_IN_USE
+            - SOURCE_NOT_CARRIED
+            - SOURCE_CAPACITY_EXCEEDED
           headers:
             X-Request-ID:
               $ref: '#/components/headers/RequestId'
             Cache-Control:
               $ref: '#/components/headers/CacheControl'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
             Retry-After:
               $ref: '#/components/headers/RetryAfter'
           content:
@@ -352,6 +357,21 @@ paths:
                 IDEMPOTENCY_IN_PROGRESS:
                   value:
                     code: IDEMPOTENCY_IN_PROGRESS
+                    message: Request could not be completed
+                    request_id: example-request-1
+                VEHICLE_IN_USE:
+                  value:
+                    code: VEHICLE_IN_USE
+                    message: Request could not be completed
+                    request_id: example-request-1
+                SOURCE_NOT_CARRIED:
+                  value:
+                    code: SOURCE_NOT_CARRIED
+                    message: Request could not be completed
+                    request_id: example-request-1
+                SOURCE_CAPACITY_EXCEEDED:
+                  value:
+                    code: SOURCE_CAPACITY_EXCEEDED
                     message: Request could not be completed
                     request_id: example-request-1
         '413':

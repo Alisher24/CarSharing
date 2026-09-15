@@ -25,6 +25,7 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/platform/periodic"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/sessions"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals"
+	"github.com/Alisher24/CarSharing/backend/internal/simulation"
 	"github.com/Alisher24/CarSharing/backend/internal/tariffs"
 	"github.com/Alisher24/CarSharing/backend/internal/zones"
 	"github.com/google/uuid"
@@ -59,32 +60,43 @@ func main() {
 	}
 }
 
-// application assembles what the HTTP layer serves: the readiness probe, the session store, the
-// account rules, the rental module and the fan-out of the change signals, all over the one pool so
-// that a request can commit a user and its session together.
-func application(cfg config.Config, pool *pgxpool.Pool, hub *events.Hub) (httpapi.Dependencies, error) {
+// assembled is what one API process runs: the handler both of its surfaces are served through, and the
+// demonstration source of telemetry it confirms the fleet with.
+type assembled struct {
+	handler       http.Handler
+	confirmations *demo.Confirmations
+}
+
+// assemble builds everything this process serves: the readiness probe, the session store, the account
+// rules, the rental module with the model of the fleet, and both the public and the internal surface,
+// all over the one pool so that a request can commit a user and its session together.
+func assemble(cfg config.Config, pool *pgxpool.Pool, hub *events.Hub) (assembled, error) {
 	users := auth.NewUserStore(pool)
 	hasher := auth.NewPasswordHasher(cfg.Argon2)
 	service, err := auth.NewService(users, hasher)
 	if err != nil {
-		return httpapi.Dependencies{}, err
+		return assembled{}, err
 	}
 	vehicles := fleet.NewStore(pool)
-	reservations, err := rentals.NewService(pool, vehicles, tariffs.NewStore(pool),
-		invoices.NewStore(pool), notifications.NewCompleter(pool),
+	prices := tariffs.NewStore(pool)
+	models := simulation.NewStore(pool)
+	issued := invoices.NewStore(pool)
+	reservations, err := rentals.NewService(pool, vehicles, prices, issued,
+		notifications.NewCompleter(pool), models,
 		rentals.Settings{FinishLanding: cfg.FinishLanding})
 	if err != nil {
-		return httpapi.Dependencies{}, err
+		return assembled{}, err
 	}
 	notifications, err := notifications.NewService(pool)
 	if err != nil {
-		return httpapi.Dependencies{}, err
+		return assembled{}, err
 	}
 	cursors, err := cursor.NewSigner(cfg.CursorSigningKey)
 	if err != nil {
-		return httpapi.Dependencies{}, err
+		return assembled{}, err
 	}
-	return httpapi.Dependencies{
+
+	public, err := httpapi.NewHandler(httpapi.Dependencies{
 		Probe:          httpapi.DatabaseProbe(pool),
 		AllowedOrigins: cfg.AllowedOrigins,
 		Pool:           pool,
@@ -95,12 +107,32 @@ func application(cfg config.Config, pool *pgxpool.Pool, hub *events.Hub) (httpap
 		Events:         hub,
 		Reservations:   reservations,
 		Notifications:  notificationOperations{reservations: reservations, reads: notifications},
+		Invoices:       issued,
 		Cursors:        cursors,
 		Catalog: httpapi.Catalog{
 			Vehicles: vehicles,
 			Zones:    zones.NewStore(pool),
-			Tariffs:  tariffs.NewStore(pool),
+			Tariffs:  prices,
 		},
+	})
+	if err != nil {
+		return assembled{}, err
+	}
+	internal, err := httpapi.NewInternalHandler(httpapi.InternalDependencies{
+		Simulation: reservations,
+		Demo:       reservations,
+		Tokens: httpapi.InternalTokens{
+			Simulator:   cfg.SimulatorToken,
+			DemoControl: cfg.DemoControlToken,
+		},
+		Demonstrating: cfg.Environment == config.DemoEnvironment,
+	})
+	if err != nil {
+		return assembled{}, err
+	}
+	return assembled{
+		handler:       httpapi.NewSurfaceRouter(public, internal),
+		confirmations: demo.NewConfirmations(pool, models),
 	}, nil
 }
 
@@ -131,12 +163,14 @@ func (o notificationOperations) MarkRead(
 // source stands in for vehicles that do not exist outside a demonstration, so it runs only where the
 // demonstration does. Releasing reservations that have run out belongs to the worker process, which
 // is the one place that decides a deadline has passed.
-func startBackgroundWork(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, hub *events.Hub) {
+func startBackgroundWork(
+	ctx context.Context, cfg config.Config, hub *events.Hub, confirmations *demo.Confirmations,
+) {
 	go hub.Run(ctx)
 	if cfg.Environment != config.DemoEnvironment {
 		return
 	}
-	go periodic.Run(ctx, "demonstration telemetry", demo.ConfirmationInterval, demo.NewConfirmations(pool).Confirm)
+	go periodic.Run(ctx, "demonstration telemetry", demo.ConfirmationInterval, confirmations.Confirm)
 }
 
 // newServer is the HTTP server this process runs, with the timeouts a publicly reachable listener
@@ -171,16 +205,12 @@ func run() error {
 	defer pool.Close()
 
 	hub := events.NewHub(pool)
-	served, err := application(cfg, pool, hub)
+	serving, err := assemble(cfg, pool, hub)
 	if err != nil {
 		return err
 	}
-	handler, err := httpapi.NewHandler(served)
-	if err != nil {
-		return err
-	}
-	startBackgroundWork(ctx, cfg, pool, hub)
-	return serve(ctx, newServer(cfg, handler))
+	startBackgroundWork(ctx, cfg, hub, serving.confirmations)
+	return serve(ctx, newServer(cfg, serving.handler))
 }
 
 // serve answers requests until the server fails or the context is cancelled, and then gives the

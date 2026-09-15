@@ -1,4 +1,4 @@
-import { payInvoice as payInvoiceRequest } from './generated/sdk.gen';
+import { getInvoice, payInvoice as payInvoiceRequest } from './generated/sdk.gen';
 import {
   answerOf,
   commandHeaders,
@@ -6,9 +6,23 @@ import {
   type CommandCredentials,
   type CommandResult,
 } from './commands.ts';
-import type { PayResult } from './generated/types.gen';
+import type { InvoiceView, PayResult } from './generated/types.gen';
 
 export type { Invoice, InvoiceView, PayResult, Payment } from './generated/types.gen';
+
+/**
+ * fetchInvoice reads one invoice of the caller's own account together with the state of its payment.
+ * It is a private read: the browser sends the session cookie, and an invoice of another account is
+ * answered as absent rather than as forbidden.
+ *
+ * What it publishes is what a completed ride is shown from — the completion the invoice was issued
+ * for, the exact total, and where paying it stands — and no other answer the interface reads carries
+ * the state of a payment, which the service moves on its own.
+ */
+export async function fetchInvoice(invoiceId: string, signal: AbortSignal): Promise<InvoiceView> {
+  const { data } = await getInvoice({ path: { id: invoiceId }, ...sameOriginRequest, throwOnError: true, signal });
+  return data;
+}
 
 /**
  * The command that settles an invoice: the one transition of a payment a person makes themselves,

@@ -72,7 +72,7 @@ export async function reserve(vehicleId, key, account) {
     csrfToken: account.csrfToken,
     headers: { [IDEMPOTENCY_HEADER]: key },
   });
-  if (answer.status === 201) madeRentals.push({ id: answer.json.rental.id, account });
+  if (answer.status === 201) madeRentals.push({ id: answer.json.rental.id, vehicleId, account });
   return answer;
 }
 

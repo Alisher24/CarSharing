@@ -1,16 +1,21 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import type { Progress } from '../../shared/api/current.ts';
+import type { Completion, Progress, SourceKind } from '../../shared/api/current.ts';
 import { commandText, type CommandPhase } from './commandPhase.ts';
 import {
   amountText,
+  completionText,
+  COMPLETION_UNKNOWN,
   FINISH_ACTION,
   FINISH_QUESTION,
   FINISH_WARNING,
+  finishedAtText,
+  invoiceAmountText,
   KEEP_RIDING_ACTION,
   PAUSE_ACTION,
   RESUME_ACTION,
   START_ACTION,
+  UNREADABLE_VALUE,
 } from './rideCopy.ts';
 
 /** One progress statement, with the amount a test is about. */
@@ -71,6 +76,58 @@ describe('what an ending is reported as', () => {
     assert.match(outside ?? '', /вне зоны/);
     assert.match(stale ?? '', /подтверждалось/);
     assert.notEqual(outside, stale);
+  });
+});
+
+describe('what a completed ride is reported with', () => {
+  test('writes the total of the invoice as som, exactly as the invoice states it', () => {
+    assert.equal(invoiceAmountText('2789'), '27,89 сома');
+    assert.equal(invoiceAmountText('900719925474099399').replaceAll('\u00a0', ' '), '9 007 199 254 740 993,99 сома');
+    assert.equal(invoiceAmountText('не число'), UNREADABLE_VALUE);
+  });
+
+  test('writes the moment the ride ended in the zone the service states its days in', () => {
+    // The moment of the fixture is 07:30 UTC, which is 13:30 in the zone the service states its days
+    // in: a moment written in the browser's own zone would be a different hour.
+    assert.equal(finishedAtText('2026-09-14T07:30:30.123456Z'), '14 сентября в 13:30');
+  });
+
+  test('writes a moment it cannot read as missing rather than as a guess', () => {
+    assert.equal(finishedAtText('вчера'), UNREADABLE_VALUE);
+  });
+});
+
+describe('what ended a ride', () => {
+  /** One ending caused by the sources that ran out, which is what the reason is read with. */
+  function exhaustion(exhausted: SourceKind[]): Completion {
+    return { reason: 'energy_depleted', exhausted_sources: exhausted };
+  }
+
+  test('names every source that ran out, in the words the fleet names them by', () => {
+    assert.equal(completionText(exhaustion(['battery'])), 'закончился запас энергии или топлива: батарея');
+    assert.equal(completionText(exhaustion(['gasoline'])), 'закончился запас энергии или топлива: бензин');
+    assert.equal(completionText(exhaustion(['diesel'])), 'закончился запас энергии или топлива: дизель');
+    assert.equal(completionText(exhaustion(['lpg'])), 'закончился запас энергии или топлива: сжиженный газ');
+    assert.equal(completionText(exhaustion(['cng'])), 'закончился запас энергии или топлива: сжатый газ');
+  });
+
+  test('lists the sources in the order the service reported them', () => {
+    assert.equal(
+      completionText(exhaustion(['gasoline', 'lpg'])),
+      'закончился запас энергии или топлива: бензин, сжиженный газ',
+    );
+  });
+
+  test('writes the reason alone when no source was named and when the person ended the ride', () => {
+    assert.equal(completionText(exhaustion([])), 'закончился запас энергии или топлива');
+    assert.equal(completionText({ reason: 'user_finished' }), 'поездку завершил пользователь');
+  });
+
+  test('names a source and a reason this build does not know rather than leaving a gap', () => {
+    const unknown = completionText(exhaustion(['hydrogen' as unknown as SourceKind]));
+
+    assert.equal(unknown, 'закончился запас энергии или топлива: неизвестный источник');
+    assert.equal(completionText({ reason: 'towed' } as unknown as Completion), COMPLETION_UNKNOWN);
   });
 });
 

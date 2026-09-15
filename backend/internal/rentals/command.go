@@ -12,6 +12,7 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/invoices"
 	"github.com/Alisher24/CarSharing/backend/internal/notifications"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
+	"github.com/Alisher24/CarSharing/backend/internal/simulation"
 	"github.com/Alisher24/CarSharing/backend/internal/tariffs"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -72,6 +73,22 @@ const (
 	// InvoiceNotFound reports an identifier this account holds no invoice for, whether no such invoice
 	// exists or it belongs to somebody else.
 	InvoiceNotFound RefusalKind = "invoice_not_found"
+
+	// VehicleInUse reports a vehicle a rental holds, which a demonstration may not move by hand or
+	// service: a booked or moving vehicle is where the ride put it.
+	VehicleInUse RefusalKind = "vehicle_in_use"
+
+	// VehicleNotFound reports an identifier no vehicle this installation simulates carries, whether no
+	// such vehicle exists or nothing placed it on a route.
+	VehicleNotFound RefusalKind = "vehicle_not_found"
+
+	// SourceNotCarried reports a source the powertrain of a vehicle does not move it on, which cannot
+	// be refilled because nothing would ever spend it.
+	SourceNotCarried RefusalKind = "source_not_carried"
+
+	// SourceCapacityExceeded reports a reserve larger than the source of that vehicle holds when it is
+	// full, which no vehicle can be given.
+	SourceCapacityExceeded RefusalKind = "source_capacity_exceeded"
 )
 
 // Refusal is a domain answer that changed nothing, together with what displaying it needs.
@@ -101,6 +118,10 @@ type Outcome struct {
 	// Invoice is what a finished ride cost. A command that issued no invoice carries the zero value,
 	// which is not published.
 	Invoice invoices.Invoice
+
+	// Tick is what one call of the simulator changed. A command that is not a tick carries the zero
+	// value, which is not published.
+	Tick TickOutcome
 
 	Refusal Refusal
 }
@@ -151,6 +172,10 @@ type Service struct {
 	invoices    *invoices.Store
 	completions *notifications.Completer
 
+	// models is the simulated state of the fleet. A command reaches it inside its own transaction,
+	// so the model a command advances is advanced with the change it makes rather than beside it.
+	models *simulation.Store
+
 	// finishLanding is the rule an ending ride is judged by where it stands, which the process was
 	// configured with rather than reading the environment here.
 	finishLanding string
@@ -170,6 +195,7 @@ func NewService(
 	prices *tariffs.Store,
 	issued *invoices.Store,
 	completions *notifications.Completer,
+	models *simulation.Store,
 	settings Settings,
 ) (*Service, error) {
 	for _, required := range []struct {
@@ -181,6 +207,7 @@ func NewService(
 		{"price lists", prices != nil},
 		{"invoice records", issued != nil},
 		{"completion reports", completions != nil},
+		{"simulated state", models != nil},
 		{"finish landing rule", settings.FinishLanding != ""},
 	} {
 		if !required.supplied {
@@ -194,6 +221,7 @@ func NewService(
 		results:       idempotency.NewStore(pool),
 		invoices:      issued,
 		completions:   completions,
+		models:        models,
 		finishLanding: settings.FinishLanding,
 	}, nil
 }

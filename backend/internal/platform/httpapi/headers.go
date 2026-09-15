@@ -9,12 +9,20 @@ const (
 	csrfTokenHeader      = "X-CSRF-Token"
 	idempotencyKeyHeader = "Idempotency-Key"
 	deliveryKeyHeader    = "Delivery-Key"
+	authorizationHeader  = "Authorization"
 	contentTypeHeader    = "Content-Type"
 	requestIDHeader      = "X-Request-ID"
 	cacheControlHeader   = "Cache-Control"
 	noStoreCacheControl  = "no-store"
 	jsonMediaType        = "application/json"
 	streamMediaType      = "text/event-stream"
+)
+
+// The extension the contract states the implementation status of an operation in, and the one status
+// that means this build serves it.
+const (
+	implementationStatusExtension = "x-implementation-status"
+	implementedStatus             = "implemented"
 )
 
 // declaresHeader reports whether an operation declares a header parameter, optionally demanding

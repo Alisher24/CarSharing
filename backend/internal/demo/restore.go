@@ -10,6 +10,7 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/events"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
+	"github.com/Alisher24/CarSharing/backend/internal/simulation"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -24,15 +25,19 @@ var ErrScenarioVehicleInUse = errors.New(
 // from. It touches only the vehicles the scenario declares: the ones left free for a person to book
 // by hand, and every account outside the scenario, are not read from and not written to.
 //
-// Seeding creates what is missing; this command is the only one that returns what already exists.
-func Restore(ctx context.Context, pool *pgxpool.Pool) error {
-	restoration := restorer{store: store{pool: pool}, users: auth.NewUserStore(pool)}
+// Seeding creates what is missing; this command is the only one that returns what already exists. The
+// model of every vehicle it puts back is dropped with it, so the next reading of the fleet begins from
+// the reserves and the position the restoration installed rather than from what a previous ride made
+// of them.
+func Restore(ctx context.Context, pool *pgxpool.Pool, models *simulation.Store) error {
+	restoration := restorer{store: store{pool: pool}, users: auth.NewUserStore(pool), models: models}
 	return database.InTransaction(ctx, pool, restoration.restore)
 }
 
 type restorer struct {
-	store store
-	users *auth.UserStore
+	store  store
+	users  *auth.UserStore
+	models *simulation.Store
 }
 
 func (r restorer) restore(ctx context.Context) error {
@@ -56,6 +61,9 @@ func (r restorer) restore(ctx context.Context) error {
 	}
 	rentals, err := r.restoreRentals(ctx, scenario)
 	if err != nil {
+		return err
+	}
+	if err = r.models.Forget(ctx, vehicleIDs); err != nil {
 		return err
 	}
 	return events.Record(ctx, r.store.pool, append(signals, rentals...)...)
@@ -131,16 +139,16 @@ func (r restorer) scenarioAccount(ctx context.Context, address string) (uuid.UUI
 	return user.ID, nil
 }
 
-// scenarioVehicles are the vehicles the command puts back: the ones a prepared rental holds and the
-// ones that stand as permanent examples of an exhausted reserve.
+// scenarioVehicles are the vehicles the command puts back: every vehicle the demonstration declares.
+//
+// The model spends a reserve as a vehicle moves, so a vehicle a person booked and drove is no longer
+// the vehicle the demonstration declares — its position and its sources have moved on. Putting the
+// demonstration back therefore means putting all of it back, including the vehicles left free for a
+// person to book, which are the ones a demonstration most often drives. What the command still never
+// touches is a person's rental and the history of one: a scenario vehicle another account holds stops
+// the whole command rather than being overwritten.
 func scenarioVehicles() []Vehicle {
-	var scenario []Vehicle
-	for _, vehicle := range Fleet() {
-		if vehicle.Restored() {
-			scenario = append(scenario, vehicle)
-		}
-	}
-	return scenario
+	return Fleet()
 }
 
 func identifiersOf(vehicles []Vehicle) []string {

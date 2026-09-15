@@ -43,4 +43,7 @@ const (
 	messageResourceNotFound       = "Resource not found"
 	messageServiceUnavailable     = "Service unavailable"
 	messageValidationFailed       = "Request validation failed"
+	messageVehicleInUse           = "The vehicle is held by a rental"
+	messageSourceNotCarried       = "The vehicle does not carry that source"
+	messageSourceCapacityExceeded = "The reserve is larger than the source holds"
 )

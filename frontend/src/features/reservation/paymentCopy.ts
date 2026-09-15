@@ -1,4 +1,4 @@
-import type { InvoiceView, Payment } from '../../shared/api/current.ts';
+import type { Payment } from '../../shared/api/current.ts';
 import { bishkekMoment } from './reservationCopy.ts';
 import { UNREADABLE_VALUE } from './rideCopy.ts';
 
@@ -6,9 +6,9 @@ import { UNREADABLE_VALUE } from './rideCopy.ts';
  * The Russian wording of the payment of a finished ride, and the two rules that produce it: what each
  * state of a payment is called, and whether the state offers a control at all.
  *
- * The state shown is the one the service last published — the answer that ended the ride, or the
- * answer to a payment since — so the interface reads a status rather than deciding one. Nothing here
- * computes what is owed.
+ * The state written here is the one the service last published — the payment of the invoice the ride
+ * was charged on, as that invoice was read — so the interface reads a status rather than deciding one.
+ * Nothing here computes what is owed.
  */
 
 /** What the invoice of a finished ride is waiting for, which is the attempt the service owes it. */
@@ -71,13 +71,12 @@ export function paymentActionText(payment: Payment): string | undefined {
 }
 
 /**
- * The moment a settled invoice was paid, in the timezone the service states its days in. A moment the
- * interface cannot read is written as missing rather than guessed at, and a state that carries no
- * moment of settlement states none.
+ * The moment a settled invoice was paid, in the timezone the service states its days in, or nothing
+ * for a state that carries no moment of settlement. A moment the interface cannot read is written as
+ * missing rather than guessed at.
  */
-export function paidAtText(payment: InvoiceView): string {
-  const paidAt = payment.payment.status === 'paid' ? payment.payment.paid_at : undefined;
-  if (paidAt === undefined) return UNREADABLE_VALUE;
+export function paidAtText(payment: Payment): string | undefined {
+  if (payment.status !== 'paid') return undefined;
 
-  return bishkekMoment(paidAt) ?? UNREADABLE_VALUE;
+  return bishkekMoment(payment.paid_at) ?? UNREADABLE_VALUE;
 }

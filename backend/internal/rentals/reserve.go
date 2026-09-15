@@ -30,7 +30,7 @@ type ReserveCommand struct {
 // the caller's own rental and the state of the chosen vehicle judged. A command that decides nothing
 // still commits its answer, because the refusal is what a repeat of the same command must reproduce.
 func (s *Service) Reserve(ctx context.Context, command ReserveCommand) (Answered, error) {
-	return s.answer(ctx, command.Caller, command.Attempt,
+	return s.answer(ctx, idempotency.ForAccount(command.Caller), command.Attempt,
 		reserveParticipants(s.pool, command),
 		func(ctx context.Context, moment time.Time) (Outcome, error) {
 			return s.reservationWithin(ctx, moment, command)
@@ -43,14 +43,14 @@ func (s *Service) Reserve(ctx context.Context, command ReserveCommand) (Answered
 // never be lost, and an answer that is stored describes a change that happened.
 func (s *Service) answer(
 	ctx context.Context,
-	caller uuid.UUID,
+	owner idempotency.Owner,
 	attempt Attempt,
 	discover func(context.Context) (participants, error),
 	decide func(context.Context, time.Time) (Outcome, error),
 ) (Answered, error) {
 	var answered Answered
 	err := transact(ctx, s.pool, discover, func(txCtx context.Context, moment time.Time) error {
-		claim, err := s.results.Claim(txCtx, caller, attempt.Key, attempt.Fingerprint)
+		claim, err := s.results.Claim(txCtx, owner, attempt.Key, attempt.Fingerprint)
 		if err != nil {
 			return err
 		}
@@ -68,7 +68,7 @@ func (s *Service) answer(
 			return err
 		}
 		stored := idempotency.Result{Status: response.Status, Body: response.Body}
-		if err := s.results.Complete(txCtx, caller, attempt.Key, stored); err != nil {
+		if err := s.results.Complete(txCtx, owner, attempt.Key, stored); err != nil {
 			return err
 		}
 		answered = Answered{Response: response}
@@ -180,7 +180,7 @@ func (s *Service) reservationWithin(
 		return refused(moment, contendedRefusal(ctx, s.pool, command)), nil
 	}
 
-	raised, err := raiseVehicleVersion(ctx, s.pool, command.VehicleID)
+	raised, err := publishVehicleChange(ctx, s.pool, command.VehicleID, false)
 	if err != nil {
 		return Outcome{}, err
 	}

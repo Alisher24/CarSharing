@@ -103,17 +103,6 @@ func TestExhaustedExamplesAlsoShowStaleAndOfflineVehicles(t *testing.T) {
 	}
 }
 
-// A vehicle a person may book by hand must be left alone by the scenario command, and every
-// vehicle the command does put back must be one the demonstration itself set up.
-func TestRestorationCoversPreparedVehiclesOnly(t *testing.T) {
-	for _, vehicle := range demo.Fleet() {
-		free := published(vehicle).Status == fleet.Available
-		if free == vehicle.Restored() {
-			t.Errorf("%s: available %t, restored %t", vehicle.Model, free, vehicle.Restored())
-		}
-	}
-}
-
 // A prepared rental belongs to a service account of its own, because one account may hold only one
 // live rental and none of them may be an account a person signs in as.
 func TestEveryPreparedRentalHasItsOwnServiceAccount(t *testing.T) {

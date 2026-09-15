@@ -221,16 +221,20 @@ describe('seeding and restoring the scenario', () => {
     assert.equal(exhausted.size, 5, `only ${[...exhausted].join(', ')} keep an exhausted example`);
   });
 
-  test('a vehicle left for a person to book by hand is never touched', () => {
+  test('puts back a vehicle left for a person to book by hand with the rest', () => {
     restoreScenario();
     const bookable = vehicleIdWhere(`id NOT IN (SELECT vehicle_id FROM rentals)`);
     const reserves = () => sql(`SELECT remaining FROM vehicle_energy_sources WHERE vehicle_id = '${bookable}'`);
 
+    // A demonstration drives the vehicles left free for a person to book, so what they hold is part of
+    // what the command puts back: the declared fleet is one demonstration, and a vehicle nobody holds
+    // is where it is most often spent.
+    const declared = reserves();
     sql(`UPDATE vehicle_energy_sources SET remaining = capacity WHERE vehicle_id = '${bookable}'`);
-    const filled = reserves();
-    restoreScenario();
+    assert.notEqual(reserves(), declared, 'the check needs a vehicle that is not already full');
 
-    assert.equal(reserves(), filled, 'the restoration changed a vehicle it does not own');
+    restoreScenario();
+    assert.equal(reserves(), declared, 'the restoration left a driven vehicle with the reserve it had');
   });
 });
 

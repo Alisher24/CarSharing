@@ -53,8 +53,8 @@ type Route struct {
 	Points []fleet.Position
 }
 
-// Routes are every trajectory this build declares. A vehicle names one of them by identifier, and
-// this is the only place the geometry of any of them lives.
+// Routes are every trajectory this build declares, one per demonstration vehicle. A vehicle names one
+// of them by identifier, and this is the only place the geometry of any of them lives.
 var Routes = []Route{
 	memberRoute("electric-1", fleet.Position{Longitude: 74.5720, Latitude: 42.8590}),
 	memberRoute("electric-2", fleet.Position{Longitude: 74.5865, Latitude: 42.8742}),
@@ -66,7 +66,7 @@ var Routes = []Route{
 	memberRoute("gasoline-3", fleet.Position{Longitude: 74.6046, Latitude: 42.8928}),
 	memberRoute("gasoline-4", fleet.Position{Longitude: 74.6209, Latitude: 42.8701}),
 	memberRoute("gasoline-5", fleet.Position{Longitude: 74.6371, Latitude: 42.8836}),
-	memberRoute("diesel-1", fleet.Position{Longitude: 74.5561, Latitude: 42.8628}),
+	ScenarioRoute(),
 	memberRoute("diesel-2", fleet.Position{Longitude: 74.5904, Latitude: 42.8955}),
 	memberRoute("diesel-3", fleet.Position{Longitude: 74.6158, Latitude: 42.8443}),
 	memberRoute("diesel-4", fleet.Position{Longitude: 74.6432, Latitude: 42.8759}),
@@ -87,38 +87,38 @@ var Routes = []Route{
 // it drives out of the zone and back in, which is what an ending beyond the boundary is shown with.
 const ScenarioRouteID RouteID = "scenario-1"
 
-// The corners of the circuit every ordinary demonstration vehicle keeps to, as offsets from the place
-// it is stood at. The whole fleet stands inside the demonstration service area, and a rectangle this
-// size stays inside it from every one of those places.
+// The extent of the circuit every ordinary demonstration vehicle keeps to, east and north of the
+// place it is stood at. The whole fleet stands inside the demonstration service area, and a rectangle
+// this size from every one of those places stays inside it.
 const (
 	circuitLongitudeOffset = 0.0030
 	circuitLatitudeOffset  = 0.0028
 )
 
-// memberRoute declares the circuit of one vehicle: a closed rectangle around the place the
-// demonstration stands it, so the route passes through the position its model starts from.
+// memberRoute declares the circuit of one vehicle: a closed rectangle with the place the demonstration
+// stands it at as its south-western corner. The vehicle therefore starts on its route rather than
+// beside it, which is what keeps the first movement from being a jump to the nearest point of a
+// circuit drawn around it.
 func memberRoute(id RouteID, start fleet.Position) Route {
-	return rectangle(id,
-		fleet.Position{
-			Longitude: start.Longitude - circuitLongitudeOffset,
-			Latitude:  start.Latitude - circuitLatitudeOffset,
-		},
-		fleet.Position{
-			Longitude: start.Longitude + circuitLongitudeOffset,
-			Latitude:  start.Latitude + circuitLatitudeOffset,
-		},
-	)
+	return rectangle(id, start, fleet.Position{
+		Longitude: start.Longitude + circuitLongitudeOffset,
+		Latitude:  start.Latitude + circuitLatitudeOffset,
+	})
 }
+
+// scenarioNorthLatitude is the far side of the scenario circuit. It lies past the northern edge of the
+// demonstration area, so part of every lap of this route is driven outside it.
+const scenarioNorthLatitude = 42.9030
 
 // ScenarioRoute is the trajectory that crosses the boundary of the demonstration area. It starts
 // where the vehicle it belongs to stands, near the northern edge of the zone, and runs north beyond
 // it, so part of every lap is driven outside the area.
 func ScenarioRoute() Route {
 	start := fleet.Position{Longitude: 74.5561, Latitude: 42.8628}
-	return rectangle(ScenarioRouteID,
-		fleet.Position{Longitude: start.Longitude - 0.0040, Latitude: start.Latitude - 0.0040},
-		fleet.Position{Longitude: start.Longitude + 0.0040, Latitude: 42.9030},
-	)
+	return rectangle(ScenarioRouteID, start, fleet.Position{
+		Longitude: start.Longitude + circuitLongitudeOffset,
+		Latitude:  scenarioNorthLatitude,
+	})
 }
 
 // rectangle declares a closed circuit over two opposite corners: east along the southern side, north,
@@ -138,9 +138,6 @@ func rectangle(id RouteID, southWest, northEast fleet.Position) Route {
 
 // RouteOf answers the route a vehicle was given, and reports whether this build declares it.
 func RouteOf(id RouteID) (Route, bool) {
-	if id == ScenarioRouteID {
-		return ScenarioRoute(), true
-	}
 	for _, route := range Routes {
 		if route.ID == id {
 			return route, true

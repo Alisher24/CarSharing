@@ -23,9 +23,15 @@ const (
 type UnavailableReason string
 
 const (
-	InsufficientEnergy   UnavailableReason = "insufficient_energy"
-	TelemetryStale       UnavailableReason = "telemetry_stale"
-	OutsideServiceZone   UnavailableReason = "outside_service_zone"
+	InsufficientEnergy UnavailableReason = "insufficient_energy"
+	TelemetryStale     UnavailableReason = "telemetry_stale"
+	OutsideServiceZone UnavailableReason = "outside_service_zone"
+
+	// ServiceRequired is a vehicle a ride ran out of energy in. It stays out of service until
+	// somebody has looked at it, and refilling it does not put it back: the ride ended because its
+	// reserves ran out, and servicing is the answer to that rather than a full tank.
+	ServiceRequired UnavailableReason = "service_required"
+
 	TechnicalUnavailable UnavailableReason = "technical_unavailable"
 )
 

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/events"
+	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -38,6 +39,8 @@ const notificationFields = `
     note.version,
     COALESCE(note.invoice_id::text, ''),
     COALESCE(note.completion_reason, ''),
+    note.exhausted_sources,
+    note.ended_at,
     rental.expires_at`
 
 // notificationColumns reads the notification together with the rental it is about, because a
@@ -340,7 +343,8 @@ func readNotification(
 }
 
 func scanNotification(rows pgx.Rows, found *Notification) error {
-	return rows.Scan(
+	var exhausted []string
+	err := rows.Scan(
 		&found.ID,
 		&found.UserID,
 		&found.RentalID,
@@ -351,6 +355,25 @@ func scanNotification(rows pgx.Rows, found *Notification) error {
 		&found.Version,
 		&found.InvoiceID,
 		&found.CompletionReason,
+		&exhausted,
+		&found.EndedAt,
 		&found.ExpiresAt,
 	)
+	if err != nil {
+		return err
+	}
+	found.Exhausted = exhaustedKinds(exhausted)
+	return nil
+}
+
+// exhaustedKinds reads the sources a ride ran out of in the vocabulary the catalog publishes them in.
+func exhaustedKinds(stored []string) []fleet.SourceKind {
+	if len(stored) == 0 {
+		return nil
+	}
+	kinds := make([]fleet.SourceKind, 0, len(stored))
+	for _, kind := range stored {
+		kinds = append(kinds, fleet.SourceKind(kind))
+	}
+	return kinds
 }

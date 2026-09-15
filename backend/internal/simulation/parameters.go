@@ -26,3 +26,20 @@ func ParametersOf(capacities map[fleet.SourceKind]fleet.Amount) Parameters {
 // RateOf is how fast a source of this kind is spent. A kind the parameters do not name cannot be spent
 // at all, which is what keeps a ride from quietly moving on a source nobody declared.
 func (p Parameters) RateOf(kind fleet.SourceKind) Rate { return RateOf(p.Capacities[kind]) }
+
+// InProfileOrder arranges inventories in the order a powertrain uses them. The order is the whole of
+// the priority rule: the first source that still holds something is the one the vehicle moves on, so
+// a list in any other order would burn the reserve the profile says to keep. An inventory the profile
+// does not name is left out, because nothing would ever move on it.
+func InProfileOrder(sources []Source, profile []fleet.SourceKind) []Source {
+	ordered := make([]Source, 0, len(profile))
+	for _, kind := range profile {
+		for _, source := range sources {
+			if source.Kind == kind {
+				ordered = append(ordered, source)
+				break
+			}
+		}
+	}
+	return ordered
+}
