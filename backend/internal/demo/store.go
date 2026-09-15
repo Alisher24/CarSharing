@@ -178,6 +178,12 @@ func (s store) insertRental(ctx context.Context, prepared preparedRental) error 
 // A restoration puts a prepared rental back rather than creating it again: the row keeps its
 // identity and its version is raised, because a version that started over would look to every client
 // like a change older than the one it already shows, and would be discarded.
+//
+// Everything an ending wrote belongs to the completed stage, so a rental put back into a live one is
+// put back without it. A prepared ride is live, but the model ends one whose sources run out while
+// the demonstration is running: keeping the reason and the empty sources of that ending beside a
+// stage that is not completed is a row the table's own check refuses, and the restoration of the
+// whole scenario would fail over it.
 const restoreRentalStatement = `
 INSERT INTO rentals (
     id, user_id, vehicle_id, stage, tariff_id, zone_id, reserved_at, expires_at, started_at,
@@ -201,7 +207,9 @@ ON CONFLICT (id) DO UPDATE SET
     expires_at = EXCLUDED.expires_at,
     started_at = EXCLUDED.started_at,
     mode_started_at = EXCLUDED.mode_started_at,
-    ended_at = CASE WHEN EXCLUDED.stage IN ('reserved', 'active', 'paused') THEN NULL ELSE now() END,
+    ended_at = CASE WHEN EXCLUDED.stage = 'completed' THEN now() END,
+    completion_reason = CASE WHEN EXCLUDED.stage = 'completed' THEN rentals.completion_reason END,
+    exhausted_sources = CASE WHEN EXCLUDED.stage = 'completed' THEN rentals.exhausted_sources END,
     tariff_currency = EXCLUDED.tariff_currency,
     tariff_billing_policy = EXCLUDED.tariff_billing_policy,
     tariff_driving_rate_tyiyn_per_started_minute = EXCLUDED.tariff_driving_rate_tyiyn_per_started_minute,

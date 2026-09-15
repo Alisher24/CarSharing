@@ -15,6 +15,14 @@ export const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '
 export const SERVICE_ORIGIN = process.env.ACCEPTANCE_BASE ?? 'http://127.0.0.1:8080';
 
 /**
+ * The address the mail stub publishes its inbox on, which is the loopback address of the host and the
+ * port the stub's configuration documents. It is the one surface of that process a check reaches from
+ * the host: the internal listener is not published at all, so a check that needs it sends its request
+ * from a container on the same network.
+ */
+export const MAILBOX_ORIGIN = process.env.ACCEPTANCE_MAILBOX ?? 'http://127.0.0.1:8025';
+
+/**
  * The session cookie the service issues. It is the API contract's session security scheme, which
  * the backend declares as `sessions.CookieName`; nothing here reads the cookie to decide anything,
  * so the suites observe the line the service actually set rather than a value they chose.
@@ -68,4 +76,22 @@ export function composeWith(environment, ...args) {
  */
 export function sql(query) {
   return compose(...DATABASE_QUERY_ARGUMENTS, query);
+}
+
+/**
+ * Runs one statement as a role of the database and reports whether it was accepted.
+ *
+ * The privilege under check belongs to the role rather than to the schema owner, so a statement the
+ * migrator runs proves nothing about it: this sets the role inside one transaction, which is rolled
+ * back, and answers whether the database refused what was written. The statement never names a row
+ * and never commits, so a template that changes nothing is safe to present: what is observed is the
+ * privilege, not the effect.
+ */
+export function asRole(role, statement) {
+  try {
+    sql(`BEGIN; SET LOCAL ROLE ${role}; ${statement}; ROLLBACK;`);
+    return { accepted: true, refusal: '' };
+  } catch (failure) {
+    return { accepted: false, refusal: String(failure.stderr ?? failure.message) };
+  }
 }

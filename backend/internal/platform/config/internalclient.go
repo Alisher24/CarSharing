@@ -1,6 +1,6 @@
 package config
 
-import "errors"
+import "os"
 
 // InternalClient is what a process that only calls the internal API is told: the address it reaches
 // the API on and the token its capability is called with.
@@ -27,12 +27,20 @@ func DemoControlClient() (InternalClient, error) {
 }
 
 func internalClient(tokenVariable string) (InternalClient, error) {
-	token, err := secretFromFile(tokenVariable)
+	return internalClientOf(tokenVariable, InternalAPIURLVariable, defaultInternalAPIURL)
+}
+
+// internalClientOf reads the credential one capability is called with and the address it calls, which
+// is the shape every client of an internal surface is given: a file holding a token, and a URL whose
+// default is the documented local profile of the caller.
+func internalClientOf(tokenVariable, urlVariable, defaultURL string) (InternalClient, error) {
+	token, err := requiredSecret(tokenVariable)
 	if err != nil {
 		return InternalClient{}, err
 	}
-	if token == "" {
-		return InternalClient{}, errors.New(tokenVariable + " is required")
+	apiURL := defaultURL
+	if value := os.Getenv(urlVariable); value != "" {
+		apiURL = value
 	}
-	return InternalClient{APIURL: internalAPIURLFromEnvironment(), Token: token}, nil
+	return InternalClient{APIURL: apiURL, Token: token}, nil
 }

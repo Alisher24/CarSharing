@@ -60,8 +60,11 @@ func NewInternalHandler(dependencies InternalDependencies) (http.Handler, error)
 	}
 	served := internalHandlers{simulation: dependencies.Simulation, demo: dependencies.Demo}
 	strict := internalapi.NewStrictHandlerWithOptions(served, nil, internalStrictErrorHandlers())
-	policy := transport{allowedOrigins: map[string]bool{}, authenticate: dependencies.Tokens.authenticate}
-	return boundary(spec, internalapi.Handler(strict), policy), nil
+	policy := Policy{
+		AllowedOrigins: map[string]bool{},
+		Authenticate:   dependencies.Tokens.capabilities().authenticate,
+	}
+	return Boundary(spec, internalapi.Handler(strict), policy), nil
 }
 
 func (d InternalDependencies) validate() error {
@@ -76,7 +79,7 @@ func (d InternalDependencies) validate() error {
 			return fmt.Errorf("%w: %s", ErrIncompleteApplication, required.name)
 		}
 	}
-	return d.Tokens.validate()
+	return d.Tokens.capabilities().validate()
 }
 
 // servedInternalSpec is the internal specification this process serves. The projection carries every
@@ -104,18 +107,13 @@ func servedInternalSpec(demonstrating bool) (*openapi3.T, error) {
 	return spec, nil
 }
 
-// internalStrictErrorHandlers answers the two failures the generated strict layer reports: a request it
-// could not decode and a handler that returned a value outside the contract. Both leave as the JSON
-// error envelope the internal contract declares, which is the same envelope every specification
-// states.
+// internalStrictErrorHandlers answers the two failures the generated strict layer reports, which are
+// the ones every surface answers: see strictErrorAnswers for what they are.
 func internalStrictErrorHandlers() internalapi.StrictHTTPServerOptions {
+	failures := strictErrorAnswers()
 	return internalapi.StrictHTTPServerOptions{
-		RequestErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, _ error) {
-			writeError(w, r, codeMalformedJSON, messageMalformedJSON)
-		},
-		ResponseErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, _ error) {
-			writeError(w, r, codeInternalError, messageInternalError)
-		},
+		RequestErrorHandlerFunc:  failures.request,
+		ResponseErrorHandlerFunc: failures.response,
 	}
 }
 

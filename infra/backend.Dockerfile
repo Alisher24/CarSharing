@@ -4,7 +4,7 @@ COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 COPY backend/ ./
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/ \
-    ./cmd/api ./cmd/worker ./cmd/simulator ./cmd/democontrol ./cmd/migrate ./cmd/seed \
+    ./cmd/api ./cmd/worker ./cmd/simulator ./cmd/democontrol ./cmd/mailstub ./cmd/migrate ./cmd/seed \
     ./cmd/demoscenario ./cmd/healthcheck
 
 FROM scratch

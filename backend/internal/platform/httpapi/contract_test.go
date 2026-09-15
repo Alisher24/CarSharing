@@ -43,12 +43,12 @@ const (
 // with production and does not implement or register any domain commands there.
 func contractRouter(t *testing.T, spec *openapi3.T) http.Handler {
 	t.Helper()
-	return boundary(spec, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return Boundary(spec, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(contentTypeHeader, jsonMediaType)
 		w.WriteHeader(http.StatusNoContent)
-	}), transport{
-		allowedOrigins: originSet([]string{testOrigin}),
-		authenticate:   openapi3filter.NoopAuthenticationFunc,
+	}), Policy{
+		AllowedOrigins: originSet([]string{testOrigin}),
+		Authenticate:   openapi3filter.NoopAuthenticationFunc,
 	})
 }
 
@@ -131,9 +131,9 @@ func TestInternalContractsAuthenticateBeforePayloadAndUseLargerBodyLimit(t *test
 			accepted := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusNoContent)
 			})
-			handler := boundary(spec, accepted, transport{
-				allowedOrigins: originSet([]string{testOrigin}),
-				authenticate:   authenticateTestCredential,
+			handler := Boundary(spec, accepted, Policy{
+				AllowedOrigins: originSet([]string{testOrigin}),
+				Authenticate:   authenticateTestCredential,
 			})
 			overPublicLimit := `{"unexpected":"` + strings.Repeat("x", 64<<10) + `"}`
 			overInternalLimit := strings.Repeat("x", 256<<10+1)

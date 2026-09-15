@@ -11,8 +11,11 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/Alisher24/CarSharing/backend/internal/auth"
 	"github.com/Alisher24/CarSharing/backend/internal/events"
 	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
+	"github.com/Alisher24/CarSharing/backend/internal/invoices"
+	"github.com/Alisher24/CarSharing/backend/internal/mailstub"
 	"github.com/Alisher24/CarSharing/backend/internal/outbox"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/config"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
@@ -46,17 +49,24 @@ func run() error {
 	}
 	defer pool.Close()
 
-	return work(ctx, pool)
+	// The address and the credential of the mail stub are read here, where the process is assembled,
+	// and handed to the delivery: nothing below this line reads the environment.
+	letters, err := config.MailstubClient()
+	if err != nil {
+		return err
+	}
+	return work(ctx, pool, letters)
 }
 
 // work runs the recurring jobs of this process until it is asked to stop. Each job is given the
 // behaviour it performs and the schedule it runs on; the process only decides that they run at all.
 //
 // Two workers may run side by side: the queue hands a task to one attempt at a time under a lease
-// that runs out on its own, and the deadline pass performs one transition per reservation — its
-// release or its warning — whichever process performs it.
-func work(ctx context.Context, pool *pgxpool.Pool) error {
-	deliveries, err := deliveries(pool)
+// that runs out on its own, the letter of an invoice is stored under a key the receiver deduplicates,
+// and the deadline pass performs one transition per reservation — its release or its warning —
+// whichever process performs it.
+func work(ctx context.Context, pool *pgxpool.Pool, letters config.InternalClient) error {
+	deliveries, err := deliveries(pool, letters)
 	if err != nil {
 		return err
 	}
@@ -78,14 +88,21 @@ func work(ctx context.Context, pool *pgxpool.Pool) error {
 }
 
 // deliveries is the table of what this process delivers, assembled where the process is: the signals
-// the queue carries to every API process, and the first attempt at the payment of an invoice, which is
-// work of the service rather than a message to anybody.
+// the queue carries to every API process, the first attempt at the payment of an invoice, and the
+// letter that carries the invoice to the account that owes it.
 //
 // A task of a kind this table does not name is kept in the queue with its error, so a kind whose
-// delivery belongs to a later task — the letter with the invoice — is owed rather than reported as
-// delivered.
-func deliveries(pool *pgxpool.Pool) (outbox.Deliveries, error) {
+// delivery belongs to a later task is owed rather than reported as delivered.
+func deliveries(pool *pgxpool.Pool, letters config.InternalClient) (outbox.Deliveries, error) {
 	payments, err := rentals.NewRentalPayment(pool)
+	if err != nil {
+		return nil, err
+	}
+	posted, err := mailstub.NewClient(letters.APIURL, letters.Token)
+	if err != nil {
+		return nil, err
+	}
+	delivery, err := mailstub.NewDelivery(invoices.NewStore(pool), auth.NewUserStore(pool), posted)
 	if err != nil {
 		return nil, err
 	}
@@ -93,6 +110,9 @@ func deliveries(pool *pgxpool.Pool) (outbox.Deliveries, error) {
 	table[rentals.PaymentAttemptTask()] = func(ctx context.Context, task outbox.Task) error {
 		_, err := payments.Attempt(ctx, task.ResourceID)
 		return err
+	}
+	table[rentals.InvoiceIssuedTask()] = func(ctx context.Context, task outbox.Task) error {
+		return delivery.Deliver(ctx, task.ResourceID)
 	}
 	return table, nil
 }

@@ -24,18 +24,24 @@ type boundaryRequest struct {
 // step may replace the request to buffer the body or to carry its results to a later step.
 type boundaryStep func(*boundaryRequest) *contractError
 
-// transport is the policy the boundary applies to every request: which browser origins may make a
-// mutation, and how a session credential is checked. The owning application supplies it; the
-// isolated contract routers supply their own so that they exercise the same steps.
-type transport struct {
-	allowedOrigins map[string]bool
-	authenticate   openapi3filter.AuthenticationFunc
+// Policy is what one listener applies to every request beyond the specification itself: the browser
+// origins a mutation may come from, and the credentials an operation that declares one is checked
+// against. The owning application supplies it; the isolated contract routers supply their own so that
+// they exercise the same steps.
+type Policy struct {
+	// AllowedOrigins is the set of origins a browser mutation may come from. An empty set refuses
+	// every origin, which is what a listener that serves no browser at all declares.
+	AllowedOrigins map[string]bool
+
+	// Authenticate checks the credential of an operation that declares a security requirement. A
+	// listener whose operations declare none never calls it.
+	Authenticate openapi3filter.AuthenticationFunc
 }
 
-// boundary applies the same transport contract to the production router and to the isolated
-// contract routers: request identity, panic recovery, origin and CSRF checks, authentication, body
-// limits, media type and schema validation.
-func boundary(spec *openapi3.T, next http.Handler, policy transport) http.Handler {
+// Boundary applies the same transport contract to every surface of this program: request identity,
+// panic recovery, origin and CSRF checks, authentication, body limits, media type and schema
+// validation. Each listener serves its own specification over its own implementation.
+func Boundary(spec *openapi3.T, next http.Handler, policy Policy) http.Handler {
 	routes := mustResolveRoutes(spec)
 	validate := schemaValidated(spec, next)
 	steps := transportSteps(spec, policy)
@@ -89,11 +95,11 @@ func declaresStreamingResponse(operation *openapi3.Operation) bool {
 // account, session or cookie on the way past. Credentials are then checked before any step touches
 // the body, so an unauthenticated caller cannot learn whether its payload would have parsed, and
 // the body is buffered before the schema validator, which reads it a second time.
-func transportSteps(spec *openapi3.T, policy transport) []boundaryStep {
+func transportSteps(spec *openapi3.T, policy Policy) []boundaryStep {
 	return []boundaryStep{
-		requireAllowedOrigin(policy.allowedOrigins),
+		requireAllowedOrigin(policy.AllowedOrigins),
 		requireSessionCSRFToken,
-		requireCredentials(spec, policy.authenticate),
+		requireCredentials(spec, policy.Authenticate),
 		bufferBodyWithinLimit,
 		requireJSONRequestBody,
 		requireSingleValuedHeaders,

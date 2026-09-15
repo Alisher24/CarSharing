@@ -4,15 +4,12 @@
 package democontrol
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
 
+	"github.com/Alisher24/CarSharing/backend/internal/platform/internalclient"
 	"github.com/google/uuid"
 )
 
@@ -32,57 +29,32 @@ const maxAnswerBytes = 1 << 20
 type Request map[string]any
 
 // Client calls the internal demonstration operation.
-type Client struct {
-	http    *http.Client
-	baseURL string
-	token   string
-}
+type Client struct{ call *internalclient.Client }
 
 // NewClient assembles the client over one address and one credential. Both are required: a client
 // without them would call the operation as an anonymous request and be refused.
 func NewClient(baseURL, token string) (*Client, error) {
-	if baseURL == "" {
-		return nil, errors.New("the demonstration control must be told the address of the API")
+	call, err := internalclient.New(baseURL, token, internalclient.Settings{
+		Timeout:        RequestTimeout,
+		MaxAnswerBytes: maxAnswerBytes,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("the demonstration control: %w", err)
 	}
-	if token == "" {
-		return nil, errors.New("the demonstration control must be given the token its capability is called with")
-	}
-	return &Client{
-		http:    &http.Client{Timeout: RequestTimeout},
-		baseURL: baseURL,
-		token:   token,
-	}, nil
+	return &Client{call: call}, nil
 }
 
 // Apply carries one command and answers the body the API replied with, which is the stored answer of
 // the first attempt when this identifier was already used.
 func (c *Client) Apply(ctx context.Context, action Request) ([]byte, error) {
-	body, err := json.Marshal(action)
+	answer, err := c.call.Post(ctx, internalclient.Call{Path: ActionPath, Body: action})
 	if err != nil {
 		return nil, err
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+ActionPath,
-		bytes.NewReader(body))
-	if err != nil {
-		return nil, err
+	if answer.Status != http.StatusOK {
+		return nil, fmt.Errorf("the action was refused with %d: %s", answer.Status, answer.Refusal())
 	}
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Authorization", "Bearer "+c.token)
-
-	response, err := c.http.Do(request)
-	if err != nil {
-		return nil, err
-	}
-	defer response.Body.Close()
-
-	answer, err := io.ReadAll(io.LimitReader(response.Body, maxAnswerBytes))
-	if err != nil {
-		return nil, err
-	}
-	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("the action was refused with %s: %s", response.Status, refusalOf(answer))
-	}
-	return answer, nil
+	return answer.Body, nil
 }
 
 // ActionID is the identifier a command is remembered by. A command run without one draws a fresh
@@ -100,16 +72,4 @@ func ActionID(given string) (string, error) {
 		return "", err
 	}
 	return id.String(), nil
-}
-
-// refusalOf is what an error answer says, so a failure names the code rather than the whole envelope.
-func refusalOf(answer []byte) string {
-	var envelope struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	}
-	if err := json.Unmarshal(answer, &envelope); err != nil {
-		return "an answer that is not the error contract"
-	}
-	return envelope.Code + ": " + envelope.Message
 }

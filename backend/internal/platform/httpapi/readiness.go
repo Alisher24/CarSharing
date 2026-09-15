@@ -29,3 +29,23 @@ func DatabaseProbe(pool *pgxpool.Pool) ReadinessProbe {
 		return readiness, err
 	}
 }
+
+// MailReadinessProbe reports whether the store the mail stub serves is usable. It answers with the
+// failure rather than with a description of one, because the only thing readiness decides is whether
+// the container may be given work.
+type MailReadinessProbe func(context.Context) error
+
+// countMessagesStatement counts the letters of the box. It reads the mail schema rather than the
+// connection, which is what readiness means for this process: a stub that answers ready without
+// reaching its own schema turns an unreachable store into a delivery the worker can never complete
+// instead of into a container that is not ready.
+const countMessagesStatement = `SELECT count(*) FROM mailstub.messages`
+
+// MailDatabaseProbe reads the mail box. Counting rather than selecting a row keeps an empty box ready:
+// there is nothing to find, and an empty box is exactly what a running stub starts with.
+func MailDatabaseProbe(pool *pgxpool.Pool) MailReadinessProbe {
+	return func(ctx context.Context) error {
+		var stored int64
+		return pool.QueryRow(ctx, countMessagesStatement).Scan(&stored)
+	}
+}

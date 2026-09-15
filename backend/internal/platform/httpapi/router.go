@@ -22,7 +22,7 @@ func NewAnonymousRouter(probe ReadinessProbe, catalog Catalog) (http.Handler, er
 		catalogHandlers: handlers,
 		streams:         streams{hub: unservedStreams{}},
 	}
-	policy := transport{allowedOrigins: map[string]bool{}, authenticate: refuseCredentials}
+	policy := Policy{AllowedOrigins: map[string]bool{}, Authenticate: refuseCredentials}
 	strict := servedapi.NewStrictHandlerWithOptions(served, nil, strictErrorHandlers())
 	return servedRouter(servedapi.Handler(strict), policy), nil
 }
@@ -79,26 +79,22 @@ func NewHandler(dependencies Dependencies) (http.Handler, error) {
 		streams:              streaming,
 	}
 	strict := servedapi.NewStrictHandlerWithOptions(served, nil, strictErrorHandlers())
-	policy := transport{
-		allowedOrigins: originSet(dependencies.AllowedOrigins),
-		authenticate:   authenticateSession,
+	policy := Policy{
+		AllowedOrigins: originSet(dependencies.AllowedOrigins),
+		Authenticate:   authenticateSession,
 	}
 	// The session is attached before the boundary so that the boundary's credential check and the
 	// handler below it read one resolved session rather than querying the store twice.
 	return withClientAddress(withSession(dependencies.Sessions, servedRouter(servedapi.Handler(strict), policy))), nil
 }
 
-// strictErrorHandlers answers the two failures the generated strict layer reports: a request it
-// could not decode and a handler that returned a value outside the contract. Both must leave as
-// the JSON error envelope rather than as the strict layer's own text.
+// strictErrorHandlers answers the two failures the generated strict layer reports, which every
+// surface answers the same way: see strictErrorAnswers for what they are.
 func strictErrorHandlers() servedapi.StrictHTTPServerOptions {
+	failures := strictErrorAnswers()
 	return servedapi.StrictHTTPServerOptions{
-		RequestErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, _ error) {
-			writeError(w, r, codeMalformedJSON, messageMalformedJSON)
-		},
-		ResponseErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, _ error) {
-			writeError(w, r, codeInternalError, messageInternalError)
-		},
+		RequestErrorHandlerFunc:  failures.request,
+		ResponseErrorHandlerFunc: failures.response,
 	}
 }
 
@@ -119,13 +115,13 @@ func NewSurfaceRouter(public http.Handler, internal http.Handler) http.Handler {
 // servedRouter wraps one implementation in the transport contract the whole served API shares: the
 // specification router and the request-validation boundary. Only the transport policy and the
 // implementation differ between the routers this package builds.
-func servedRouter(implementation http.Handler, policy transport) http.Handler {
+func servedRouter(implementation http.Handler, policy Policy) http.Handler {
 	spec, err := servedapi.GetSwagger()
 	if err != nil {
 		panic(err)
 	}
 	dropUnimplementedPaths(spec)
-	return boundary(spec, implementation, policy)
+	return Boundary(spec, implementation, policy)
 }
 
 // dropUnimplementedPaths removes the operations this application does not serve. The generated
