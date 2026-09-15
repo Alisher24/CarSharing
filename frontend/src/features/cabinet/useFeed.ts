@@ -150,28 +150,31 @@ function useReadOf<T extends FeedRecord>(options: FeedRead<T>): void {
   const { coordinator, document, session, read, request, setResource } = options;
 
   useEffect(() => {
+    // A reader with no session reads nothing: the feed does not exist without an account.
     if (coordinator === undefined || session === undefined) return;
+    const reader = coordinator;
+    const owner = session;
 
     const controller = new AbortController();
     let abandoned = false;
 
     async function reload(): Promise<void> {
-      const ticket = coordinator?.begin(document);
-      if (coordinator === undefined || ticket === undefined) return;
+      const ticket = reader.begin(document);
+      if (ticket === undefined) return;
 
       try {
         const page = await read(request.cursor, controller.signal);
         if (abandoned) return;
 
         const answered: FeedPage<T> = { ...page, placement: request.placement };
-        const stored = storedAnswer<FeedReading<T>>(coordinator, ticket, session, answered);
+        const stored = storedAnswer<FeedReading<T>>(reader, ticket, owner, answered);
         if (stored !== undefined) setResource(stored);
       } catch {
         // A failed read keeps the records already on screen and marks them stale, so a feed a person
         // is reading does not empty itself because one attempt did not arrive.
         if (!abandoned) setResource(afterFailure);
       } finally {
-        if (!abandoned) coordinator.settle(document);
+        if (!abandoned) reader.settle(document);
       }
     }
 
@@ -180,7 +183,7 @@ function useReadOf<T extends FeedRecord>(options: FeedRead<T>): void {
     return () => {
       abandoned = true;
       controller.abort();
-      coordinator.settle(document);
+      reader.settle(document);
     };
   }, [coordinator, document, session, read, request, setResource]);
 }

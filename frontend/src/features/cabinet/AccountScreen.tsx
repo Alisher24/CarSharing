@@ -33,7 +33,6 @@ export function AccountScreen({ account, submission, onSubmit, onLeave, children
 
   return (
     <section className="cabinet" aria-labelledby={CABINET_TITLE_ID}>
-      <span className="section-label">КАБИНЕТ</span>
       <h2 className="cabinet-title" id={CABINET_TITLE_ID}>
         {CABINET_HEADING}
       </h2>
