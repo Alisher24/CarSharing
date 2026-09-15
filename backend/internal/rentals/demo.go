@@ -456,9 +456,6 @@ SET remaining = $3::numeric
 WHERE vehicle_id = $1 AND source_kind = $2`
 )
 
-// wgs84SRID is the spatial reference every stored coordinate uses.
-const wgs84SRID = 4326
-
 func publishDemoChange(
 	ctx context.Context, pool *pgxpool.Pool, vehicleID string, connectivity, serviceRequired any,
 ) (int64, error) {
@@ -476,7 +473,7 @@ func confirmModel(
 ) error {
 	querier := database.QuerierFrom(ctx, pool)
 	if _, err := querier.Exec(ctx, confirmPositionStatement,
-		vehicleID, state.Position.Longitude, state.Position.Latitude, wgs84SRID); err != nil {
+		vehicleID, state.Position.Longitude, state.Position.Latitude, fleet.WGS84SRID); err != nil {
 		return err
 	}
 	for _, source := range state.Sources {

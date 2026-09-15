@@ -60,6 +60,14 @@ ALTER TABLE invoices ADD COLUMN exhausted_sources text[];
 ALTER TABLE notifications ADD COLUMN exhausted_sources text[];
 ALTER TABLE notifications ADD COLUMN ended_at timestamptz;
 
+-- A report an earlier build wrote states only the moment it was written, because the moment the ride
+-- ended was not something it stored. That is the nearest moment the row holds, and it is what the
+-- column is given rather than a guess at the ending: a report whose moment is missing is one no
+-- reader could publish, and the constraint below requires every report to state one.
+UPDATE notifications
+SET ended_at = created_at
+WHERE kind = 'rental_completed' AND ended_at IS NULL;
+
 ALTER TABLE notifications
     ADD CONSTRAINT notifications_ended_at_with_completion
         CHECK ((kind = 'rental_completed') = (ended_at IS NOT NULL));

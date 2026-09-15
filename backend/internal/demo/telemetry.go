@@ -142,7 +142,7 @@ func (c *Confirmations) publishArrivals(ctx context.Context, reporting []string)
 	querier := database.QuerierFrom(ctx, c.pool)
 	if len(arrivals.vehicleIDs) > 0 {
 		if _, err = querier.Exec(ctx, confirmPositionStatement, arrivals.vehicleIDs,
-			arrivals.longitudes, arrivals.latitudes, wgs84SRID); err != nil {
+			arrivals.longitudes, arrivals.latitudes, fleet.WGS84SRID); err != nil {
 			return err
 		}
 	}

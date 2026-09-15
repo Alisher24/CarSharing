@@ -3,6 +3,7 @@ package demo
 import (
 	"context"
 
+	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
@@ -11,9 +12,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-// wgs84SRID is the spatial reference every stored coordinate uses.
-const wgs84SRID = 4326
 
 // store writes the demonstration rows. Every statement runs on the querier the context carries, so
 // a whole installation or a whole restoration commits at once or not at all.
@@ -30,7 +28,7 @@ ON CONFLICT (id) DO NOTHING`
 
 func (s store) insertZone(ctx context.Context, zone zones.Zone) error {
 	_, err := s.querier(ctx).Exec(ctx, insertZoneStatement,
-		zone.ID, zone.Name, string(zone.Area), wgs84SRID, zone.Version)
+		zone.ID, zone.Name, string(zone.Area), fleet.WGS84SRID, zone.Version)
 	return err
 }
 
@@ -112,7 +110,7 @@ ON CONFLICT (vehicle_id) DO NOTHING`
 
 func (s store) insertTelemetry(ctx context.Context, vehicle Vehicle) error {
 	_, err := s.querier(ctx).Exec(ctx, insertTelemetryStatement,
-		vehicle.ID, vehicle.Position.Longitude, vehicle.Position.Latitude, wgs84SRID,
+		vehicle.ID, vehicle.Position.Longitude, vehicle.Position.Latitude, fleet.WGS84SRID,
 		vehicle.confirmedAgo().Seconds())
 	return err
 }
@@ -325,7 +323,7 @@ func (s store) restoreVehicle(ctx context.Context, vehicle Vehicle) (int64, erro
 		}
 	}
 	_, err := querier.Exec(ctx, restoreTelemetryStatement,
-		vehicle.ID, vehicle.Position.Longitude, vehicle.Position.Latitude, wgs84SRID,
+		vehicle.ID, vehicle.Position.Longitude, vehicle.Position.Latitude, fleet.WGS84SRID,
 		vehicle.confirmedAgo().Seconds())
 	return version, err
 }

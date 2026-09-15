@@ -11,19 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// exhaustedColumn renders the sources a ride ran out of as the column stores them. A ride that was
-// ended by a person ran out of nothing, and the column states that by holding nothing.
-func exhaustedColumn(exhausted []fleet.SourceKind) []string {
-	if len(exhausted) == 0 {
-		return nil
-	}
-	kinds := make([]string, 0, len(exhausted))
-	for _, kind := range exhausted {
-		kinds = append(kinds, string(kind))
-	}
-	return kinds
-}
-
 // Completion is what the report of a finished ride tells about beyond the ride itself: the invoice the
 // ride produced, why it ended, when it ended and, for a ride whose sources ran out, which of them were
 // empty. A warning about a reservation states none of them, so the record states one or the other
@@ -70,7 +57,7 @@ func (c *Completer) Record(
 	}
 	written, err := database.QuerierFrom(ctx, c.pool).Exec(ctx, insertCompletionStatement,
 		id.String(), owner, rentalID, RentalCompleted, at, initialVersion, about.InvoiceID,
-		about.Reason, exhaustedColumn(about.Exhausted), about.EndedAt)
+		about.Reason, fleet.SourceNames(about.Exhausted), about.EndedAt)
 	if err != nil {
 		return err
 	}

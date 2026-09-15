@@ -114,7 +114,7 @@ func completeRental(
 		string(stage.Completed),
 		ending.EndedAt,
 		string(ending.Reason),
-		exhaustedColumn(ending.Exhausted),
+		fleet.SourceNames(ending.Exhausted),
 		rideStages,
 	)
 	if err != nil {
@@ -133,19 +133,6 @@ func completeRental(
 		return Rental{}, err
 	}
 	return ended, rows.Err()
-}
-
-// exhaustedColumn renders the sources a ride ran out of as the column stores them. A ride that was
-// ended by a person ran out of nothing, and the column states that by holding nothing.
-func exhaustedColumn(exhausted []fleet.SourceKind) []string {
-	if len(exhausted) == 0 {
-		return nil
-	}
-	kinds := make([]string, 0, len(exhausted))
-	for _, kind := range exhausted {
-		kinds = append(kinds, string(kind))
-	}
-	return kinds
 }
 
 // rideStages are the stages a ride that has begun stands in, which is what an ending applies to: a
@@ -194,8 +181,8 @@ func invoiceDraft(ended Rental, priced billing.Charge, ending Ending, moment tim
 // is not merely free again, it is one nobody may book until it has been looked at.
 //
 // The deliveries an ending owes are two: the attempt at the payment of the invoice and the letter that
-// carries it. The attempt is recorded only for an invoice that is still waiting for one — a ride that
-// cost nothing is settled by the moment its invoice was issued — and that question is asked of the
+// carries it. The attempt is recorded only for an invoice that is still waiting for one вЂ” a ride that
+// cost nothing is settled by the moment its invoice was issued вЂ” and that question is asked of the
 // state the invoice was stored with rather than of a second comparison of its amount with zero.
 func announceEnding(
 	ctx context.Context, pool *pgxpool.Pool, ended Rental, issued invoices.Invoice, ending Ending,

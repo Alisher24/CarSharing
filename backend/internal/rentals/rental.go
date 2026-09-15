@@ -191,20 +191,8 @@ func scanRental(rows pgx.Rows, found *Rental) error {
 	if err != nil {
 		return err
 	}
-	found.Exhausted = exhaustedKinds(exhausted)
+	found.Exhausted = fleet.SourceKinds(exhausted)
 	return nil
-}
-
-// exhaustedKinds reads the sources a ride ran out of in the vocabulary the catalog publishes them in.
-func exhaustedKinds(stored []string) []fleet.SourceKind {
-	if len(stored) == 0 {
-		return nil
-	}
-	kinds := make([]fleet.SourceKind, 0, len(stored))
-	for _, kind := range stored {
-		kinds = append(kinds, fleet.SourceKind(kind))
-	}
-	return kinds
 }
 
 // liveRentals reads every rental that still holds a vehicle, ordered by the vehicle it holds. It is

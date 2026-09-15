@@ -97,8 +97,12 @@ func (s *Service) reconcileRead(
 	if err != nil {
 		return Reconciled{}, err
 	}
+	// The state is saved whenever a window was played, whatever the vehicle did in it. A free or
+	// reserved vehicle spends nothing, but the moment it accounts for has still moved: leaving it
+	// behind would make the next reconcile play that window again, in the mode the vehicle is in by
+	// then — the whole of a free afternoon charged as driving the moment a ride starts.
 	spent := spends(mode)
-	if spent || !stored {
+	if spent || !stored || state.ProcessedAt.Before(moment) {
 		if err = s.models.Save(ctx, vehicle.ID, advanced); err != nil {
 			return Reconciled{}, err
 		}
