@@ -22,7 +22,7 @@ services:
       POSTGRES_DB: carsharing
       POSTGRES_USER: carsharing_migrator
       POSTGRES_PASSWORD_FILE: /run/secrets/db_admin_password
-    secrets: [db_admin_password, db_app_password]
+    secrets: [db_admin_password, db_app_password, mailstub_app_password]
     volumes:
       - postgres_data:/var/lib/postgresql
       - ./infra/postgres/20-app-role.sql:/docker-entrypoint-initdb.d/20-app-role.sql:ro
@@ -107,6 +107,10 @@ services:
   # The background work of the backend: outbox delivery, the reservation deadline sweep and the
   # retention of delivered signals. It is a separate process so that restarting either it or the API
   # leaves the other serving; both use the same modules.
+  #
+  # It delivers the letter with an invoice to the mail stub, so it is given that address and the
+  # delivery token alone: the process that sends a letter is not thereby allowed to arm the loss of an
+  # answer, which is what the other capability of the stub is for.
   worker:
     <<: *backend
     entrypoint: [/usr/local/bin/worker]
@@ -114,9 +118,45 @@ services:
       <<: *database
       DB_USER: carsharing_app
       DB_PASSWORD_FILE: /run/secrets/db_app_password
-    secrets: [db_app_password]
+      MAILSTUB_API_URL: http://mailstub:8080
+      MAILSTUB_DELIVERY_TOKEN_FILE: /run/secrets/mailstub_delivery_token
+    secrets: [db_app_password, mailstub_delivery_token]
     depends_on:
       migrate: { condition: service_completed_successfully }
+      mailstub: { condition: service_healthy }
+    restart: unless-stopped
+    stop_grace_period: 15s
+
+  # The mail stub: it accepts one letter per delivery key into a schema of its own, arms the loss of an
+  # answer when a demonstration asks for it, and shows what it received.
+  #
+  # Two listeners, one process. The internal one carries the contract's internal operations and is
+  # reachable from this network alone: the external proxy answers every path under /internal with an
+  # unknown resource, and this service publishes no port for it. The inbox is published on the loopback
+  # address of the machine, on the port the process already listens on by default, so a person can read
+  # what arrived without the box being on any network.
+  mailstub:
+    <<: *backend
+    entrypoint: [/usr/local/bin/mailstub]
+    environment:
+      <<: *database
+      DB_USER: mailstub_app
+      DB_PASSWORD_FILE: /run/secrets/mailstub_app_password
+      MAILSTUB_DELIVERY_TOKEN_FILE: /run/secrets/mailstub_delivery_token
+      MAILSTUB_DEMO_TOKEN_FILE: /run/secrets/mailstub_demo_token
+      MAILSTUB_CURSOR_HMAC_KEY_FILE: /run/secrets/mailstub_cursor_hmac_key
+      # The demonstration control is served only under this profile, as it is in the API.
+      APP_ENV: demo
+    secrets: [mailstub_app_password, mailstub_delivery_token, mailstub_demo_token, mailstub_cursor_hmac_key]
+    ports: ["127.0.0.1:8025:8025"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: [CMD, /usr/local/bin/healthcheck]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+      start_period: 5s
     restart: unless-stopped
     stop_grace_period: 15s
 
@@ -174,6 +214,10 @@ services:
   #
   #   docker compose --profile demo run --rm democontrol set-energy-remaining \
   #     --vehicle <id> --source battery --remaining 5
+  #
+  # One of its commands belongs to the mail stub rather than to the API — arming the loss of the next
+  # answer — so it is given that address and that capability too, and neither client can call the other
+  # surface.
   democontrol:
     <<: *backend
     profiles: [demo]
@@ -181,7 +225,9 @@ services:
     environment:
       INTERNAL_API_URL: http://api:8080
       DEMO_CONTROL_TOKEN_FILE: /run/secrets/demo_control_token
-    secrets: [demo_control_token]
+      MAILSTUB_API_URL: http://mailstub:8080
+      MAILSTUB_DEMO_TOKEN_FILE: /run/secrets/mailstub_demo_token
+    secrets: [demo_control_token, mailstub_demo_token]
     depends_on:
       api: { condition: service_healthy }
 
@@ -193,11 +239,19 @@ secrets:
     file: ./.secrets/db_admin_password
   db_app_password:
     file: ./.secrets/db_app_password
+  mailstub_app_password:
+    file: ./.secrets/mailstub_app_password
   cursor_hmac_key:
     file: ./.secrets/cursor_hmac_key
   simulator_token:
     file: ./.secrets/simulator_token
   demo_control_token:
     file: ./.secrets/demo_control_token
+  mailstub_delivery_token:
+    file: ./.secrets/mailstub_delivery_token
+  mailstub_demo_token:
+    file: ./.secrets/mailstub_demo_token
+  mailstub_cursor_hmac_key:
+    file: ./.secrets/mailstub_cursor_hmac_key
   demo_user_password:
     file: ./.secrets/demo_user_password

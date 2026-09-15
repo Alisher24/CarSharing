@@ -234,3 +234,9 @@ func recordPaymentAttempt(
 // the ride ended. It is named here, beside the ending that records it, and the process that delivers
 // it declares the same kind where the deliveries of the queue are assembled.
 const invoiceIssuedTask events.Kind = "invoice.issued"
+
+// InvoiceIssuedTask is the kind of task the letter with one invoice is delivered as, for the
+// composition root that names it in the table of deliveries. The kind is stated once, beside the
+// ending that records it, because the module that owes the work and the process that performs it have
+// to say the same word.
+func InvoiceIssuedTask() string { return string(invoiceIssuedTask) }

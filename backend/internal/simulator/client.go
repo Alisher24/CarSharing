@@ -5,14 +5,11 @@
 package simulator
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 
+	"github.com/Alisher24/CarSharing/backend/internal/platform/internalclient"
 	"github.com/google/uuid"
 )
 
@@ -39,26 +36,19 @@ type TickResult struct {
 }
 
 // Client calls the internal tick operation.
-type Client struct {
-	http    *http.Client
-	baseURL string
-	token   string
-}
+type Client struct{ call *internalclient.Client }
 
 // NewClient assembles the client over one address and one credential. Both are required: a client
 // without them would call the operation as an anonymous request and be refused on every tick.
 func NewClient(baseURL, token string) (*Client, error) {
-	if baseURL == "" {
-		return nil, errors.New("the simulator must be told the address of the API")
+	call, err := internalclient.New(baseURL, token, internalclient.Settings{
+		Timeout:        RequestTimeout,
+		MaxAnswerBytes: maxTickBodyBytes,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("the simulator: %w", err)
 	}
-	if token == "" {
-		return nil, errors.New("the simulator must be given the token its capability is called with")
-	}
-	return &Client{
-		http:    &http.Client{Timeout: RequestTimeout},
-		baseURL: baseURL,
-		token:   token,
-	}, nil
+	return &Client{call: call}, nil
 }
 
 // Tick advances the fleet once and answers what it changed. The identifier is drawn here, so a call
@@ -74,47 +64,19 @@ func (c *Client) Tick(ctx context.Context) (TickResult, error) {
 // TickWith advances the fleet under one identifier, which is what makes a repeat reproduce the first
 // answer rather than advancing anything a second time.
 func (c *Client) TickWith(ctx context.Context, tickID string) (TickResult, error) {
-	body, err := json.Marshal(TickRequest{TickID: tickID})
+	answer, err := c.call.Post(ctx, internalclient.Call{
+		Path: TickPath,
+		Body: TickRequest{TickID: tickID},
+	})
 	if err != nil {
 		return TickResult{}, err
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+TickPath,
-		bytes.NewReader(body))
-	if err != nil {
-		return TickResult{}, err
-	}
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Authorization", "Bearer "+c.token)
-
-	response, err := c.http.Do(request)
-	if err != nil {
-		return TickResult{}, err
-	}
-	defer response.Body.Close()
-
-	answer, err := io.ReadAll(io.LimitReader(response.Body, maxTickBodyBytes))
-	if err != nil {
-		return TickResult{}, err
-	}
-	if response.StatusCode != http.StatusOK {
-		return TickResult{}, fmt.Errorf("the tick was refused with %s: %s",
-			response.Status, refusalOf(answer))
+	if answer.Status != http.StatusOK {
+		return TickResult{}, fmt.Errorf("the tick was refused with %d: %s", answer.Status, answer.Refusal())
 	}
 	var result TickResult
-	if err = json.Unmarshal(answer, &result); err != nil {
+	if err = answer.Decode(&result); err != nil {
 		return TickResult{}, err
 	}
 	return result, nil
-}
-
-// refusalOf is what an error answer says, so a failure names the code rather than the whole envelope.
-func refusalOf(answer []byte) string {
-	var envelope struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	}
-	if err := json.Unmarshal(answer, &envelope); err != nil {
-		return "an answer that is not the error contract"
-	}
-	return envelope.Code + ": " + envelope.Message
 }

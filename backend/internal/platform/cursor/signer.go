@@ -65,12 +65,17 @@ type Position struct {
 }
 
 // Scope is what a cursor is issued for: the operation that issued it, the account it belongs to, and
-// the query parameters it was issued under. It is built by OperationOn rather than assembled, so the
-// parameters a cursor binds are the ones the operation declares.
+// the query parameters it was issued under. It is built by OperationOn or by AnonymousOperationOn
+// rather than assembled, so the parameters a cursor binds are the ones the operation declares.
 type Scope struct {
 	operation string
 	owner     uuid.UUID
 	params    []Parameter
+
+	// anonymous reports a collection that belongs to no account at all — the mailbox of the mail
+	// stub, which is read without signing in. It is stated rather than inferred from an absent
+	// owner, so a scope built without an account is refused instead of quietly belonging to nobody.
+	anonymous bool
 }
 
 // OperationOn names the operation and the account a cursor belongs to. A cursor issued for one
@@ -78,6 +83,14 @@ type Scope struct {
 // being passed here rather than by a second call that could be forgotten.
 func OperationOn(operation string, owner uuid.UUID, params ...Parameter) Scope {
 	return Scope{operation: operation, owner: owner, params: params}
+}
+
+// AnonymousOperationOn names the operation of a collection that belongs to no account. It exists
+// because such a collection has no subject to bind its cursor to, and binding it to the nil account
+// would sign a cursor that names nobody: an anonymous cursor and an account's cursor are refused by
+// each other, which is what keeps a cursor of one collection out of another.
+func AnonymousOperationOn(operation string, params ...Parameter) Scope {
+	return Scope{operation: operation, params: params, anonymous: true}
 }
 
 // Parameter pairs the name of a query parameter with the value a page was read under.
@@ -189,7 +202,7 @@ func (s *Signer) payload(position Position, scope Scope) ([]byte, error) {
 		CreatedAt: timestamp.Format(position.CreatedAt),
 		ID:        position.ID,
 		Operation: scope.operation,
-		Owner:     scope.owner.String(),
+		Owner:     scope.ownerText(),
 		Params:    parameters,
 	})
 }
@@ -234,27 +247,40 @@ func parsePayload(payload []byte) (Position, Scope, error) {
 	if err != nil {
 		return Position{}, Scope{}, ErrMalformed
 	}
-	owner, err := uuid.Parse(carried.Owner)
+	scope, err := readScope(carried.Operation, carried.Owner, carried.Params)
 	if err != nil {
-		return Position{}, Scope{}, ErrMalformed
-	}
-	params := make([]Parameter, 0, len(carried.Params))
-	names := make([]string, 0, len(carried.Params))
-	for name := range carried.Params {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		params = append(params, Parameter{Name: name, Value: carried.Params[name]})
-	}
-	scope := OperationOn(carried.Operation, owner, params...)
-	if err := scope.validate(); err != nil {
 		return Position{}, Scope{}, ErrMalformed
 	}
 	if err := validIdentifier("a cursor position identifier", carried.ID); err != nil {
 		return Position{}, Scope{}, ErrMalformed
 	}
+	if err := scope.validate(); err != nil {
+		return Position{}, Scope{}, ErrMalformed
+	}
 	return Position{CreatedAt: moment, ID: carried.ID}, scope, nil
+}
+
+// readScope reads the scope one payload carries. An empty owner is an anonymous collection rather
+// than a missing value: a token that names no account is one this package wrote for a collection
+// that has none, and every other value is the account a cursor belongs to.
+func readScope(operation, owner string, params map[string]string) (Scope, error) {
+	names := make([]string, 0, len(params))
+	for name := range params {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	declared := make([]Parameter, 0, len(names))
+	for _, name := range names {
+		declared = append(declared, Parameter{Name: name, Value: params[name]})
+	}
+	if owner == "" {
+		return AnonymousOperationOn(operation, declared...), nil
+	}
+	account, err := uuid.Parse(owner)
+	if err != nil {
+		return Scope{}, err
+	}
+	return OperationOn(operation, account, declared...), nil
 }
 
 // matchesScope reports whether a cursor was issued for exactly the scope it is presented to: the
@@ -269,12 +295,22 @@ func (s Scope) matchesScope(expected Scope) bool {
 func (s Scope) scopeText() string {
 	var text strings.Builder
 	field(&text, s.operation)
-	field(&text, s.owner.String())
+	field(&text, s.ownerText())
 	for _, one := range s.params {
 		field(&text, one.Name)
 		field(&text, one.Value)
 	}
 	return text.String()
+}
+
+// ownerText is the subject a cursor belongs to: the account it was issued for, or nothing at all for
+// a collection that belongs to no account. The empty text is what tells an anonymous cursor from an
+// account's, since no account ever spells itself that way.
+func (s Scope) ownerText() string {
+	if s.anonymous {
+		return ""
+	}
+	return s.owner.String()
 }
 
 func field(text *strings.Builder, value string) {
@@ -292,7 +328,7 @@ func (s Scope) validate() error {
 	if len(s.operation) > maxOperation {
 		return errors.New("the operation name of a cursor is too long")
 	}
-	if s.owner == uuid.Nil {
+	if s.owner == uuid.Nil && !s.anonymous {
 		return errors.New("a cursor needs the account it belongs to")
 	}
 	seen := make(map[string]bool, len(s.params))

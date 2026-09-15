@@ -89,6 +89,23 @@ func (i Invoice) Lines() (driving Line, paused Line) { return i.Driving, i.Pause
 // CompletionReason is why the ride this invoice describes ended.
 func (i Invoice) CompletionReason() completion.Reason { return i.Completion }
 
+// AsIssued is the invoice as the moment it was issued left it: the state its payment started in rather
+// than the state it has reached since.
+//
+// It exists because a letter about an invoice is rendered again by every attempt that delivers it. A
+// sentence that followed a later payment would make the second rendering a different letter under one
+// delivery key, which the receiver refuses as a conflict, and the letter that really arrived would
+// never be confirmed. The state an invoice was issued with is therefore derivable from what an invoice
+// never changes — its total and the moment it was issued — rather than from a second stored copy.
+func (i Invoice) AsIssued() Invoice {
+	status, paidAt := FirstPayment(i.TotalTyiyn, i.IssuedAt)
+	i.Payment = status
+	i.PaymentVersion = issuedVersion
+	i.PaymentUpdatedAt = i.IssuedAt
+	i.PaidAt, i.FailedAt, i.FailureCode = paidAt, nil, nil
+	return i
+}
+
 // LineOf reads one line of a charge as an invoice stores it, taking the duration in the unit the
 // invoice counts in rather than in the nanoseconds a time.Duration holds.
 func LineOf(line billing.Line) Line {

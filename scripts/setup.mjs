@@ -3,9 +3,14 @@ import { mkdir, readFile, writeFile, access, chmod } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-// The database passwords predate the capability credentials, so a legacy installation holds only
-// these two alongside LEGACY_SECRET.
-const DATABASE_SECRETS = ['db_admin_password', 'db_app_password'];
+// The passwords that predate every capability credential: an installation migrating from them holds
+// exactly these two alongside LEGACY_SECRET.
+const LEGACY_DATABASE_SECRETS = ['db_admin_password', 'db_app_password'];
+
+// One password per database role: the migrator, the application and the mail stub, which each connect
+// as a role of their own. A role added later brings a password an installation predating it cannot
+// hold, so that password is created where it is absent rather than demanded of it.
+const DATABASE_SECRETS = [...LEGACY_DATABASE_SECRETS, 'mailstub_app_password'];
 
 // One credential per capability, so that revoking or rotating one does not affect the others.
 export const CAPABILITY_SECRETS = [
@@ -18,7 +23,11 @@ export const CAPABILITY_SECRETS = [
   'demo_user_password',
 ];
 
+// Everything setup writes, and what an installation that already exists must hold before it can be
+// migrated. The two differ by the passwords added after the capabilities: a backup taken before one
+// of them existed cannot contain it, so setup creates it instead of asking for the backup.
 const SECRET_NAMES = [...DATABASE_SECRETS, ...CAPABILITY_SECRETS];
+const REQUIRED_SECRET_NAMES = [...LEGACY_DATABASE_SECRETS, ...CAPABILITY_SECRETS];
 
 // A single internal_token used to cover every capability; it becomes the simulator token so an
 // existing installation keeps working after the split.
@@ -92,12 +101,16 @@ async function writeNewSecret(secretsDirectory, name, value) {
  * Reports the credentials a legacy installation must already hold before it can migrate: every
  * capability credential, or the pair of database passwords and the single internal token that
  * predates them.
+ *
+ * A password that joined the database list later is deliberately not among them: an installation set
+ * up before it existed is migrated by giving it the new one rather than by demanding a backup it
+ * never had.
  */
 async function requiredSecretNames(secretsDirectory) {
   const capabilities = await Promise.all(CAPABILITY_SECRETS.map((name) => exists(secretPath(secretsDirectory, name))));
-  if (capabilities.some(Boolean)) return SECRET_NAMES;
+  if (capabilities.some(Boolean)) return REQUIRED_SECRET_NAMES;
   const hasLegacySecret = await exists(secretPath(secretsDirectory, LEGACY_SECRET));
-  return hasLegacySecret ? [...DATABASE_SECRETS, LEGACY_SECRET] : SECRET_NAMES;
+  return hasLegacySecret ? [...LEGACY_DATABASE_SECRETS, LEGACY_SECRET] : SECRET_NAMES;
 }
 
 async function requireExistingSecrets(secretsDirectory, names) {

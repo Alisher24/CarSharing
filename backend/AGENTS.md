@@ -20,13 +20,17 @@ wrong home for it.
 
 ## The commands
 
-Nine commands, each one process:
+Ten commands, each one process:
 
 - `api` — serves the HTTP API and holds the database connection the streams read. It serves two
   surfaces from one listener: the public application, and the internal operations under `/internal`,
   which the external proxy answers as an unknown resource.
 - `worker` — outbox delivery, the reservation deadline sweep and retention, in a process of its own so
   that either it or the API can be restarted alone, over the same modules.
+- `mailstub` — the mail stub: it accepts one letter per delivery key into a schema of its own, arms the
+  loss of an answer when a demonstration asks for it, and serves the read-only inbox. Two listeners in
+  one process: the internal one, which nothing publishes, and the inbox, which the container publishes
+  on the loopback address.
 - `simulator` — the clock of the modelled fleet: it calls the internal tick operation once a second
   and changes nothing itself. `-once [-tick-id]` advances the fleet exactly once. It belongs to the
   demonstration profile, because starting the demonstration is a deliberate act.

@@ -20,7 +20,8 @@ An edit here is not finished until `generate` has run and the regenerated files 
   commands and notifications. The large one; its size is the contract, not duplication.
 - `internal.yaml` — the internal API: its own authentication, a larger body limit than the public one,
   and no route through the public proxy, which closes `/internal` with a 404.
-- `mailstub.yaml` — the mail stub, still planned.
+- `mailstub.yaml` — the mail stub: its own delivery key, its own two capabilities, and the two
+  listeners the `x-listener` extension splits its paths between.
 - `components/common.yaml` (Timestamps, ExactInteger, EnergyDecimal, Cursor),
   `components/identifiers.yaml` (ResourceId, CommandId, RequestId) and `components/errors.yaml`
   (ApiError and the domain errors) hold what the three contracts share.

@@ -50,3 +50,23 @@ func writeError(w http.ResponseWriter, r *http.Request,
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
 }
+
+// strictFailures are the two answers every generated strict layer needs: a request it could not
+// decode, and a handler that returned a value outside the contract. Each surface wraps them in its
+// own generated options type, so the two answers are stated once rather than once per surface.
+type strictFailures struct {
+	request  func(w http.ResponseWriter, r *http.Request, err error)
+	response func(w http.ResponseWriter, r *http.Request, err error)
+}
+
+// strictErrorAnswers answers those two failures with the JSON envelope every specification declares.
+func strictErrorAnswers() strictFailures {
+	return strictFailures{
+		request: func(w http.ResponseWriter, r *http.Request, _ error) {
+			writeError(w, r, codeMalformedJSON, messageMalformedJSON)
+		},
+		response: func(w http.ResponseWriter, r *http.Request, _ error) {
+			writeError(w, r, codeInternalError, messageInternalError)
+		},
+	}
+}

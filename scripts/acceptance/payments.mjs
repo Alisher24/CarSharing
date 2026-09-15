@@ -7,6 +7,7 @@
 // surface of the demonstration control is not served — so a check that needs a decline writes the
 // demand the way the demonstration control would.
 import { call, sql } from './client.mjs';
+import { asRole } from '../service.mjs';
 import { insertRentalReturning } from './rentalrows.mjs';
 import { endSuiteReservations } from './reservations.mjs';
 
@@ -375,21 +376,7 @@ export const ACCOUNT_PREFIX = 'payments';
 /** The role the application connects as, which is the one whose privileges a check observes. */
 const APPLICATION_ROLE = 'carsharing_app';
 
-/**
- * Runs one statement as the role the application connects as and reports whether it was accepted.
- *
- * The privilege under check is the application's rather than the schema owner's, so a statement the
- * migrator runs proves nothing about it: this sets the role inside one transaction, which is rolled
- * back, and answers whether the database refused what was written.
- *
- * The statement never names a row and never commits, so a template that changes nothing is safe to
- * present: what is observed is the privilege, not the effect.
- */
+/** Runs one statement as the role the application connects as and reports whether it was accepted. */
 export function asApplication(statement) {
-  try {
-    sql(`BEGIN; SET LOCAL ROLE ${APPLICATION_ROLE}; ${statement}; ROLLBACK;`);
-    return { accepted: true, refusal: '' };
-  } catch (failure) {
-    return { accepted: false, refusal: String(failure.stderr ?? failure.message) };
-  }
+  return asRole(APPLICATION_ROLE, statement);
 }

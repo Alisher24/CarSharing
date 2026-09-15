@@ -19,7 +19,7 @@ paths:
     post:
       operationId: deliverMessage
       summary: deliver Message
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-body-limit: 262144
       description: >-
         Atomically store delivery key, exact content and stable receipt. Same key/body replays original 201
@@ -235,7 +235,7 @@ paths:
     post:
       operationId: applyMailDemoAction
       summary: apply Mail Demo Action
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-body-limit: 262144
       description: >-
         Replay action_id without arming a second fault. The next delivery commits its record before dropping
@@ -452,8 +452,8 @@ paths:
     get:
       operationId: getMessages
       summary: get Messages
-      x-implementation-status: planned
-      x-body-limit: 65536
+      x-implementation-status: implemented
+      x-body-limit: 0
       description: >-
         Read-only anonymous localhost inbox. Order (accepted_at DESC, id DESC), forward only. Cursor uses a
         dedicated mailstub HMAC key and binds resource/query scope. No request body is permitted, including an
@@ -609,8 +609,8 @@ paths:
     get:
       operationId: getMessage
       summary: get Message
-      x-implementation-status: planned
-      x-body-limit: 65536
+      x-implementation-status: implemented
+      x-body-limit: 0
       description: >-
         Read-only localhost inbox. Display text without HTML interpretation. No request body is permitted,
         including an empty JSON object.

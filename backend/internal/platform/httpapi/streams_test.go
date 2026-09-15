@@ -132,7 +132,7 @@ func testStreamRouter(t *testing.T, hub EventStream) http.Handler {
 		catalogHandlers: handlers,
 		streams:         streams{hub: hub},
 	}
-	policy := transport{allowedOrigins: map[string]bool{}, authenticate: refuseCredentials}
+	policy := Policy{AllowedOrigins: map[string]bool{}, Authenticate: refuseCredentials}
 	strict := servedapi.NewStrictHandlerWithOptions(served, nil, strictErrorHandlers())
 	return servedRouter(servedapi.Handler(strict), policy)
 }
