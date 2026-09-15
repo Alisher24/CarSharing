@@ -7,8 +7,11 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 )
 
-// microsecond is one unit of the time every rule here is stated in.
-const microsecond = time.Microsecond
+// nanosecond is one unit of the time every rule here is stated in, and the resolution a moment is
+// counted in. Counting a charge in whole microseconds instead would drop the part of one at every
+// boundary a caller names, and a part dropped at every tick makes the same journey cost a little less
+// when it is played in pieces than when it is played in one call.
+const nanosecond = time.Nanosecond
 
 // DrivingMinutesPerSource is how long a whole source lasts while the vehicle moves. The rate of every
 // source follows from its own capacity and this duration, so no absolute consumption is written down a
@@ -23,10 +26,10 @@ const (
 	pausedFractionDenominator = 10
 )
 
-// periodOfDriving is the window a rate is stated over: the microseconds a whole source lasts. Every
+// periodOfDriving is the window a rate is stated over: the nanoseconds a whole source lasts. Every
 // charge is counted in millionths multiplied by this one window, in either mode, so a charge means the
 // same thing whether the vehicle was moving or standing when it was made.
-const periodOfDriving = int64(DrivingMinutesPerSource) * int64(time.Minute/time.Microsecond)
+const periodOfDriving = int64(DrivingMinutesPerSource) * int64(time.Minute/nanosecond)
 
 // Source is one inventory a vehicle carries. What it holds is not stored beside the capacity: a reserve
 // is a rounded number, and one rounded away once per tick would make the same journey cost different
@@ -52,7 +55,7 @@ type Source struct {
 }
 
 // Rate is how fast a source is spent, as a fraction: this many millionths of its unit over this many
-// microseconds. Keeping the fraction rather than a rounded rate is what makes a whole source last
+// nanoseconds. Keeping the fraction rather than a rounded rate is what makes a whole source last
 // exactly as long as the rule says instead of running a little short.
 type Rate struct {
 	units  int64
@@ -86,13 +89,29 @@ func SourceWith(kind fleet.SourceKind, capacity, remaining fleet.Amount) Source 
 }
 
 // Remaining is what is left of the source: what it holds when full, less the whole millionths its
-// windows have charged. It is never below nothing, because a ride that runs out stops spending.
+// windows have charged. The part of a millionth the charge has reached but not completed is not a
+// reserve a caller can act on, so it is not reported; a source that has run out reports nothing, and
+// one that has not always reports something.
 func (s Source) Remaining() fleet.Amount {
-	spent := new(big.Int).Quo(s.Charged, big.NewInt(s.Rate.period)).Int64()
-	if spent >= int64(s.Capacity) {
+	if s.exhausted() {
 		return 0
 	}
+	spent := new(big.Int).Quo(s.Charged, big.NewInt(s.Rate.period)).Int64()
 	return s.Capacity - fleet.Amount(spent)
+}
+
+// exhausted reports whether the source has spent everything it held, which is what a charge reaching
+// the whole of what the source is worth means. The comparison is made in the unit the charge is kept in
+// rather than in a reserve rounded to whole millionths: rounding first left a part of a millionth
+// behind on every window, and a part left behind on every window is a part the next one spends again.
+func (s Source) exhausted() bool {
+	return s.Charged.Cmp(s.budget()) >= 0
+}
+
+// budget is the whole of what the source is worth in the unit the charge is kept in: its capacity,
+// stated in millionths a period, over as many periods as the rate is stated in.
+func (s Source) budget() *big.Int {
+	return new(big.Int).Mul(big.NewInt(int64(s.Rate.units)), big.NewInt(s.Rate.period))
 }
 
 // charge is the sum a reserve read from storage stands for: nothing has been charged yet, so the
@@ -102,39 +121,41 @@ func (s Source) charge(remaining fleet.Amount) *big.Int {
 	return new(big.Int).Mul(big.NewInt(spent), big.NewInt(s.Rate.period))
 }
 
-// consume charges one window of this source. A window costs what the rate says over the time it covers,
-// and only whole millionths are charged: the part of one is never subtracted, so it is not lost either.
-//
-// The charge of a long window is a product of two large counts, so the sum is held exactly.
+// consume charges one window of this source for the time it covers. The charge of a long window is a
+// product of two large counts, so the sum is held exactly.
 func (s Source) consume(rate Rate, duration time.Duration, charged *big.Int) {
-	window := new(big.Int).Mul(big.NewInt(rate.units), big.NewInt(int64(duration/microsecond)))
+	window := new(big.Int).Mul(big.NewInt(rate.units), big.NewInt(duration.Nanoseconds()))
 	charged.Add(charged, window)
 }
 
 // spentAt is the moment inside a window at which this source has nothing left to give. It reports the
 // moment the source runs out, which is the end of the window when it covers the whole of it.
 //
-// A source lasts what it still holds plus whatever of it the windows have spent, and a window asks for
-// what the rate gives over it, so the moment is the first microsecond at which the charge would pass
-// that. Both sides are products of a rate and a window, held exactly rather than as a rate rounded to a
-// whole millionth a microsecond: the division is the moment a ride's ending and its invoice are both
-// read from.
+// The moment is the first nanosecond at which the window would ask for more than the source still
+// holds, and what it holds is read from the charge rather than from a reserve rounded to whole
+// millionths: rounding first left a part of a millionth behind on every window, and a part left behind
+// on every window is a part the next one charges again, which is how a journey split into pieces came
+// to spend less of a reserve than the same journey played in one call.
 func (s Source) spentAt(rate Rate, charged *big.Int, from time.Time, window time.Duration) time.Time {
 	covering := from.Add(window)
-	remaining := s.Remaining()
-	if remaining <= 0 || rate.units <= 0 || rate.period <= 0 {
+	if rate.units <= 0 || rate.period <= 0 || s.exhausted() {
 		return covering
 	}
-	held := new(big.Int).Mul(big.NewInt(int64(remaining)), big.NewInt(rate.period))
-	held.Add(held, charged)
-	// The first whole microsecond that asks for more than the source holds.
+	gives := s.wholeNanosecondsLeft(rate, charged)
+	if gives > window.Nanoseconds() {
+		return covering
+	}
+	return from.Add(time.Duration(gives) * nanosecond)
+}
+
+// wholeNanosecondsLeft is how many whole nanoseconds of this window the source can still be charged
+// for, counted from the start of the window. A source that has given everything answers nothing.
+//
+// What the source is worth is stated over the period of the rate it is spent at, which is what makes a
+// paused vehicle last ten times as long on the same reserve without the rate ever being rounded.
+func (s Source) wholeNanosecondsLeft(rate Rate, charged *big.Int) int64 {
+	held := new(big.Int).Mul(big.NewInt(rate.units), big.NewInt(rate.period))
+	held.Sub(held, charged)
 	needed := new(big.Int).Add(held, big.NewInt(rate.units-1))
-	needed.Quo(needed, big.NewInt(rate.units))
-	if needed.Sign() <= 0 {
-		return from
-	}
-	if needed.Cmp(big.NewInt(window.Microseconds())) > 0 {
-		return covering
-	}
-	return from.Add(time.Duration(needed.Int64()) * microsecond)
+	return needed.Quo(needed, big.NewInt(rate.units)).Int64()
 }

@@ -2,6 +2,8 @@ package simulation
 
 import (
 	"math"
+	"math/big"
+	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 )
@@ -15,24 +17,30 @@ type RouteID string
 // the place the same journey covers in one step: nothing is rounded away between two steps.
 type Path int64
 
-// Microseconds is a duration counted in the unit every rule here is stated in.
-type Microseconds int64
-
-// The speed every vehicle moves at while it is driving, as a fraction of a metre per microsecond.
-// Thirty kilometres an hour is exactly twenty-five thirds of a metre a second; keeping the fraction
-// rather than its decimal is what keeps the distance of a long journey exact.
+// The speed every vehicle moves at while it is driving: twenty-five thirds of a millimetre a
+// microsecond, which is thirty kilometres an hour exactly. The distance of a window is counted from
+// nanoseconds, the resolution a moment has, so a journey split into many short steps covers what the
+// same journey covers in one call.
 const (
-	speedNumerator   = 25
-	speedDenominator = 3
+	speedNumerator            = 25
+	speedDenominator          = 3
+	nanosecondsPerMicrosecond = 1_000
 
 	metresPerKilometre      = 1_000
 	millimetresPerMetre     = 1_000
 	millimetresPerKilometre = metresPerKilometre * millimetresPerMetre
 )
 
-// travelled is how far a vehicle moves in one window at the declared speed.
-func travelled(duration Microseconds) Path {
-	return Path(int64(duration) * speedNumerator / speedDenominator)
+// travelled is how far a vehicle moves in one window at the declared speed, in whole millimetres. The
+// last millimetre is the one the vehicle is nearest to, so a long window and the short windows that
+// make it up agree rather than each losing the part of a millimetre they end in.
+func travelled(window time.Duration) Path {
+	// The speed over one nanosecond is the fraction of a millimetre the numerator and the denominator
+	// state, so the window moves the vehicle that many times its nanoseconds, rounded to the nearest.
+	covered := new(big.Int).Mul(big.NewInt(window.Nanoseconds()), big.NewInt(speedNumerator))
+	perMillimetre := big.NewInt(speedDenominator * nanosecondsPerMicrosecond)
+	covered.Add(covered, new(big.Int).Quo(perMillimetre, big.NewInt(2)))
+	return Path(new(big.Int).Quo(covered, perMillimetre).Int64())
 }
 
 // Route is one fixed closed trajectory. It is a loop, so a vehicle that reaches its end continues

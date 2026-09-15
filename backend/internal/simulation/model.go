@@ -122,8 +122,11 @@ func (s State) Journey(spans []Span, target time.Time) (Motion, State, error) {
 	}
 
 	moved := s.clone()
-	exhausted, depleted := moved.burn(spans)
-	moved.Path = s.Path + covered(spans)
+	exhausted, depleted, charged := moved.burn(spans)
+	// A journey that ran out ended where the reserve did, so the distance is read from the time the
+	// sources were charged for rather than from the windows the caller named: a vehicle that stopped two
+	// minutes into a five-minute window stands two minutes along, not five.
+	moved.Path = s.Path + travelled(charged)
 	moved.IsOffRoute = s.IsOffRoute && moved.Path < s.JoinPath
 	moved.Position = moved.at()
 	if depleted.IsZero() {
@@ -156,38 +159,47 @@ func (s State) clone() State {
 }
 
 // burn spends the reserves of the vehicle over the whole journey, in order. It reports the sources the
-// journey used up and the first moment at which no source could carry the vehicle any further, which is
-// where a ride that runs out ends rather than where the command that noticed it arrived.
-func (s *State) burn(spans []Span) ([]fleet.SourceKind, time.Time) {
+// journey used up, the first moment at which no source could carry the vehicle any further, which is
+// where a ride that runs out ends rather than where the command that noticed it arrived, and the time
+// the sources were charged for while the vehicle was moving. The last of the three is the distance the
+// vehicle really covered: a vehicle that ran out does not travel the part of the window after it.
+func (s *State) burn(spans []Span) ([]fleet.SourceKind, time.Time, time.Duration) {
 	var exhausted []fleet.SourceKind
+	var inMotion time.Duration
 	for _, span := range spans {
 		if !spends(span.Mode) {
 			continue
 		}
-		used, ranOut := s.consume(span)
+		used, charged, ranOut := s.consume(span)
 		exhausted = append(exhausted, used...)
+		if span.Mode == Driving {
+			inMotion += charged
+		}
 		if !ranOut.IsZero() {
-			return exhausted, ranOut
+			return exhausted, ranOut, inMotion
 		}
 	}
-	return exhausted, time.Time{}
+	return exhausted, time.Time{}, inMotion
 }
 
 // consume takes one window out of the sources the vehicle is moving on. It reports the sources the
-// window used up and the moment the vehicle ran out, or the zero moment when it still has something to
-// move on.
+// window used up, the time of the window that was charged for, and the moment the vehicle ran out, or
+// the zero moment when it still has something to move on.
 //
 // The window is handed to a source as one stretch rather than as one subtraction per tick: what a
 // stretch costs follows from its duration and the rate alone, so nothing depends on how often the model
-// was asked to move. A source that runs out inside the window ends its stretch there, which leaves the
-// part of the window after it to the next source.
-func (s *State) consume(span Span) ([]fleet.SourceKind, time.Time) {
+// was asked to move. A source that runs out inside the window ends its stretch there, and the part of
+// the window after it belongs to the next source, so none of the window is lost at the switch.
+func (s *State) consume(span Span) ([]fleet.SourceKind, time.Duration, time.Time) {
 	var exhausted []fleet.SourceKind
+	var charged time.Duration
 	from := span.From
-	for {
+	for from.Before(span.To) {
 		position, found := s.current()
 		if !found {
-			return exhausted, from
+			// Nothing the vehicle carries can move it any further, so it stops where its last source
+			// did rather than at the end of a window it never covered.
+			return exhausted, charged, from
 		}
 		source := s.Sources[position]
 		rate := source.DrivingRate()
@@ -197,21 +209,26 @@ func (s *State) consume(span Span) ([]fleet.SourceKind, time.Time) {
 		until := source.spentAt(rate, source.Charged, from, span.To.Sub(from))
 		source.consume(rate, until.Sub(from), source.Charged)
 		s.Sources[position] = source
-		if source.Remaining() > 0 {
-			return exhausted, time.Time{}
-		}
-		exhausted = append(exhausted, source.Kind)
+		charged += until.Sub(from)
 		if until.Equal(span.To) {
-			// The source covered the whole window and is spent at the end of it, which is where a ride
-			// that runs out ends.
-			return exhausted, until
+			// The source covered the whole window, so the next window begins wherever the vehicle
+			// carries on: a source ending exactly with a window is one of the sources the vehicle has
+			// used up, not a vehicle that has run out.
+			if source.Remaining() > 0 {
+				return exhausted, charged, time.Time{}
+			}
+			exhausted = append(exhausted, source.Kind)
+			if _, continues := s.current(); continues {
+				return exhausted, charged, time.Time{}
+			}
+			return exhausted, charged, span.To
 		}
 		// The source ran out inside the window, and the part of the window after it belongs to whatever
-		// the vehicle carries next. The window is narrowed to that part, so the next source is charged
-		// for what is left of it rather than for the whole of it.
-		span.From = until
+		// the vehicle carries next.
+		exhausted = append(exhausted, source.Kind)
 		from = until
 	}
+	return exhausted, charged, time.Time{}
 }
 
 // spends reports whether a vehicle in this mode uses any of its reserve at all. A free or reserved
@@ -244,18 +261,6 @@ func checkState(s State) error {
 		}
 	}
 	return nil
-}
-
-// covered is the distance a sequence of spans travels at the declared speed. Only the driving mode
-// moves: a paused vehicle stands still, and a free or reserved one has nowhere to go.
-func covered(spans []Span) Path {
-	distance := Path(0)
-	for _, span := range spans {
-		if span.Mode == Driving {
-			distance += travelled(Microseconds(span.To.Sub(span.From) / microsecond))
-		}
-	}
-	return distance
 }
 
 // checkSpans refuses a journey the model cannot account for: one that begins before the moment the

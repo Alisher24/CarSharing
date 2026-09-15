@@ -2,6 +2,7 @@ package simulation_test
 
 import (
 	"errors"
+	"fmt"
 	"math/big"
 	"testing"
 	"time"
@@ -26,15 +27,21 @@ var capacity = map[fleet.SourceKind]fleet.Amount{
 
 // lasting is what a source of this capacity holds to last this long of driving. A check states how long
 // a reserve lasts rather than how many millionths it is, because the rules being checked are about
-// time: a sixtieth of a source is a minute, and a tenth of one is six minutes.
+// time: a sixtieth of a source is a minute, and a tenth of one is six minutes. The part of a millionth
+// a division leaves is rounded up rather than away, so a reserve stated for a duration covers the whole
+// of it instead of ending a fraction short of it.
 func lasting(kind fleet.SourceKind, lasts time.Duration) fleet.Amount {
-	held := new(big.Int).Mul(big.NewInt(int64(capacity[kind])), big.NewInt(int64(lasts/time.Microsecond)))
-	held.Quo(held, big.NewInt(periodOfDriving))
+	held := new(big.Int).Mul(big.NewInt(int64(capacity[kind])), big.NewInt(lasts.Nanoseconds()))
+	window := big.NewInt(periodOfDriving)
+	held.Add(held, new(big.Int).Sub(window, big.NewInt(1)))
+	held.Quo(held, window)
 	return fleet.Amount(held.Int64())
 }
 
-// periodOfDriving is the window a whole source lasts, which is the hour a capacity is stated over.
-const periodOfDriving = 3_600_000_000
+// periodOfDriving is the window a whole source lasts, which is the hour a capacity is stated over. It is
+// the model's own unit, written here because a check that states a reserve as a duration needs it, so
+// the two must agree on it.
+const periodOfDriving = 3_600_000_000_000
 
 // vehicle is a state the checks start from: the reserves they name, standing at the beginning of its
 // route at epoch.
@@ -229,8 +236,38 @@ func TestRunningOutSwitchesToTheReserveInBothOrders(t *testing.T) {
 	}
 }
 
+// A vehicle reaches its reserve when one source ends, whether it ends inside a window or exactly with
+// one. A source that ends exactly with a window leaves nothing of that window to the next source, and
+// the vehicle carries on in the window after it: reading the end of a window as the end of the journey
+// stopped a vehicle with a full tank beside it.
+func TestASourceEndingWithAWindowHandsOverToTheReserve(t *testing.T) {
+	start := vehicle(fleet.PowertrainHybrid, map[fleet.SourceKind]fleet.Amount{
+		fleet.SourceBattery:  lasting(fleet.SourceBattery, time.Minute),
+		fleet.SourceGasoline: capacity[fleet.SourceGasoline],
+	})
+	first, after, err := start.Journey(driving(time.Minute), epoch.Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, depleted := first.DepletedBy(); depleted {
+		t.Fatal("a vehicle that ended its battery exactly with a window was reported as run out")
+	}
+
+	later, moved, err := after.Journey([]simulation.Span{
+		{Mode: simulation.Driving, From: epoch.Add(time.Minute), To: epoch.Add(2 * time.Minute)},
+	}, epoch.Add(2*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, depleted := later.DepletedBy(); depleted {
+		t.Fatal("the window after the switch reported a vehicle with a usable reserve as run out")
+	}
+	if lost := spent(moved, after, fleet.SourceGasoline); lost <= 0 {
+		t.Errorf("the reserve spent %d in the window after the battery ended", lost)
+	}
+}
+
 func TestTheUnusedPartOfTheWindowContinuesOnTheReserve(t *testing.T) {
-	// A sixtieth of the priority source lasts one minute of driving, so a window of six minutes must
 	// spend five minutes of the reserve on top of it: none of the window is lost at the switch.
 	start := vehicle(fleet.PowertrainHybrid, map[fleet.SourceKind]fleet.Amount{
 		fleet.SourceBattery:  capacity[fleet.SourceBattery] / 60,
@@ -278,43 +315,59 @@ func TestAnEmptyBatteryBesideAFullTankIsNotDepletion(t *testing.T) {
 	}
 }
 
+// A journey is cut into windows a caller names, and a caller's boundaries are whatever the clock says:
+// the same journey is checked whole, cut into a few long windows, and cut into thousands of short ones.
 func TestSplittingAJourneyChangesNothing(t *testing.T) {
-	// Both magnitudes are checked: a journey split into pieces longer than the reserve lasts, and one
-	// split into thousands of pieces that each end while it still holds something.
-	start := vehicle(fleet.PowertrainHybrid, map[fleet.SourceKind]fleet.Amount{
-		fleet.SourceBattery:  capacity[fleet.SourceBattery] / 20,
-		fleet.SourceGasoline: capacity[fleet.SourceGasoline] / 30,
-	})
-	const wholeWindow = 4 * time.Minute
+	for _, check := range []struct {
+		wholeWindow time.Duration
+		pieces      []int
+	}{
+		// A window the model can cut into whole nanoseconds, so every boundary falls where the reserve
+		// ends as well.
+		{wholeWindow: 4 * time.Minute, pieces: []int{1, 5, 600, 5000}},
+		// A window it cannot: a seventh of four minutes is not a whole number of nanoseconds, and the
+		// pieces a caller names are the pieces it is given.
+		{wholeWindow: 4 * time.Minute, pieces: []int{7}},
+	} {
+		for _, pieces := range check.pieces {
+			t.Run(fmt.Sprintf("%d pieces of %v", pieces, check.wholeWindow), func(t *testing.T) {
+				// Both magnitudes are checked: a journey split into pieces longer than the reserve
+				// lasts, and one split into thousands of pieces that each end while it still holds
+				// something.
+				start := vehicle(fleet.PowertrainHybrid, map[fleet.SourceKind]fleet.Amount{
+					fleet.SourceBattery:  capacity[fleet.SourceBattery] / 20,
+					fleet.SourceGasoline: capacity[fleet.SourceGasoline] / 30,
+				})
+				one, _, err := start.Journey(driving(check.wholeWindow), epoch.Add(check.wholeWindow))
+				if err != nil {
+					t.Fatal(err)
+				}
 
-	one, _, err := start.Journey(driving(wholeWindow), epoch.Add(wholeWindow))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, pieces := range []int{1, 7, 600, 5000} {
-		state := start
-		spans := equalSpans(pieces, wholeWindow)
-		for _, span := range spans {
-			_, state, err = state.Journey([]simulation.Span{span}, span.To)
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
-		played, _, err := start.Journey(spans, epoch.Add(wholeWindow))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got, want := depletedAt(played), depletedAt(one); !got.Equal(want) {
-			t.Errorf("%d pieces ran out at %v, one window at %v", pieces, got, want)
-		}
-		if got, want := played.Position, one.Position; !samePlace(got, want) {
-			t.Errorf("%d pieces in one call ended at %v, one window at %v", pieces, got, want)
-		}
-		if got, want := state.Position, one.Position; !samePlace(got, want) {
-			t.Errorf("%d separate ticks ended at %v, one window at %v", pieces, got, want)
-		}
-		if got, want := state.Holding(), one.Holding; !sameAmounts(got, want) {
-			t.Errorf("%d separate ticks left %v, one window left %v", pieces, got, want)
+				state := start
+				spans := equalSpans(pieces, check.wholeWindow)
+				for _, span := range spans {
+					_, state, err = state.Journey([]simulation.Span{span}, span.To)
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+				played, _, err := start.Journey(spans, epoch.Add(check.wholeWindow))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got, want := depletedAt(played), depletedAt(one); !got.Equal(want) {
+					t.Errorf("%d pieces ran out at %v, one window at %v", pieces, got, want)
+				}
+				if got, want := played.Position, one.Position; !samePlace(got, want) {
+					t.Errorf("%d pieces in one call ended at %v, one window at %v", pieces, got, want)
+				}
+				if got, want := state.Position, one.Position; !samePlace(got, want) {
+					t.Errorf("%d separate ticks ended at %v, one window at %v", pieces, got, want)
+				}
+				if got, want := state.Holding(), one.Holding; !sameAmounts(got, want) {
+					t.Errorf("%d separate ticks left %v, one window left %v", pieces, got, want)
+				}
+			})
 		}
 	}
 }
