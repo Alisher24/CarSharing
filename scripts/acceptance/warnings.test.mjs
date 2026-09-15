@@ -63,6 +63,13 @@ const FINAL_SECOND_REMAINING_MS = 9000;
 /** The zone every stored moment is rendered in, which is the one the contract publishes. */
 const STORED_MOMENT_ZONE = 'UTC';
 
+/**
+ * The zone the service day is counted in, which is the one the day's allowance is judged by. It is
+ * the timezone the seed writes into `bootstrap_metadata`, restated here because a check that dates a
+ * row of its own has to name it.
+ */
+const SERVICE_DAY_ZONE = 'Asia/Bishkek';
+
 before(async () => {
   await waitForReady();
 });
@@ -564,7 +571,7 @@ describe('an overdue reservation another command meets', () => {
 
       // The release stands, so the vehicle is free; dating the spent reservation to the day before
       // leaves today's allowance unspent and the same account takes it again.
-      dateReservation(rentalId, "(now() AT TIME ZONE 'Asia/Bishkek')::date - interval '1 day'");
+      dateReservation(rentalId, `(now() AT TIME ZONE '${SERVICE_DAY_ZONE}')::date - interval '1 day'`);
       const taken = await reserve(vehicleId, newCommandKey(), account);
       assert.equal(taken.status, 201, taken.text);
     } finally {
@@ -604,6 +611,11 @@ describe('an overdue reservation another command meets', () => {
  * because a check has to reach a moment the commands of this build cannot produce on demand; it
  * takes the conditions of the price list in force, so the row says what a reservation of this build
  * says.
+ *
+ * The moment it was reserved is never earlier than the start of the service day, and the reservation
+ * never ends before it begins. The day's allowance counts the reservations of one day, so a check that
+ * dated its row "twenty minutes ago" would spend yesterday's allowance whenever it ran in the first
+ * minutes of a service day, and a check about the allowance would then meet no refusal at all.
  */
 function prepareReservation({
   account,
@@ -612,14 +624,20 @@ function prepareReservation({
   startedSecondsAgo = RESERVATION_STARTED_SECONDS_AGO,
 }) {
   const id = randomUUID();
+  const reservedAt =
+    `greatest(date_trunc('day', clock_timestamp() AT TIME ZONE '${SERVICE_DAY_ZONE}')` +
+    ` AT TIME ZONE '${SERVICE_DAY_ZONE}',` +
+    ` clock_timestamp() - make_interval(secs => ${startedSecondsAgo}))`;
   sql(
     insertRental({
       id,
       email: account.email,
       vehicleId,
       stage: 'reserved',
-      reservedAt: `clock_timestamp() - make_interval(secs => ${startedSecondsAgo})`,
-      expiresAt: `clock_timestamp() + make_interval(secs => ${deadlineSeconds})`,
+      reservedAt,
+      expiresAt:
+        `greatest(${reservedAt} + interval '1 second',` +
+        ` clock_timestamp() + make_interval(secs => ${deadlineSeconds}))`,
     }),
   );
   return id;
