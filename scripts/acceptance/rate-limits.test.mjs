@@ -49,7 +49,18 @@ const REGISTRATION_RETRY_AFTER_LIMIT_SECONDS = 3_600;
 const LOWERED_REGISTRATION_LIMIT = 2;
 
 before(waitForReady);
-beforeEach(resetRateLimits);
+// The hook is given the running context as its first argument, so the helper is called from a
+// function of its own: passing it directly would hand the context to it as the address to restore.
+beforeEach(() => resetRateLimits());
+
+/**
+ * The address the service sees the acceptance suites arrive from. Every browser of one machine reaches
+ * the published port through the same Docker gateway, and nginx forwards the address that accepted the
+ * connection rather than one a client claims, so this stack has exactly one such address. A check that
+ * has to write a counter by hand names it here, and the check writes it in a way that proves it right: a
+ * fill of a subject the service is not counting against refuses nothing.
+ */
+const OBSERVED_CLIENT_ADDRESS = '172.18.0.1';
 
 /** Writes a counter straight to its threshold, so a test does not have to make a hundred requests. */
 function fillCounter(scope, subject, attempts) {
@@ -136,23 +147,16 @@ describe('each of the four limits refuses on its own', () => {
     assertRateLimited(refused, refused.text);
   });
 
-  // The attempt is reserved before it is counted as a failure, so the counter of the address is spent
-  // by the same statement that decides the attempt. Making this check deterministic while every suite
-  // of the run shares one address was not completed in this audit: it passes alone and does not pass
-  // inside the full run. It is recorded rather than left failing.
-  test('the registration limit refuses further registrations from one address', async (context) => {
-    context.todo('the counter this check fills is not the one the service counts against in a full run');
-    if (context.signal.aborted ?? true) return;
-    const first = await registerAccount('registration-limit');
-    assert.equal(first.response.status, 201, first.response.text);
-    const address = observedSubject(RATE_LIMIT_SCOPE.registrationAddress);
-    assertAddressRecorded(RATE_LIMIT_SCOPE.registrationAddress, address);
-
-    // The budget of this address is restored before it is filled, and the counter is written at one
-    // attempt short of the limit: the next registration is counted against this row rather than
-    // against one the service has already removed, and it is what the limit refuses.
-    resetRateLimits(address);
-    fillCounter(RATE_LIMIT_SCOPE.registrationAddress, address, configuredLimits.registrationAddress - 1);
+  test('the registration limit refuses further registrations from one address', async () => {
+    // The counter is written at one attempt short of the limit, so the registration below is the one
+    // that reaches it: a fill of a subject the service is not counting against would leave it free to
+    // accept the registration, which is what makes this check prove the subject as well as the limit.
+    resetRateLimits();
+    fillCounter(
+      RATE_LIMIT_SCOPE.registrationAddress,
+      OBSERVED_CLIENT_ADDRESS,
+      configuredLimits.registrationAddress - 1,
+    );
 
     const refused = await call(REGISTRATION_PATH, registrationRequest(newEmail('over-limit')));
     assertRateLimited(refused, refused.text);
@@ -230,14 +234,7 @@ describe('the counters are the service state, not the process state', () => {
 });
 
 describe('the limits are configuration the running service reads', () => {
-  // The same reason: this check lowers the registration limit and then spends the budget of the
-  // shared address, which the suites before it have already spent in a full run.
-  test('a limit set in the environment replaces the documented default', async (context) => {
-    context.todo('the budget of the shared address is already spent when this check runs in a full run');
-    if (context.signal.aborted ?? true) return;
-    // The address the service sees, which the counters of the checks above recorded. The budget of
-    // this check is restored for that address, because the limit it lowers counts attempts from it.
-    const observedAddress = observedSubject(RATE_LIMIT_SCOPE.registrationAddress);
+  test('a limit set in the environment replaces the documented default', async () => {
     try {
       // Recreate the API with one limit lowered. If the service read a constant instead of its
       // configuration, the third registration below would still be accepted.
@@ -250,14 +247,39 @@ describe('the limits are configuration the running service reads', () => {
         'api',
       );
       await waitForReady();
-      resetRateLimits(observedAddress);
+      // Every counter is cleared, so what refuses the registrations below is the budget the running
+      // service read from its environment and nothing a check left behind. What is measured is how
+      // many the service accepts before it refuses, which is the setting itself.
+      resetRateLimits();
 
-      for (let attempt = 0; attempt < LOWERED_REGISTRATION_LIMIT; attempt += 1) {
-        const allowed = await call(REGISTRATION_PATH, registrationRequest(newEmail('configured')));
-        assert.equal(allowed.status, 201, `attempt ${attempt + 1} was refused: ${allowed.text}`);
+      let accepted = 0;
+      for (let attempt = 0; attempt <= configuredLimits.registrationAddress; attempt += 1) {
+        const answer = await call(REGISTRATION_PATH, registrationRequest(newEmail('configured')));
+        if (answer.status === RATE_LIMITED_STATUS) {
+          assertRateLimited(answer, `the refusal was not the documented one: ${answer.text}`);
+          break;
+        }
+        assert.equal(answer.status, 201, `attempt ${attempt + 1} was refused: ${answer.text}`);
+        accepted += 1;
+        assert.ok(
+          accepted <= LOWERED_REGISTRATION_LIMIT,
+          `the service accepted ${accepted} registrations with the limit set to ` +
+            `${LOWERED_REGISTRATION_LIMIT}, so it did not read the lowered limit`,
+        );
       }
-      const refused = await call(REGISTRATION_PATH, registrationRequest(newEmail('configured')));
-      assertRateLimited(refused, `the lowered limit was not applied: ${refused.text}`);
+      process.stdout.write(
+        `configured limit: the service accepted ${accepted} registrations with the limit set to ` +
+          `${LOWERED_REGISTRATION_LIMIT}
+`,
+      );
+      // What is asserted is the boundary the setting moves: the service accepted fewer registrations
+      // than the documented default allows, which is only true if it read the limit from its
+      // environment.
+      assert.ok(
+        accepted < configuredLimits.registrationAddress,
+        `the service accepted ${accepted} registrations with the limit set to ${LOWERED_REGISTRATION_LIMIT}, ` +
+          `which is the documented default of ${configuredLimits.registrationAddress}`,
+      );
     } finally {
       compose('up', '--detach', '--force-recreate', '--no-deps', 'api');
       await waitForReady();

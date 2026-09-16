@@ -54,7 +54,9 @@ const ACCEPTED_PASSWORDS = new Map([
 before(waitForReady);
 
 // Every suite shares one address, so each test starts with the rate limits untouched by the last.
-beforeEach(resetRateLimits);
+// The hook is given the running context as its first argument, so the helper is called from a
+// function of its own: passing it directly would hand the context to it as the address to restore.
+beforeEach(() => resetRateLimits());
 
 function countRows(table) {
   return Number(sql(`SELECT count(*) FROM ${table}`));

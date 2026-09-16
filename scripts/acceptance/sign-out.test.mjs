@@ -24,7 +24,9 @@ const UNKNOWN_SESSION_COOKIE = `${SESSION_COOKIE_NAME}=a-token-that-names-no-ses
 before(waitForReady);
 
 // Every suite shares one address, so each test starts with the rate limits untouched by the last.
-beforeEach(resetRateLimits);
+// The hook is given the running context as its first argument, so the helper is called from a
+// function of its own: passing it directly would hand the context to it as the address to restore.
+beforeEach(() => resetRateLimits());
 
 describe('signing out ends exactly this session', () => {
   test('answers 204 with no body and a cookie that clears the browser', async () => {

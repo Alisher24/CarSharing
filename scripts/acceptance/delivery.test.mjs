@@ -65,14 +65,19 @@ describe('two workers deliver one task once', () => {
   });
 
   // The heartbeat is the worker's own report of what it delivered, what failed, how long the queue is
-  // and how old its oldest task is. The line exists and was read by hand from the running worker
-  // (`docker compose logs worker` prints one `worker heartbeat` every thirty seconds), but the check
-  // below could not read it inside the suite: the service the check restarts is the one whose log it
-  // then has to find, and the line was not there when it looked. The report of this audit says so
-  // rather than this check pretending to have verified it.
+  // and how old its oldest task is, and the line is there: `docker compose logs worker` prints one
+  // `worker heartbeat` every thirty seconds, measured by hand as
+  // `{"delivered":161,"failed":0,"pending":0,"oldest_pending":"0s"}` on an idle queue.
+  //
+  // Reading it inside this check is what did not work: the check needs the queue to hold something for
+  // the numbers to be worth comparing, and the only way this suite puts a task in the queue is to stop
+  // the worker first — a worker that is not running writes no heartbeat at all. Making it work needs a
+  // task that is owed while a worker runs, which means either a longer wait for a delivery to fail or a
+  // fault injected into a delivery. Both are a change to the check rather than a defect in the worker,
+  // and this audit records the case as not verified instead of claiming it.
   test('the worker reports its numbers every thirty seconds', async (context) => {
     scaleWorkers(1);
-    context.todo('reading the heartbeat from the worker the check started was not completed in this audit');
+    context.todo('the suite cannot read a heartbeat while it is also stopping the worker to build a queue');
   });
 });
 
@@ -141,16 +146,28 @@ async function rideWithAnInvoiceOwed() {
   return { invoiceId, rentalId };
 }
 
+/** How many worker replicas are running, as Compose reports them. */
+function runningWorkers() {
+  return compose('ps', '--format', '{{.Service}} {{.State}}')
+    .split('\n')
+    .filter((line) => line.startsWith('worker ') && line.includes('running')).length;
+}
+
 /** Sets the number of worker replicas, which is how one worker becomes two or none. */
 async function scaleWorkers(count) {
-  // A stopped container would be started again by the next `up`, so the replicas are removed rather
-  // than stopped: what the count asks for is exactly the workers that run afterwards.
-  execFileSync('docker', ['compose', 'rm', '--stop', '--force', 'worker'], {
-    cwd: repositoryRoot,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  if (count === 0) return;
+  // A worker that is already running is left alone: it is a process that has been alive long enough to
+  // report on itself, and restarting it for every check would throw that away.
+  if (runningWorkers() === count) return;
+  if (count === 0) {
+    // A stopped container would be started again by the next `up`, so the replicas are removed rather
+    // than stopped: what the count asks for is exactly the workers that run afterwards.
+    execFileSync('docker', ['compose', 'rm', '--stop', '--force', 'worker'], {
+      cwd: repositoryRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return;
+  }
   compose('up', '--detach', '--scale', `worker=${count}`, '--no-recreate', 'worker');
   await until(() => runningWorkers() === count, `${count} workers never started`);
 }
@@ -198,44 +215,6 @@ async function until(reached, complaint) {
     if (Date.now() > deadline) throw new Error(`${complaint} within ${DELIVERY_PATIENCE_MS} ms`);
     await new Promise((resolve) => setTimeout(resolve, DELIVERY_POLL_MS));
   }
-}
-
-/**
- * Waits for one worker to write its heartbeat and reads the numbers it states. The line is JSON in the
- * service's own log, which is where the count of delivered and failed tasks, the size of the queue and
- * the age of its oldest task are published.
- */
-async function untilHeartbeat(notBefore) {
-  return until(() => {
-    const line = compose('logs', '--no-color', '--tail', '200', 'worker')
-      .split('\n')
-      .filter((entry) => entry.includes('worker heartbeat'))
-      .at(-1);
-    if (!line) return undefined;
-    // Every line of the service's log is one JSON object, so the line is parsed from its first brace
-    // to its last rather than by taking everything after the first.
-    try {
-      const parsed = JSON.parse(line.slice(line.indexOf('{'), line.lastIndexOf('}') + 1));
-      // Only a heartbeat written after this check began counts: an older line is another process's
-      // report about a queue this check had not touched yet.
-      const written = Math.floor(Date.parse(parsed.time) / 1000);
-      return written >= notBefore ? parsed : undefined;
-    } catch {
-      return undefined;
-    }
-  }, 'the worker never reported a heartbeat');
-}
-
-/** How many of one ride's tasks a worker holds under a lease right now. */
-function claimedTasks(resourceId) {
-  return Number(sql(`SELECT count(*) FROM outbox WHERE resource_id = '${resourceId}' AND lease_token IS NOT NULL`));
-}
-
-/** How many worker replicas are running, as Compose reports them. */
-function runningWorkers() {
-  return compose('ps', '--format', '{{.Service}} {{.State}}')
-    .split('\n')
-    .filter((line) => line.startsWith('worker ') && line.includes('running')).length;
 }
 
 /** Removes the rows this suite wrote, so the prepared demonstration can be put back. */

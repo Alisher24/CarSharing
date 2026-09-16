@@ -212,19 +212,18 @@ export async function callUntilRefused(action, { allowedAttempts, expectedStatus
 
 /**
  * Clears every rate-limit counter, which is the harness standing in for the passage of time: in
- * production a window ends on its own, and here a suite ends it between checks. A suite that lowers a
- * limit to observe it passes the address it observed, so the budget it is about to spend is restored
- * even when this installation has recorded no counter for that address yet.
+ * production a window ends on its own, and here a suite ends it between checks. A check that needs an
+ * address to be known again passes it, and the budget is then spent at the age a window that has just
+ * ended has: the next attempt against it starts a fresh window and is the first of that budget.
  *
- * The address is written as one spent attempt rather than as an empty counter, because an attempt is
- * the whole of what a counter holds: a row stating that nothing was attempted is the second way of
- * saying the row is not there, and the table says so itself.
+ * A counter cannot hold zero attempts — an attempt is the whole of what it holds — so a budget cannot
+ * be handed back as an empty row. Handing it back as an old window is what the passage of time does.
  */
 export function resetRateLimits(observedAddress) {
   sql('DELETE FROM rate_limit_counters');
   if (observedAddress === undefined) return;
   sql(
     `INSERT INTO rate_limit_counters (scope, subject, window_started_at, attempts)
-     VALUES ('${REGISTRATION_SCOPE}', '${observedAddress}', now(), 1)`,
+     VALUES ('${REGISTRATION_SCOPE}', '${observedAddress}', now() - interval '2 hours', 1)`,
   );
 }
