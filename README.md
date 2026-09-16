@@ -337,7 +337,7 @@ Stylelint проверяет CSS, `gofmt` — Go. Хук `pre-commit` форма
 Сгенерированный код исключён из форматирования: он обновляется только генерацией.
 
 Версии Go/Node и образы закреплены в Dockerfiles/Compose, зависимости — в
-`go.mod`/`go.sum` и `package-lock.json`. Использованы React 19.3, react-router 7.11,
+`go.mod`/`go.sum` и `package-lock.json`. Использованы React 19.3, react-router 7.18,
 TypeScript 7.0, Vite 8.3, chi 5.3, pgx 5.11 и goose 3.28. [Vite поддерживает Node 24](https://vite.dev/guide/),
 [PostGIS использует путь volume PostgreSQL 18](https://github.com/postgis/docker-postgis).
 Обязательный Repository checks параллельно проверяет форматирование и стили,
