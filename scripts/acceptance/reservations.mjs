@@ -2,6 +2,7 @@
 // mutation requires, the queries that read what the database actually holds, and the barrier that
 // starts several requests at the same moment.
 import { randomUUID } from 'node:crypto';
+import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
 import { call, compose, registerAccount, resetRateLimits, serviceOrigin, sql } from './client.mjs';
 
@@ -48,17 +49,20 @@ const madeAccounts = [];
 const madeRentals = [];
 
 /**
- * How many registrations one address may make before the service refuses the next one. The suites
- * share one address, and clearing the counters is the harness standing in for the passage of time,
- * which is also how access returns in production.
+ * How many registrations this address makes before the harness restores its budget. The suites share
+ * one address and the registration limit counts every attempt from it, so a suite that registers a
+ * handful of accounts would otherwise start failing on a limit that has nothing to do with what it
+ * checks. Restoring the budget is the harness standing in for the passage of time, exactly as
+ * `resetRateLimits` does for the suites that clear it themselves.
  */
-const REGISTRATIONS_BEFORE_RESET = 8;
+const REGISTRATIONS_BEFORE_RESET = 4;
 
 /** Registers a fresh account, which is the only way these suites obtain a signed-in person. */
 export async function newAccount(prefix = 'reservations') {
   if (madeAccounts.length % REGISTRATIONS_BEFORE_RESET === 0) resetRateLimits();
 
   const account = await registerAccount(prefix);
+  assert.equal(account.response.status, 201, `the account ${account.email} was refused: ${account.response.text}`);
   madeAccounts.push(account);
   return account;
 }

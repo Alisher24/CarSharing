@@ -20,6 +20,8 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/platform/config"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/periodic"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/ratelimit"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/sessions"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -80,6 +82,9 @@ func work(ctx context.Context, pool *pgxpool.Pool, letters config.InternalClient
 	go periodic.Run(ctx, "signal retention", events.RetentionInterval, events.NewReaper(pool).Delete)
 	go periodic.Run(ctx, "command result retention", idempotency.RetentionInterval,
 		idempotency.NewReaper(pool).Delete)
+	go periodic.Run(ctx, "sign-in counter retention", ratelimit.RetentionInterval,
+		ratelimit.NewReaper(pool).Delete)
+	go periodic.Run(ctx, "session retention", sessions.RetentionInterval, sessions.NewReaper(pool).Delete)
 
 	slog.Info("worker started")
 	<-ctx.Done()

@@ -1,15 +1,14 @@
 // Package ratelimit counts attempts per subject in PostgreSQL so that guessing a password costs an
 // attacker time. Counters are deliberately kept outside the transaction of the attempt they count:
 // a refused sign-in rolls its transaction back, and a counter that rolled back with it would leave
-// the attempt free.
+// the attempt free. An attempt is counted by the same statement that decides whether it fits, so a
+// burst of simultaneous attempts cannot each be told that the budget still has room.
 package ratelimit
 
 import (
 	"context"
-	"errors"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -37,11 +36,17 @@ type Limits struct {
 // what the caller advertises in Retry-After, so it is the real remaining time rather than the whole
 // window.
 type Reached struct {
-	Scope Scope
-	Wait  time.Duration
+	// Refused reports that the limit refused the attempt rather than granting it. It is stated
+	// rather than derived from the scope, because a granted claim names no scope either.
+	Refused bool
+	Scope   Scope
+	Wait    time.Duration
 }
 
-// Counter records attempts and reports which limits are exhausted.
+// Fits reports whether the attempt the counter was asked about was granted rather than refused.
+func (r Reached) Fits() bool { return !r.Refused }
+
+// Counter spends attempts against subjects and reports which limits refuse them.
 type Counter struct {
 	pool   *pgxpool.Pool
 	limits map[Scope]Limit
@@ -51,74 +56,78 @@ func NewCounter(pool *pgxpool.Pool, limits map[Scope]Limit) *Counter {
 	return &Counter{pool: pool, limits: limits}
 }
 
-// Limit reports the configured limit for a scope, so a caller can state what it enforces.
-func (c *Counter) Limit(scope Scope) Limit { return c.limits[scope] }
-
-// Counted is one subject to check or record under a scope.
+// Counted is one subject to spend an attempt against under a scope.
 type Counted struct {
 	Scope   Scope
 	Subject string
 }
 
-// Exhausted reports the first of the given subjects whose limit is already reached, without
-// recording anything. It is called before a password is verified, so a throttled attempt never
-// pays for a hash. The caller passes the subjects in the order it wants them reported, so two
-// identical requests always learn about the same limit and advertise the same wait.
-func (c *Counter) Exhausted(ctx context.Context, subjects []Counted) (Reached, bool, error) {
-	for _, counted := range subjects {
-		limit, configured := c.limits[counted.Scope]
-		if !configured {
-			continue
-		}
-		attempts, windowStartedAt, found, err := c.read(ctx, counted.Scope, counted.Subject, limit.Window)
-		if err != nil {
-			return Reached{}, false, err
-		}
-		if found && attempts >= limit.Attempts {
-			return Reached{Scope: counted.Scope, Wait: remaining(windowStartedAt, limit.Window)}, true, nil
-		}
-	}
-	return Reached{}, false, nil
-}
+// claimStatement adds one attempt to a subject's counter and reports the count it stands at. It is
+// one statement so that the decision and the increment cannot be separated: two round trips would let
+// a burst of simultaneous attempts decide against the same count and each proceed, which would
+// release more password checks than the budget allows.
+//
+// A row whose window has already passed starts a fresh window holding the attempt rather than being
+// incremented, which is what makes access return on its own. A row that does not fit keeps the count
+// it had, so a refused attempt is never counted, and the moment its window began comes back with it
+// so the caller can advertise the real remaining wait.
+const claimStatement = `
+INSERT INTO rate_limit_counters (scope, subject, window_started_at, attempts)
+VALUES ($1, $2, now(), 1)
+ON CONFLICT (scope, subject) DO UPDATE SET
+	window_started_at = CASE
+		WHEN rate_limit_counters.window_started_at + $3::interval <= now()
+		THEN now() ELSE rate_limit_counters.window_started_at END,
+	attempts = CASE
+		WHEN rate_limit_counters.window_started_at + $3::interval <= now()
+		THEN 1
+		WHEN rate_limit_counters.attempts < $4
+		THEN rate_limit_counters.attempts + 1
+		ELSE rate_limit_counters.attempts END
+RETURNING attempts, window_started_at, window_started_at + $3::interval <= now() AS window_expired`
 
-// Record adds one attempt to a subject's counter, starting a new window when the previous one has
-// passed. A window that has passed is simply replaced, which is what makes access return on its
-// own without any unblocking step.
-func (c *Counter) Record(ctx context.Context, scope Scope, subject string) error {
+// Claim spends one attempt of a subject's budget and reports whether it fit. It is the only way an
+// attempt is counted: the caller learns from the same statement whether the limit still allows the
+// work the attempt is about to do, so a burst of simultaneous attempts cannot each be told that the
+// budget has room.
+func (c *Counter) Claim(ctx context.Context, scope Scope, subject string) (Reached, error) {
 	limit, configured := c.limits[scope]
 	if !configured {
+		return Reached{}, nil
+	}
+	var attempts int
+	var windowStartedAt time.Time
+	// The window's state is not read back: the count alone decides whether the attempt fit, and the
+	// statement is the one place that must know whether it was counting in a fresh window.
+	var windowExpired bool
+	err := c.pool.QueryRow(ctx, claimStatement, string(scope), subject, limit.Window, limit.Attempts).
+		Scan(&attempts, &windowStartedAt, &windowExpired)
+	if err != nil {
+		return Reached{}, err
+	}
+	// The statement keeps the count it had when it did not fit, so a count that has reached the limit
+	// is a refused attempt rather than a spent one.
+	if attempts >= limit.Attempts {
+		return Reached{Refused: true, Scope: scope, Wait: remaining(windowStartedAt, limit.Window)}, nil
+	}
+	return Reached{}, nil
+}
+
+// Release gives back an attempt a subject's counter was charged for. A caller that claims the budget
+// of a failure before it knows the outcome releases it when the outcome turns out not to be a
+// failure, so a counter that records failures keeps recording failures and never a correct attempt.
+//
+// Releasing a subject whose counter is already at zero changes nothing, so a caller may release an
+// attempt the reaper has already removed.
+func (c *Counter) Release(ctx context.Context, scope Scope, subject string) error {
+	if _, configured := c.limits[scope]; !configured {
 		return nil
 	}
 	_, err := c.pool.Exec(ctx, `
-		INSERT INTO rate_limit_counters (scope, subject, window_started_at, attempts)
-		VALUES ($1, $2, now(), 1)
-		ON CONFLICT (scope, subject) DO UPDATE SET
-			window_started_at = CASE
-				WHEN rate_limit_counters.window_started_at + $3::interval <= now()
-				THEN now() ELSE rate_limit_counters.window_started_at END,
-			attempts = CASE
-				WHEN rate_limit_counters.window_started_at + $3::interval <= now()
-				THEN 1 ELSE rate_limit_counters.attempts + 1 END`,
-		string(scope), subject, limit.Window)
+		UPDATE rate_limit_counters SET attempts = attempts - 1
+		WHERE scope = $1 AND subject = $2 AND attempts > 0`,
+		string(scope), subject)
 	return err
-}
-
-func (c *Counter) read(
-	ctx context.Context, scope Scope, subject string, window time.Duration,
-) (int, time.Time, bool, error) {
-	var attempts int
-	var windowStartedAt time.Time
-	err := c.pool.QueryRow(ctx, `
-		SELECT attempts, window_started_at FROM rate_limit_counters
-		WHERE scope = $1 AND subject = $2 AND window_started_at + $3::interval > now()`,
-		string(scope), subject, window).Scan(&attempts, &windowStartedAt)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return 0, time.Time{}, false, nil
-	}
-	if err != nil {
-		return 0, time.Time{}, false, err
-	}
-	return attempts, windowStartedAt, true, nil
 }
 
 // MinimumRetryAfter is the shortest wait a caller is ever told to wait. A rounded-down zero would

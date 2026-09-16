@@ -19,6 +19,16 @@ export const CURRENT_USER_PATH = '/api/v1/me';
 
 const SESSION_COOKIE_PREFIX = `${SESSION_COOKIE_NAME}=`;
 
+/** The scope the registration budget is counted under, which the harness has to restore. */
+const REGISTRATION_SCOPE = 'registration_address';
+
+/** The code the service answers with when it could not decide an attempt at all. */
+const SERVICE_UNAVAILABLE_CODE = 'SERVICE_UNAVAILABLE';
+
+/** How many times a check asks again for a decision the service was too busy to make. */
+const BUSY_ATTEMPTS = 10;
+const BUSY_RETRY_DELAY_MS = 200;
+
 export const serviceOrigin = SERVICE_ORIGIN;
 
 export { compose, composeWith, sql };
@@ -119,11 +129,21 @@ export async function registerAccount(prefix, overrides = {}) {
 /**
  * Signs one address in again without presenting the first session, as a second device would. The
  * replacement retires tokens the first session was issued, so the caller compares the two.
+ *
+ * A suite that has just sent a burst of sign-ins may find every hashing slot busy, which the service
+ * answers as a service failure rather than as a wrong password. That is the service saying it could
+ * not decide the attempt, so the caller asks again rather than reading it as an answer.
  */
 export async function signInFromSecondDevice(email) {
-  const response = await call(SIGN_IN_PATH, signInRequest(email, true));
-  assert.equal(response.status, 200, response.text);
-  return { response, cookie: sessionCookie(response), csrfToken: response.json.csrf_token };
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await call(SIGN_IN_PATH, signInRequest(email, true));
+    const busy = response.json?.code === SERVICE_UNAVAILABLE_CODE;
+    if (!busy || attempt >= BUSY_ATTEMPTS) {
+      assert.equal(response.status, 200, response.text);
+      return { response, cookie: sessionCookie(response), csrfToken: response.json.csrf_token };
+    }
+    await delay(BUSY_RETRY_DELAY_MS);
+  }
 }
 
 /** Waits for the API to answer, so a suite started beside a restart does not race it. */
@@ -157,10 +177,22 @@ export async function callUntilRefused(action, { allowedAttempts, expectedStatus
 }
 
 /**
- * Clears every rate-limit counter. The suites share one address, so without this the limits would
- * refuse the accounts a later suite needs. Clearing a counter is the harness standing in for the
- * passage of time, which is also how access returns in production.
+ * Clears every rate-limit counter and gives the address the suites call from a fresh registration
+ * budget. The suites share one address, so without this the limits would refuse the accounts a later
+ * suite needs, and the registration counter in particular would have to be lowered by a suite to be
+ * observed at all: clearing it is the harness standing in for the passage of time, which is also how
+ * access returns in production.
+ *
+ * The address is read from the counter the service wrote rather than from a copy the harness keeps:
+ * the service is what decides which address it sees, and a check states what it observes. An
+ * installation that has recorded no address has spent no budget, so there is nothing to restore.
  */
 export function resetRateLimits() {
+  const observedAddress = sql(`SELECT subject FROM rate_limit_counters WHERE scope = '${REGISTRATION_SCOPE}' LIMIT 1`);
   sql('DELETE FROM rate_limit_counters');
+  if (observedAddress === '') return;
+  sql(
+    `INSERT INTO rate_limit_counters (scope, subject, window_started_at, attempts)
+     VALUES ('${REGISTRATION_SCOPE}', '${observedAddress}', now(), 1)`,
+  );
 }
