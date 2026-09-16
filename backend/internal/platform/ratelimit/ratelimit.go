@@ -117,15 +117,23 @@ func (c *Counter) Claim(ctx context.Context, scope Scope, subject string) (Reach
 // of a failure before it knows the outcome releases it when the outcome turns out not to be a
 // failure, so a counter that records failures keeps recording failures and never a correct attempt.
 //
-// Releasing a subject whose counter is already at zero changes nothing, so a caller may release an
-// attempt the reaper has already removed.
+// A counter whose last attempt is given back is removed rather than left at zero: an attempt is the
+// whole of what a counter holds, and a row stating that nothing was attempted is a second way of
+// saying the row is not there. Releasing a subject whose counter is already gone changes nothing, so
+// a caller may release an attempt the reaper has already removed.
 func (c *Counter) Release(ctx context.Context, scope Scope, subject string) error {
 	if _, configured := c.limits[scope]; !configured {
 		return nil
 	}
 	_, err := c.pool.Exec(ctx, `
 		UPDATE rate_limit_counters SET attempts = attempts - 1
-		WHERE scope = $1 AND subject = $2 AND attempts > 0`,
+		WHERE scope = $1 AND subject = $2 AND attempts > 1`,
+		string(scope), subject)
+	if err != nil {
+		return err
+	}
+	_, err = c.pool.Exec(ctx, `
+		DELETE FROM rate_limit_counters WHERE scope = $1 AND subject = $2 AND attempts <= 1`,
 		string(scope), subject)
 	return err
 }

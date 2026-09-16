@@ -141,6 +141,10 @@ describe('each of the four limits refuses on its own', () => {
     assert.equal(first.response.status, 201, first.response.text);
     const address = observedSubject(RATE_LIMIT_SCOPE.registrationAddress);
     assertAddressRecorded(RATE_LIMIT_SCOPE.registrationAddress, address);
+    // The budget of this address is restored before it is filled, so the counter this check writes is
+    // the one the next registration is counted against rather than one the service has already
+    // removed.
+    resetRateLimits(address);
     fillCounter(RATE_LIMIT_SCOPE.registrationAddress, address, configuredLimits.registrationAddress);
 
     const refused = await call(REGISTRATION_PATH, registrationRequest(newEmail('over-limit')));
@@ -220,6 +224,9 @@ describe('the counters are the service state, not the process state', () => {
 
 describe('the limits are configuration the running service reads', () => {
   test('a limit set in the environment replaces the documented default', async () => {
+    // The address the service sees, which the counters of the checks above recorded. The budget of
+    // this check is restored for that address, because the limit it lowers counts attempts from it.
+    const observedAddress = observedSubject(RATE_LIMIT_SCOPE.registrationAddress);
     try {
       // Recreate the API with one limit lowered. If the service read a constant instead of its
       // configuration, the third registration below would still be accepted.
@@ -232,7 +239,7 @@ describe('the limits are configuration the running service reads', () => {
         'api',
       );
       await waitForReady();
-      resetRateLimits();
+      resetRateLimits(observedAddress);
 
       for (let attempt = 0; attempt < LOWERED_REGISTRATION_LIMIT; attempt += 1) {
         const allowed = await call(REGISTRATION_PATH, registrationRequest(newEmail('configured')));

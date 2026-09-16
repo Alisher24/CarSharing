@@ -172,7 +172,7 @@ func (a accounts) Login(
 	if err != nil {
 		reached := &auth.LimitReachedError{}
 		if !errors.As(err, &reached) {
-			return loginUnavailable(ctx), nil
+				return loginUnavailable(ctx), nil
 		}
 		seconds := retryAfterSeconds(reached.Reached.Wait)
 		return servedapi.Login429JSONResponse{

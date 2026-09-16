@@ -29,6 +29,10 @@ const SERVICE_UNAVAILABLE_CODE = 'SERVICE_UNAVAILABLE';
 const BUSY_ATTEMPTS = 10;
 const BUSY_RETRY_DELAY_MS = 200;
 
+/** How long a suite that follows a burst waits for the hasher to have room again. */
+const SETTLE_ATTEMPTS = 60;
+const SETTLE_RETRY_DELAY_MS = 500;
+
 export const serviceOrigin = SERVICE_ORIGIN;
 
 export { compose, composeWith, sql };
@@ -163,6 +167,36 @@ export async function waitForReady() {
 }
 
 /**
+ * Waits for the hasher to have room again and clears the budgets a burst spent.
+ *
+ * One API process admits a fixed number of hashes at a time and refuses the rest rather than queueing
+ * them, which is what a suite that asks for a burst on purpose observes. The burst is a fact of this
+ * shared stack, so a suite that follows one waits here: an attempt answered `503` is the service
+ * saying it could not decide rather than an answer about credentials, and a budget a burst spent is
+ * not something the next suite should inherit. The wait is bounded, so a stack that never recovers
+ * fails the suite that called this rather than hanging it.
+ */
+export async function settleAfterBurst() {
+  const email = newEmail('settle');
+  const registration = await call(REGISTRATION_PATH, registrationRequest(email));
+  resetRateLimits();
+  if (registration.status !== 201) return;
+
+  for (let attempt = 0; attempt < SETTLE_ATTEMPTS; attempt += 1) {
+    const response = await call(SIGN_IN_PATH, signInRequest(email, true));
+    // A granted attempt is answered with the session it issued; a refused one with invalid
+    // credentials, because the address this probe signs is one no account holds. Both mean the
+    // attempt was decided, which is what this wait is about.
+    if (response.json?.code !== SERVICE_UNAVAILABLE_CODE) {
+      resetRateLimits();
+      return;
+    }
+    await delay(SETTLE_RETRY_DELAY_MS);
+  }
+  throw new Error('the hasher never had room again after a burst');
+}
+
+/**
  * Polls a request until the service refuses it, which is how a suite observes a limit it has just
  * exhausted. Every attempt before that must answer as the expected status, so a refusal is what
  * ends the wait rather than an unrelated failure.
@@ -177,20 +211,18 @@ export async function callUntilRefused(action, { allowedAttempts, expectedStatus
 }
 
 /**
- * Clears every rate-limit counter and gives the address the suites call from a fresh registration
- * budget. The suites share one address, so without this the limits would refuse the accounts a later
- * suite needs, and the registration counter in particular would have to be lowered by a suite to be
- * observed at all: clearing it is the harness standing in for the passage of time, which is also how
- * access returns in production.
+ * Clears every rate-limit counter, which is the harness standing in for the passage of time: in
+ * production a window ends on its own, and here a suite ends it between checks. A suite that lowers a
+ * limit to observe it passes the address it observed, so the budget it is about to spend is restored
+ * even when this installation has recorded no counter for that address yet.
  *
- * The address is read from the counter the service wrote rather than from a copy the harness keeps:
- * the service is what decides which address it sees, and a check states what it observes. An
- * installation that has recorded no address has spent no budget, so there is nothing to restore.
+ * The address is written as one spent attempt rather than as an empty counter, because an attempt is
+ * the whole of what a counter holds: a row stating that nothing was attempted is the second way of
+ * saying the row is not there, and the table says so itself.
  */
-export function resetRateLimits() {
-  const observedAddress = sql(`SELECT subject FROM rate_limit_counters WHERE scope = '${REGISTRATION_SCOPE}' LIMIT 1`);
+export function resetRateLimits(observedAddress) {
   sql('DELETE FROM rate_limit_counters');
-  if (observedAddress === '') return;
+  if (observedAddress === undefined) return;
   sql(
     `INSERT INTO rate_limit_counters (scope, subject, window_started_at, attempts)
      VALUES ('${REGISTRATION_SCOPE}', '${observedAddress}', now(), 1)`,

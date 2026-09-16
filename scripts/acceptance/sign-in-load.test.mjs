@@ -3,7 +3,7 @@
 // so the number of passwords a burst can have verified is the budget itself and not the budget plus
 // the number of requests that were in flight together.
 import assert from 'node:assert/strict';
-import { before, describe, test } from 'node:test';
+import { after, before, describe, test } from 'node:test';
 import {
   call,
   newEmail,
@@ -13,6 +13,7 @@ import {
   signInRequest,
   sql,
   waitForReady,
+  settleAfterBurst,
 } from './client.mjs';
 
 /** The limits the running service reads, taken from its own configuration rather than restated. */
@@ -112,6 +113,10 @@ function assertRefusalsAreDocumented(answers, measured) {
     assert.equal(response.json.code, SERVICE_UNAVAILABLE_CODE, `${measured}: ${response.text}`);
   }
 }
+
+// A burst is this suite's subject, and the suites after it inherit what it left: the wait is the
+// harness standing between the burst and the next reader of the same instance.
+after(settleAfterBurst);
 
 before(waitForReady);
 

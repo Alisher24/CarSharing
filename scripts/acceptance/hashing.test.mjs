@@ -2,7 +2,7 @@
 // expensive thing a request can ask for, so what matters here is what the service refuses to do
 // rather than what it computes.
 import assert from 'node:assert/strict';
-import { before, beforeEach, describe, test } from 'node:test';
+import { after, before, beforeEach, describe, test } from 'node:test';
 import { ARGON2ID_PHC_PATTERN, PASSWORD_HASH_COLUMN, PHC_SALT_FIELD } from './accounts.mjs';
 import {
   call,
@@ -14,6 +14,7 @@ import {
   sql,
   waitForReady,
   wrongPassword,
+  settleAfterBurst,
 } from './client.mjs';
 
 /**
@@ -43,12 +44,17 @@ const MINIMUM_KNOWN_ADDRESS_SPEED_RATIO = 0.5;
 const ACCEPTED_SIGN_IN_STATUS = 200;
 const REFUSED_SIGN_IN_STATUS = 401;
 const OVERLOADED_STATUS = 503;
+const RATE_LIMITED_STATUS = 429;
+const RATE_LIMITED_CODE = 'RATE_LIMITED';
 const SERVICE_UNAVAILABLE_CODE = 'SERVICE_UNAVAILABLE';
 
 const SHARED_PASSWORD = 'sharedpasswordvalue';
 
 /** How many sign-ins the suite asks for at once, which is comfortably more than the ceiling. */
 const REQUEST_BURST_SIZE = recordedConcurrentHashes * REQUEST_BURST_MULTIPLIER;
+
+// A burst is this suite's subject, and the suites after it inherit what it left.
+after(settleAfterBurst);
 
 before(waitForReady);
 beforeEach(resetRateLimits);
@@ -115,13 +121,20 @@ describe('an instance admits only its ceiling of concurrent hashes', () => {
     for (const refused of unavailable) {
       assert.equal(refused.json.code, SERVICE_UNAVAILABLE_CODE, refused.text);
     }
-    // Nothing may answer with anything else: a queued request would eventually appear as a
-    // timeout or a gateway error rather than as an honest refusal.
+    // A burst larger than the ceiling also spends the budget of the address it comes from, and the
+    // budget is spent by the same statement that decides whether an attempt may run: the attempts the
+    // hasher never saw are therefore refused either as surplus or as over the limit, and both are an
+    // honest refusal rather than a queue. Nothing else may appear: a queued request would eventually
+    // show as a timeout or a gateway error.
+    const refused = [OVERLOADED_STATUS, RATE_LIMITED_STATUS];
     for (const status of statuses) {
       assert.ok(
-        [ACCEPTED_SIGN_IN_STATUS, OVERLOADED_STATUS].includes(status),
+        [ACCEPTED_SIGN_IN_STATUS, ...refused].includes(status),
         `an unexpected status appeared under pressure: ${status}`,
       );
+    }
+    for (const answer of answers.filter((one) => one.status === RATE_LIMITED_STATUS)) {
+      assert.equal(answer.json.code, RATE_LIMITED_CODE, answer.text);
     }
   });
 
