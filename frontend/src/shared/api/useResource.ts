@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
-import { afterFailure, afterSuccess, type Resource } from './Resource.ts';
+import { useCallback, useEffect, useState } from 'react';
+import { afterFailure, type Resource } from './Resource.ts';
+import { storedAnswer } from '../../features/events/answerStore.ts';
+import { useRequestedReads } from '../../features/events/useRequestedReads.ts';
 import type { DocumentKind } from '../../features/events/readCycle.ts';
-import type { ReadCoordinator, ReadTicket } from '../../features/events/coordinator.ts';
+import type { ReadCoordinator } from '../../features/events/coordinator.ts';
 
 /** Loads one resource, abandoning the attempt when the signal is aborted. */
 export type LoadResource<T> = (signal: AbortSignal) => Promise<T>;
@@ -60,7 +62,7 @@ export function useResource<T>(
         const value = await load(controller.signal);
         if (abandoned) return;
 
-        const stored = storeAnswer(coordinator, ticket, session, value);
+        const stored = storedAnswer<T>(coordinator, ticket, session, value);
         if (stored !== undefined) setResource(stored);
       } catch {
         if (!abandoned) setResource(afterFailure);
@@ -93,50 +95,4 @@ export function useResource<T>(
   }, [coordinator, document]);
 
   return { resource, retry };
-}
-
-/** A resource with no coordinator has no requests to watch, so it is never woken by one. */
-const noSubscription = () => () => {};
-
-/**
- * useRequestedReads counts the reads the coordinator has asked this document for. Watching the
- * count rather than reading a flag is what makes a request start a read: a request that arrives
- * while one is running stops mattering only once the answer to it is the one on screen.
- */
-function useRequestedReads(coordinator: ReadCoordinator | undefined, document: DocumentKind | undefined): number {
-  const subscribe = useCallback(
-    (listener: () => void) =>
-      coordinator === undefined || document === undefined ? noSubscription() : coordinator.watch(document, listener),
-    [coordinator, document],
-  );
-  const asked = useCallback(
-    () => (coordinator === undefined || document === undefined ? 0 : coordinator.asked(document)),
-    [coordinator, document],
-  );
-  return useSyncExternalStore(subscribe, asked);
-}
-
-/**
- * storeAnswer turns one answer into the resource to hold, or into nothing when the answer must be
- * ignored. An answer that belongs to an ended session, or to a read the coordinator has already
- * answered, is dropped; so is an answer that publishes nothing the screen does not already show.
- */
-function storeAnswer<T>(
-  coordinator: ReadCoordinator | undefined,
-  ticket: ReadTicket | undefined,
-  session: string | undefined,
-  value: T,
-): Resource<T> | undefined {
-  if (coordinator === undefined || ticket === undefined || session === undefined) return afterSuccess(value);
-  if (!coordinator.accepts(ticket)) return undefined;
-
-  const handlers = coordinator.answer(ticket.document);
-  if (!handlers.accepts(session)) return undefined;
-
-  const stored = handlers.observe(value, session);
-  if (stored === undefined) return undefined;
-
-  coordinator.cover(ticket.document, stored.covered);
-  coordinator.stored(ticket);
-  return afterSuccess(stored.value as T);
 }

@@ -98,12 +98,14 @@ func replayedHeader(replayed bool) *bool {
 	return ptr(true)
 }
 
-// Reservations is what the operations on one's own rental need from the rentals module: the commands
-// that move a rental and the read that answers what is current.
+// Reservations is what the operations on one's own rentals need from the rentals module: the
+// commands that move a rental, the read that answers what is current, and the page of the ones that
+// have finished.
 type Reservations interface {
 	Reserve(ctx context.Context, command rentals.ReserveCommand) (rentals.Answered, error)
 	Cancel(ctx context.Context, command rentals.CancelCommand) (rentals.Answered, error)
 	Current(ctx context.Context, caller uuid.UUID) (rentals.Current, error)
+	Rides(ctx context.Context, caller uuid.UUID, after *rentals.RidePosition, limit int) (rentals.RidePage, error)
 
 	// The ride commands move a rental between a reservation, a driving ride and a paused one, the
 	// finish ends it and issues the invoice, and the payment settles that invoice. They belong to the

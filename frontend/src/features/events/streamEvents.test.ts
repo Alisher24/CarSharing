@@ -15,8 +15,9 @@ describe('reading what a frame says', () => {
       ['vehicle.changed', 'vehicles'],
       ['zone.changed', 'zones'],
       ['tariff.changed', 'tariffs'],
-      ['rental.changed', 'current'],
+      ['rental.changed', 'rentals'],
       ['notification.changed', 'notifications'],
+      ['invoice.changed', 'invoices'],
     ] as const;
 
     for (const [name, resource] of changes) {
@@ -34,7 +35,7 @@ describe('reading what a frame says', () => {
   // The stream is a signal rather than a log, so a frame this client cannot use is dropped and the
   // reconciliation reads the snapshots that matter instead.
   test('a frame this contract does not declare says nothing', () => {
-    assert.deepEqual(streamEvent({ event: 'invoice.changed', data: '{"id":"r1","version":"1"}' }), { kind: 'ignored' });
+    assert.deepEqual(streamEvent({ event: 'letter.changed', data: '{"id":"r1","version":"1"}' }), { kind: 'ignored' });
     assert.deepEqual(streamEvent({ event: 'ready' }), { kind: 'ignored' });
   });
 

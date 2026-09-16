@@ -118,7 +118,7 @@ describe('an answer of the collection', () => {
     const { state } = readerOf(OWNER);
     const answers = notificationAnswers(state);
 
-    for (const document of ['vehicles', 'zones', 'tariffs', 'current'] as const) {
+    for (const document of ['vehicles', 'zones', 'tariffs', 'rentals', 'invoices'] as const) {
       assert.equal(answers[document].accepts(OWNER), false, `${document} was accepted by the notification reader`);
       assert.equal(answers[document].observe({}, OWNER), undefined, `${document} was stored by it`);
     }

@@ -1,12 +1,12 @@
 import type { ApiError, CurrentSnapshot, Rental, TariffSnapshot } from '../../shared/api/current.ts';
-import { SERVICE_TIME_ZONE } from '../../shared/locale.ts';
+import { serviceMoment } from '../../shared/locale.ts';
 import { somText } from '../fleet/money.ts';
 import type { Countdown } from './countdown.ts';
 
 /**
- * The Russian wording of the reservation, and the two rules that produce it: how a moment of the
- * service day is written, and what the day's allowance is called. Both live here rather than in each
- * component that shows them, so the panel and the card cannot describe one state two ways.
+ * The Russian wording of the reservation, and the rule that produces it: what the day's allowance is
+ * called. It lives here rather than in each component that shows it, so the panel and the card
+ * cannot describe one state two ways.
  */
 
 /** What the booking control says before anything was asked. */
@@ -135,30 +135,12 @@ export function limitText(snapshot: CurrentSnapshot | undefined): string {
   if (snapshot === undefined) return LIMIT_UNKNOWN;
   if (snapshot.daily_limit.available) return BOOK_ACTION;
 
-  return `${LIMIT_SPENT} ${bishkekMoment(snapshot.daily_limit.resets_at) ?? '—'}`;
+  return `${LIMIT_SPENT} ${serviceMoment(snapshot.daily_limit.resets_at) ?? '—'}`;
 }
 
 /** Whether the allowance as published allows the control to be offered at all. */
 export function limitAllowsBooking(snapshot: CurrentSnapshot | undefined): boolean {
   return snapshot?.daily_limit.available === true;
-}
-
-/**
- * bishkekMoment writes a moment of the contract in the timezone the service states its days in, so
- * a reset moment arrives as UTC and is read as the local date and time a person acts on. A moment
- * the interface cannot read is left out rather than guessed at.
- */
-export function bishkekMoment(wireMoment: string): string | undefined {
-  const moment = Date.parse(wireMoment);
-  if (Number.isNaN(moment)) return undefined;
-
-  return new Intl.DateTimeFormat('ru-RU', {
-    timeZone: SERVICE_TIME_ZONE,
-    day: 'numeric',
-    month: 'long',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(moment);
 }
 
 /** The rates of one reservation, as the snapshot it was made under states them. */
@@ -208,7 +190,7 @@ export function warningText(
 ): WarningText | undefined {
   if (countdown === undefined || countdown.state !== 'left') return undefined;
 
-  const endsAt = bishkekMoment(warning.expiresAt);
+  const endsAt = serviceMoment(warning.expiresAt);
   if (endsAt === undefined) return undefined;
 
   return {

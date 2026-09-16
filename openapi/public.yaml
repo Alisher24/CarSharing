@@ -4219,7 +4219,7 @@ paths:
     get:
       operationId: getRides
       summary: get Rides
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-body-limit: 65536
       description: >-
         Forward-only live keyset pagination ordered by (completed_at DESC, id DESC). Cursor binds endpoint,
@@ -4403,7 +4403,7 @@ paths:
     get:
       operationId: getInvoices
       summary: get Invoices
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-body-limit: 65536
       description: >-
         Forward-only live keyset pagination ordered by (issued_at DESC, id DESC). Cursor binds endpoint,

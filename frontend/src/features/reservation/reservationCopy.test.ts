@@ -3,7 +3,6 @@ import { describe, test } from 'node:test';
 import type { CurrentSnapshot } from '../../shared/api/current.ts';
 import type { Countdown } from './countdown.ts';
 import {
-  bishkekMoment,
   currentRental,
   limitAllowsBooking,
   limitText,
@@ -42,10 +41,6 @@ describe('the day of free reservations as it is shown', () => {
     assert.equal(limitAllowsBooking(undefined), false);
     assert.equal(limitAllowsBooking(snapshot(false)), false);
     assert.match(limitText(undefined), /неизвестно/);
-  });
-
-  test('writes a moment it cannot read as nothing rather than as a date', () => {
-    assert.equal(bishkekMoment('not a moment'), undefined);
   });
 });
 

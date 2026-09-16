@@ -79,6 +79,12 @@ func (fixedReservations) Current(context.Context, uuid.UUID) (rentals.Current, e
 	return rentals.Current{}, nil
 }
 
+func (fixedReservations) Rides(
+	context.Context, uuid.UUID, *rentals.RidePosition, int,
+) (rentals.RidePage, error) {
+	return rentals.RidePage{}, nil
+}
+
 func (fixedReservations) StartRide(
 	context.Context, rentals.StartRideCommand,
 ) (rentals.Answered, error) {
@@ -127,6 +133,12 @@ type fixedInvoices struct{}
 
 func (fixedInvoices) ByID(context.Context, uuid.UUID, string) (invoices.Invoice, error) {
 	return invoices.Invoice{}, nil
+}
+
+func (fixedInvoices) ReadPage(
+	context.Context, uuid.UUID, *invoices.Position, int,
+) (invoices.Page, error) {
+	return invoices.Page{}, nil
 }
 
 // mustTestSigner is a signer holding a key long enough to sign, which the dependency test only

@@ -1,3 +1,6 @@
+import { Link } from 'react-router';
+import { invoiceAddress } from '../../app/addresses.ts';
+import { OPEN_INVOICE } from '../cabinet/cabinetCopy.ts';
 import { commandText } from './commandPhase.ts';
 import type { CompletedRideCharge, CompletedRideResult } from './completedResult.ts';
 import { PAID_AT, PAYMENT_STATE, paidAtText, paymentActionText, paymentText } from './paymentCopy.ts';
@@ -21,6 +24,10 @@ import type { Payment } from './usePayment.ts';
  * The amount and the state of the payment belong to the invoice and are left out while it has not
  * been read, because a total this interface computed itself would not be the total a person is
  * charged.
+ *
+ * The invoice itself is one link away: what the charge was made of — the minutes of each mode and the
+ * rates they were priced at — is the card of that invoice in the cabinet, and this is the only link
+ * into the cabinet from outside it.
  */
 export function FinishedRideView({ result, paid }: { result: CompletedRideResult; paid: Payment }) {
   const notice = payNotice(paid);
@@ -42,6 +49,11 @@ export function FinishedRideView({ result, paid }: { result: CompletedRideResult
       </dl>
 
       {charge !== undefined && <PayControl charge={charge} paid={paid} />}
+      {charge !== undefined && (
+        <Link className="feed-row-link" to={invoiceAddress(charge.invoiceId)}>
+          {OPEN_INVOICE}
+        </Link>
+      )}
 
       {notice !== undefined && <p className="reservation-panel-notice">{notice}</p>}
     </div>

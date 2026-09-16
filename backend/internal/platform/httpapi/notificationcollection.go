@@ -3,7 +3,6 @@ package httpapi
 import (
 	"context"
 	"log/slog"
-	"strconv"
 
 	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
 	"github.com/Alisher24/CarSharing/backend/internal/notifications"
@@ -13,14 +12,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// getNotificationsOperation is the name the signed cursors of the collection are bound to, and
-// limitParameter is the parameter they carry. The name is the operation's own identifier in the
-// contract, so a cursor issued for another collection is refused by its signature rather than by a
-// comparison somebody has to remember to write.
-const (
-	getNotificationsOperation = "getNotifications"
-	limitParameter            = "limit"
-)
+// getNotificationsOperation is the name the signed cursors of this collection are bound to: the
+// operation's own identifier in the contract.
+const getNotificationsOperation = "getNotifications"
 
 // GetNotifications answers one page of the caller's own notifications, newest first. Everything a
 // page depends on comes from the session or from the request: the owner is never taken from a
@@ -35,10 +29,7 @@ func (h notificationHandlers) GetNotifications(
 			Body: apiErrorBody(ctx, codeAuthenticationRequired, messageAuthenticationRequired),
 		}, nil
 	}
-	limit := notifications.PageSize
-	if request.Params.Limit != nil {
-		limit = *request.Params.Limit
-	}
+	limit := pageLimitOf(request.Params.Limit, notifications.PageSize)
 
 	after, err := h.positionOf(request.Params.Cursor, caller, limit)
 	if err != nil {
@@ -58,29 +49,17 @@ func (h notificationHandlers) GetNotifications(
 	return servedapi.GetNotifications200JSONResponse{Body: body}, nil
 }
 
-// scopeOf names the collection and the parameters a cursor of this operation is bound to. The limit
-// is the one the page is read with rather than the one the request spelled, so a client that omits
-// the parameter continues with the page size the first page used.
-func (h notificationHandlers) scopeOf(owner uuid.UUID, limit int) cursor.Scope {
-	return cursor.OperationOn(getNotificationsOperation, owner,
-		cursor.Parameter{Name: limitParameter, Value: strconv.Itoa(limit)})
-}
-
-// positionOf reads the position a presented cursor names, or nil when the request carries none.
-// Every failure — an unreadable token, a signature that does not match its payload, a cursor issued
-// for another operation, account or parameter set — is the one refusal the contract declares for a
-// cursor, so a client cannot tell them apart.
+// positionOf reads the position a presented cursor names, in the vocabulary of the module that pages
+// the collection.
 func (h notificationHandlers) positionOf(
 	presented *servedapi.Cursor, owner uuid.UUID, limit int,
 ) (*notifications.Position, error) {
-	if presented == nil {
-		return nil, nil
-	}
-	position, err := h.cursors.Read(string(*presented), h.scopeOf(owner, limit))
-	if err != nil {
+	read, err := pagePositionOf(h.cursors, presented,
+		accountPageScope(getNotificationsOperation, owner, limit))
+	if err != nil || read == nil {
 		return nil, err
 	}
-	return &notifications.Position{CreatedAt: position.CreatedAt, ID: position.ID}, nil
+	return &notifications.Position{CreatedAt: read.CreatedAt, ID: read.ID}, nil
 }
 
 // collectionBody renders one page of the collection, with the cursor that reads the page after it. A
@@ -107,7 +86,7 @@ func (h notificationHandlers) collectionBody(
 	issued, err := h.cursors.Issue(cursor.Position{
 		CreatedAt: page.Next.CreatedAt,
 		ID:        page.Next.ID,
-	}, h.scopeOf(owner, limit))
+	}, accountPageScope(getNotificationsOperation, owner, limit))
 	if err != nil {
 		return servedapi.NotificationCollection{}, err
 	}

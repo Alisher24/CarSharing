@@ -1,11 +1,10 @@
-import type { Account } from '../account/useAccount.ts';
-import { storePayment } from './completedRide.ts';
+import { useEffect } from 'react';
+import { csrfTokenOf, sessionOf, type Account } from '../account/useAccount.ts';
 import { payInvoice } from '../../shared/api/invoices.ts';
-import { useCommandSender, type CommandAnswer } from './commandSender.ts';
-import type { UnfinishedCommand } from './unfinishedCommand.ts';
+import { useCommandSender } from './commandSender.ts';
 import type { CommandPhase } from './commandPhase.ts';
 
-/** What the interface can do about the invoice of a ride that has ended. */
+/** What the interface can do about one invoice of the account. */
 export type Payment = {
   /** Where the payment the interface last sent stands. */
   phase: CommandPhase;
@@ -18,27 +17,25 @@ export type Payment = {
 };
 
 /**
- * usePayment sends the one payment a person makes themselves and keeps the state of the invoice it
- * settled. It is the sender the finished ride uses, told a different command: the same key is kept
- * before the request and the same answer is applied where it arrives.
+ * usePayment sends the one payment a person makes themselves. It is the same command wherever it is
+ * asked for — below the ride that has just ended, and on the card of an invoice from the history —
+ * so it knows only the invoice it settles: an invoice read from the history has no ride on screen to
+ * be part of, and the command must not depend on one.
  *
- * The answer is written into the record of the ending rather than into a state of its own, so the
- * ending keeps the state this tab was told. What the panel shows is the state the read of the invoice
- * publishes, which that same panel asks for again once this answer arrives: what is settled here is
- * the command, not the state of the invoice.
+ * What the screen shows is the state the read of the invoice publishes, and that read is asked for
+ * again by useReadAfterPayment once the service has answered: what is settled here is the command,
+ * not the state of the invoice.
  *
  * Every ask carries a new key. A repeat of the key of a refused attempt would answer that stored
  * refusal, which is a repeat of the answer rather than another payment.
  */
 export function usePayment(account: Account): Payment {
-  const owner = account.state === 'signed-in' ? account.snapshot.user.id : undefined;
-
   const { phase, start, settle } = useCommandSender({
-    owner,
-    csrfToken: account.state === 'signed-in' ? account.snapshot.csrf_token : undefined,
+    owner: sessionOf(account),
+    csrfToken: csrfTokenOf(account),
     // The payment moves nothing about the rental: what is current is not read again for it.
     refresh: () => undefined,
-    send: (command, credentials) => settling(command, credentials, owner),
+    send: (command, credentials) => payInvoice(command.parameters.invoiceId ?? '', credentials),
   });
 
   return {
@@ -49,19 +46,15 @@ export function usePayment(account: Account): Payment {
 }
 
 /**
- * One payment, which keeps the state the service answered with in the record of the ending it belongs
- * to. The record is written here, where the answer arrived, rather than by the render that shows it.
+ * useReadAfterPayment reads the invoice again once a payment this tab sent has been answered. The
+ * service has stored that answer by the time it arrives, so the invoice is read rather than left
+ * showing the state the payment replaced — which is also what keeps the screen right when no change
+ * signal reaches this tab.
  */
-async function settling(
-  command: UnfinishedCommand,
-  credentials: { csrfToken: string; key: string },
-  owner: string | undefined,
-): Promise<CommandAnswer> {
-  const invoiceId = command.parameters.invoiceId ?? '';
-  const answer = await payInvoice(invoiceId, credentials);
-  if (answer.outcome === 'done' && owner !== undefined) {
-    storePayment(owner, invoiceId, answer.answer.invoice, Date.now());
-  }
+export function useReadAfterPayment(paid: Payment, read: () => void): void {
+  const answered = paid.phase.state === 'done' && paid.phase.action === 'pay';
 
-  return answer;
+  useEffect(() => {
+    if (answered) read();
+  }, [answered, read]);
 }

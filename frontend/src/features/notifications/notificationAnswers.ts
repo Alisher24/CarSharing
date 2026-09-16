@@ -1,4 +1,5 @@
 import type { NotificationCollection } from '../../shared/api/notifications.ts';
+import { answersOf } from '../events/documentAnswers.ts';
 import type { AnswerHandlers, DocumentKind } from '../events/readCycle.ts';
 import { versionsOf } from '../events/observedResource.ts';
 import type { NotificationReading } from './notificationReading.ts';
@@ -16,25 +17,12 @@ export type NotificationSession = {
  * than the one already held, and it covers every version it publishes, so the changes it answers for
  * are the ones the cycle stops asking about.
  *
- * The reservation and the public resources are answered by nobody here: a signal about one of them
- * belongs to the reader that holds it, and this one reads only the collection.
+ * The rentals, the invoices and the public resources are answered by nobody here: a signal about one
+ * of them belongs to the reader that holds it, and this one reads only the collection.
  */
 export function notificationAnswers(state: NotificationSession): Record<DocumentKind, AnswerHandlers> {
-  return {
-    vehicles: notReadHere,
-    zones: notReadHere,
-    tariffs: notReadHere,
-    current: notReadHere,
-    notifications: collectionAnswer(state),
-  };
+  return answersOf({ notifications: collectionAnswer(state) });
 }
-
-// A document this coordinator does not read answers nothing, so a signal that names one is left to
-// the reader that holds it.
-const notReadHere: AnswerHandlers = {
-  accepts: () => false,
-  observe: () => undefined,
-};
 
 /**
  * The answer of the collection. An answer of another account is refused before it is looked at, and

@@ -17,6 +17,10 @@ export const CONFIRM_ACTION = 'Использовать бесплатную б�
 /** What the panel offers while a reservation is running. */
 export const CANCEL_ACTION = 'Отменить бронь';
 
+/** The one account control of the header, in each of the two states it has. */
+export const SIGN_IN_ACTION = 'Вход';
+export const CABINET_ACTION = 'Кабинет';
+
 /** What a fresh address of one check looks like, so no check depends on another one's leavings. */
 export function email(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.test`;
@@ -54,24 +58,33 @@ export async function book(page, model) {
   await page.getByRole('button', { name: CONFIRM_ACTION }).click();
 }
 
-/** Registers a fresh account through the account panel, as a person would, and closes the panel. */
+/**
+ * Registers a fresh account through the entry panel above the map, as a person would. The panel
+ * closes itself: the one control of the header states what a person can do next, so a session turns
+ * it into the way into the cabinet.
+ */
 export async function signUp(page, address) {
-  await page.getByRole('button', { name: 'Вход' }).click();
+  await page.getByRole('button', { name: SIGN_IN_ACTION }).click();
   await register(page, address);
-  await page.getByRole('button', { name: 'Вход' }).click();
+  await expect(page.getByRole('link', { name: CABINET_ACTION })).toBeVisible();
 }
 
-/** Fills the entry form that is on screen and registers, which is what signing out leaves open. */
+/** Fills whichever entry form is on screen and registers, which is what a person does to get in. */
 export async function register(page, address) {
   await page.locator('#account-email-field').fill(address);
   await page.locator('#account-password-field').fill(PASSWORD);
   await page.getByRole('button', { name: 'Зарегистрироваться' }).click();
+}
+
+/** Opens the cabinet, which is where the account and the way out of it live. */
+export async function openCabinet(page, address) {
+  await page.getByRole('link', { name: CABINET_ACTION }).click();
   await expect(page.locator('[data-testid="account-email"]')).toHaveText(address);
 }
 
-/** Signs the person on screen out through the account panel, which stays open on the entry form. */
-export async function signOut(page) {
-  await page.getByRole('button', { name: 'Вход' }).click();
+/** Signs the person on screen out, which the cabinet is the one place to do from. */
+export async function signOut(page, address) {
+  await openCabinet(page, address);
   await page.getByRole('button', { name: 'Выйти' }).click();
   await expect(page.locator('[data-testid="account-email"]')).toHaveCount(0);
 }

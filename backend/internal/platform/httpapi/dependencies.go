@@ -33,9 +33,9 @@ type Dependencies struct {
 	// given an implementation that refuses every stream instead.
 	Events EventStream
 
-	// Reservations is the account's own rental: the commands that move it, the ride commands that
-	// start, pause and continue it, and the read that answers what is current. Only the full
-	// application serves those operations.
+	// Reservations is the account's own rentals: the commands that move one, the ride commands that
+	// start, pause and continue it, the read that answers what is current, and the history of the
+	// ones that have finished. Only the full application serves those operations.
 	Reservations Reservations
 
 	// Notifications is the account's own notifications: the collection and the read that marks one
@@ -43,7 +43,7 @@ type Dependencies struct {
 	Notifications Notifications
 
 	// Invoices is the account's own invoices: the read of one of them, which is how the result of an
-	// ending the account did not send is opened again.
+	// ending the account did not send is opened again, and the collection they are listed in.
 	Invoices InvoiceReads
 
 	// Cursors signs the position a paginated operation hands back for its next page. It is required
@@ -73,6 +73,7 @@ type server struct {
 	finishHandlers
 	payHandlers
 	notificationHandlers
+	rideCollectionHandlers
 	invoiceHandlers
 	streams
 }

@@ -1,0 +1,147 @@
+/* The cabinet: the two feeds of an account's own history and the card of one invoice. It is read
+   rather than acted on, so it is one column of records at every width, and the controls it does
+   carry — the way out, the page after the one on screen, the payment of a debt — sit where the rest
+   of the interface puts a control. */
+
+.cabinet {
+  display: grid;
+  gap: var(--space-md);
+  padding: var(--space-lg) var(--space-2xl) var(--space-3xl);
+}
+
+.cabinet-title {
+  margin: 0;
+  font-size: var(--font-size-lead);
+  letter-spacing: var(--tracking-tight);
+}
+
+.cabinet-account {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cabinet-email {
+  font-size: var(--font-size-detail);
+  color: var(--color-ink-body);
+}
+
+.cabinet-entry {
+  display: grid;
+  gap: var(--space-md);
+  max-width: 420px;
+}
+
+.cabinet-invitation {
+  margin: 0;
+  font-size: var(--font-size-detail);
+  color: var(--color-ink-body);
+}
+
+.cabinet-tabs {
+  display: flex;
+  gap: var(--space-sm);
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.cabinet-tab {
+  padding: 8px 16px;
+  font-size: var(--font-size-detail);
+  color: var(--color-ink-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+}
+
+.cabinet-tab:hover {
+  color: var(--color-ink);
+  background: var(--color-surface-highlight);
+}
+
+/* The feed a person came through stays marked while they read one of its records, so the cabinet
+   never looks as though they left it. */
+.cabinet-tab[aria-current='page'] {
+  color: var(--color-on-ink);
+  background: var(--color-ink);
+  border-color: var(--color-ink);
+}
+
+.feed {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.feed-rows {
+  display: grid;
+  gap: var(--space-md);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.feed-row {
+  padding: var(--space-md) var(--space-lg);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.feed-row-title {
+  margin: 0;
+  font-size: var(--font-size-body);
+  font-weight: 650;
+}
+
+.feed-row .details {
+  margin: var(--space-sm) 0 0;
+}
+
+.feed-row-link {
+  display: inline-block;
+  margin-top: var(--space-sm);
+  font-size: var(--font-size-detail);
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+
+.invoice-card {
+  display: grid;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.invoice-card-total {
+  margin: 0;
+  font-size: var(--font-size-title);
+  letter-spacing: var(--tracking-tight);
+}
+
+.invoice-line {
+  padding: var(--space-md) var(--space-lg);
+  background: var(--color-surface);
+  border-radius: var(--radius-sm);
+}
+
+.invoice-line-mode {
+  margin: 0;
+  font-size: var(--font-size-detail);
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--color-ink-label);
+}
+
+.invoice-line .details {
+  margin: var(--space-sm) 0 0;
+}
+
+@media (width <= 850px) {
+  .cabinet {
+    padding: var(--space-lg) 0 var(--space-xl);
+  }
+}

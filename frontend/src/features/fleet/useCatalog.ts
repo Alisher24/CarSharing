@@ -14,7 +14,7 @@ import { catalogAnswers } from '../events/catalogAnswers';
 import { changedResources } from '../events/changes';
 import { createReadCoordinator, PUBLIC_DOCUMENT_KINDS, type ReadCoordinator } from '../events/coordinator';
 import { RECONCILE_MILLISECONDS, reconciliationEnabled } from '../events/reconciliation';
-import type { DocumentKind } from '../events/readCycle';
+import type { DocumentKind, PublicDocumentKind } from '../events/readCycle';
 import type { EventsFeed } from '../events/useEvents';
 import type { FleetReading } from '../events/fleetSnapshot';
 
@@ -69,15 +69,11 @@ export function useCatalog(events: EventsFeed): Catalog {
  * parts are held for as long as the coordinator is, because a resource watches the part for
  * changes and a rebuilt part would restart every read on every render.
  */
-function readsOf(coordinator: ReadCoordinator): Record<DocumentKind, ResourceRead> {
+function readsOf(coordinator: ReadCoordinator): Record<PublicDocumentKind, ResourceRead> {
   return {
     vehicles: { coordinator, document: 'vehicles', session: ANONYMOUS_SESSION },
     zones: { coordinator, document: 'zones', session: ANONYMOUS_SESSION },
     tariffs: { coordinator, document: 'tariffs', session: ANONYMOUS_SESSION },
-    // The private documents are read by the readers of the account's own reservation and of its
-    // notifications; this coordinator answers nothing for them, and nothing here ever asks for one.
-    current: { coordinator, document: 'current', session: ANONYMOUS_SESSION },
-    notifications: { coordinator, document: 'notifications', session: ANONYMOUS_SESSION },
   };
 }
 
@@ -139,7 +135,12 @@ export function catalogVehicles(catalog: Catalog): readonly Vehicle[] {
 export type Found<T> =
   { state: 'loading' } | { state: 'found'; value: T } | { state: 'none' } | { state: 'unreachable' };
 
-function found<T>(resource: Resource<unknown>, value: T | undefined): Found<T> {
+/**
+ * found is what one view has when it looks for a value: the value itself, or which of the three ways
+ * of having nothing it met. It is stated once here, so a map, a card and a feed of the cabinet all
+ * tell an empty answer from an unreachable service the same way.
+ */
+export function found<T>(resource: Resource<unknown>, value: T | undefined): Found<T> {
   if (value !== undefined) return { state: 'found', value };
   if (resource.phase === 'loading') return { state: 'loading' };
   if (resource.phase === 'failed') return { state: 'unreachable' };

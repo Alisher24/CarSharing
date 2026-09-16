@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import type { Account } from '../account/useAccount.ts';
+import { csrfTokenOf, sessionOf, type Account } from '../account/useAccount.ts';
 import { cancelReservation, reserveVehicle } from '../../shared/api/current.ts';
 import { loadedValue } from '../../shared/api/Resource.ts';
 import { currentRental, rateTextOf, sameRates, type RateText } from './reservationCopy.ts';
@@ -44,8 +44,8 @@ export type Reservations = {
 export function useReservations(account: Account, current: CurrentRental): Reservations {
   const [confirmedRates, setConfirmedRates] = useState<RateText | undefined>(undefined);
 
-  const owner = account.state === 'signed-in' ? account.snapshot.user.id : undefined;
-  const csrfToken = account.state === 'signed-in' ? account.snapshot.csrf_token : undefined;
+  const owner = sessionOf(account);
+  const csrfToken = csrfTokenOf(account);
   const refresh = current.retry;
 
   const commands = useCommandSender({ owner, csrfToken, refresh, send: reservationCommand });
