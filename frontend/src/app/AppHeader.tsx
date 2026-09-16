@@ -4,7 +4,7 @@ import { ConnectionIndicator } from '../features/connection/ConnectionIndicator'
 import { StreamNotice } from '../features/connection/StreamNotice';
 import type { Connection } from '../features/connection/useConnection';
 import type { EventsConnection } from '../features/events/useEventStream';
-import { CABINET_ACTION, SIGN_IN_ACTION } from '../features/cabinet/cabinetCopy';
+import { CABINET_HEADING, SIGN_IN_ACTION } from '../features/cabinet/cabinetCopy';
 
 type AppHeaderProps = {
   connection: Connection;
@@ -42,7 +42,7 @@ export function AppHeader({ connection, stream, signedIn, entryOpen, onToggleEnt
       <ConnectionIndicator connection={connection} />
       {signedIn ? (
         <Link className="header-action" to={ACCOUNT_ADDRESS}>
-          {CABINET_ACTION}
+          {CABINET_HEADING}
         </Link>
       ) : (
         <button className="header-action" type="button" aria-expanded={entryOpen} onClick={onToggleEntry}>

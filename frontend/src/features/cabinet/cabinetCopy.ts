@@ -8,11 +8,11 @@ import type { AbsenceCopy } from '../fleet/ResourceNotice.tsx';
  * the service gave, in the modules beside this one.
  */
 
-/** What the cabinet is called, which is also the label its section is read by. */
+/**
+ * What the cabinet is called. The header control that leads there says the same word, because a
+ * control is named by where it goes: two spellings of one destination would be one word too many.
+ */
 export const CABINET_HEADING = 'Кабинет';
-
-/** What the header offers a person who is signed in, which is the way into the cabinet. */
-export const CABINET_ACTION = 'Кабинет';
 
 /** What the header offers a person who is not signed in. */
 export const SIGN_IN_ACTION = 'Вход';

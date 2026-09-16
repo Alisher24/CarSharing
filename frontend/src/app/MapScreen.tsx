@@ -1,13 +1,7 @@
 import { useCallback, useState } from 'react';
 import { AccountPanel } from '../features/account/AccountPanel';
-import { FilterBar } from '../features/fleet/FilterBar';
-import { FleetStatus } from '../features/fleet/FleetStatus';
-import { NO_FILTERS, selectVehicles, type FleetFilters } from '../features/fleet/filters';
-import { catalogVehicles, foundTariff, foundZones } from '../features/fleet/useCatalog';
-import { useSelectedVehicle } from '../features/fleet/useSelectedVehicle';
-import { VehicleCard, type VehicleBooking } from '../features/fleet/VehicleCard';
-import { VehicleList } from '../features/fleet/VehicleList';
-import { FleetMap } from '../features/map/FleetMap';
+import { FleetView } from '../features/fleet/FleetView';
+import type { VehicleBooking } from '../features/fleet/VehicleCard';
 import { ReservationPanel } from '../features/reservation/ReservationPanel';
 import { ReservationWarning } from '../features/reservation/ReservationWarning';
 import { commandText } from '../features/reservation/commandPhase';
@@ -17,9 +11,6 @@ import type { Application } from './useApplication';
 import { loadedValue } from '../shared/api/Resource';
 import type { CurrentSnapshot } from '../shared/api/current';
 
-/** What a narrow screen is showing, where the map and the list cannot both fit. */
-type NarrowView = 'map' | 'list';
-
 type MapScreenProps = {
   application: Application;
 
@@ -28,24 +19,20 @@ type MapScreenProps = {
 };
 
 /**
- * MapScreen is the address the application opens on: the fleet on a map and in a list, the rental in
- * force above them, and the card of whichever vehicle is selected. It is where a person acts on the
- * present; what they have already ridden and what they were charged for it is the cabinet's.
+ * MapScreen is the address the application opens on: what the person's own rental is doing, and the
+ * fleet below it. It is where a person acts on the present; what they have already ridden and what
+ * they were charged for it is the cabinet's.
+ *
+ * Which vehicle is selected is held here rather than by the fleet, because the panel of the rental in
+ * force selects one too: «показать машину» and a click in the list are two ways to the same card.
  */
 export function MapScreen({ application, entryOpen }: MapScreenProps) {
   const { account, submission, submit, catalog, current, reservations, ride, notifications } = application;
-
-  const [filters, setFilters] = useState<FleetFilters>(NO_FILTERS);
   const [selectedId, setSelectedId] = useState<string>();
-  const [narrowView, setNarrowView] = useState<NarrowView>('map');
 
-  const vehicles = catalogVehicles(catalog);
-  const shown = selectVehicles(vehicles, filters);
-  const selected = useSelectedVehicle(vehicles, selectedId);
   const select = useCallback((vehicleId: string) => setSelectedId(vehicleId), []);
-
-  const currentSnapshot = loadedValue(current.resource);
-  const booking = bookingOf(account.state === 'signed-in', currentSnapshot, reservations);
+  const clearSelection = useCallback(() => setSelectedId(undefined), []);
+  const booking = bookingOf(account.state === 'signed-in', loadedValue(current.resource), reservations);
 
   return (
     <>
@@ -61,37 +48,13 @@ export function MapScreen({ application, entryOpen }: MapScreenProps) {
       />
       <ReservationWarning current={current.resource} notifications={notifications} />
 
-      <div className="fleet-bar">
-        <FleetStatus resource={catalog.fleet.resource} onRetry={catalog.fleet.retry} />
-        <NarrowViewSwitch view={narrowView} onChange={setNarrowView} />
-        <FilterBar filters={filters} onChange={setFilters} />
-      </div>
-
-      <main className={`fleet-layout fleet-layout-${narrowView}`}>
-        <div className="fleet-map-pane">
-          <FleetMap
-            vehicles={shown}
-            zones={foundZones(catalog)}
-            onRetryZones={catalog.zones.retry}
-            selectedId={selectedId}
-            onSelect={select}
-          />
-        </div>
-        <div className="fleet-side-pane">
-          <VehicleList vehicles={shown} selectedId={selectedId} onSelect={select} />
-        </div>
-      </main>
-
-      {selected !== undefined && (
-        <VehicleCard
-          vehicle={selected}
-          tariff={foundTariff(catalog)}
-          onRetryTariff={catalog.tariffs.retry}
-          withinFilters={shown.some((vehicle) => vehicle.id === selected.id)}
-          onClose={() => setSelectedId(undefined)}
-          booking={booking}
-        />
-      )}
+      <FleetView
+        catalog={catalog}
+        booking={booking}
+        selectedId={selectedId}
+        onSelect={select}
+        onClearSelection={clearSelection}
+      />
     </>
   );
 }
@@ -114,21 +77,4 @@ function bookingOf(
     notice: commandText(reservations.phase),
     book: reservations.book,
   };
-}
-
-/**
- * NarrowViewSwitch is how a phone moves between the map and the list. It changes only which of the
- * two is on screen: the filters and the selected vehicle are held above it and survive the switch.
- */
-function NarrowViewSwitch({ view, onChange }: { view: NarrowView; onChange: (view: NarrowView) => void }) {
-  return (
-    <div className="view-switch" role="group" aria-label="Карта или список">
-      <button className="view-tab" type="button" aria-pressed={view === 'map'} onClick={() => onChange('map')}>
-        Карта
-      </button>
-      <button className="view-tab" type="button" aria-pressed={view === 'list'} onClick={() => onChange('list')}>
-        Список
-      </button>
-    </div>
-  );
 }
