@@ -31,10 +31,9 @@ const recordedHashingParameters = {
 /** How many hashes the instance admits at once, per the recorded configuration. */
 const recordedConcurrentHashes = 2;
 
-// Comfortably more than the ceiling, so the surplus has to be refused rather than queued. The
-// address limit is high enough that these are refused for being surplus rather than for being too
-// many attempts.
-const REQUEST_BURST_MULTIPLIER = 6;
+// More than the ceiling, so the surplus has to be refused rather than queued, and comfortably inside
+// the budget of one email and address pair, so that the ceiling is the only limit this burst can meet.
+const REQUEST_BURST_MULTIPLIER = 2;
 
 // Several rounds, comparing the fastest of each: a minimum is far less sensitive to scheduling
 // noise than a mean, and a skipped hash would show up as a floor an order of magnitude lower.
@@ -44,13 +43,11 @@ const MINIMUM_KNOWN_ADDRESS_SPEED_RATIO = 0.5;
 const ACCEPTED_SIGN_IN_STATUS = 200;
 const REFUSED_SIGN_IN_STATUS = 401;
 const OVERLOADED_STATUS = 503;
-const RATE_LIMITED_STATUS = 429;
-const RATE_LIMITED_CODE = 'RATE_LIMITED';
 const SERVICE_UNAVAILABLE_CODE = 'SERVICE_UNAVAILABLE';
 
 const SHARED_PASSWORD = 'sharedpasswordvalue';
 
-/** How many sign-ins the suite asks for at once, which is comfortably more than the ceiling. */
+/** How many sign-ins the suite asks for at once, which is more than the ceiling. */
 const REQUEST_BURST_SIZE = recordedConcurrentHashes * REQUEST_BURST_MULTIPLIER;
 
 // A burst is this suite's subject, and the suites after it inherit what it left.
@@ -114,30 +111,33 @@ describe('an instance admits only its ceiling of concurrent hashes', () => {
     const statuses = answers.map((answer) => answer.status);
     const unavailable = answers.filter((answer) => answer.status === OVERLOADED_STATUS);
     const succeeded = statuses.filter((status) => status === ACCEPTED_SIGN_IN_STATUS).length;
+    const measured = `ceiling=${recordedConcurrentHashes} burst=${REQUEST_BURST_SIZE}: ${statuses.join(',')}`;
 
+    assert.ok(unavailable.length > 0, `no request was refused while ${REQUEST_BURST_SIZE} hashes were asked at once`);
+    assert.ok(succeeded > 0, `every request was refused: ${measured}`);
+    // The hasher admitted no more than its ceiling, and every attempt it turned away was the documented
+    // refusal rather than a queue that gave up. The two together are what says the surplus was refused.
     assert.ok(
-      unavailable.length > 0,
-      `no request was refused while ${REQUEST_BURST_SIZE} hashes were asked for at once: ${statuses.join(',')}`,
+      succeeded <= recordedConcurrentHashes,
+      `${succeeded} requests were hashed at once against a ceiling of ${recordedConcurrentHashes}`,
     );
-    assert.ok(succeeded > 0, `every request was refused: ${statuses.join(',')}`);
     for (const refused of unavailable) {
       assert.equal(refused.json.code, SERVICE_UNAVAILABLE_CODE, refused.text);
     }
-    // A burst larger than the ceiling also spends the budget of the address it comes from, and the
-    // budget is spent by the same statement that decides whether an attempt may run: the attempts the
-    // hasher never saw are therefore refused either as surplus or as over the limit, and both are an
-    // honest refusal rather than a queue. Nothing else may appear: a queued request would eventually
-    // show as a timeout or a gateway error.
-    const refused = [OVERLOADED_STATUS, RATE_LIMITED_STATUS];
+    // The burst is inside the budget of the address and the email it comes from, and an attempt over
+    // that budget is refused before it reaches the hasher, so the two statuses below are the whole of
+    // what may appear. Nothing else may: a queued request would eventually show as a timeout or a
+    // gateway error rather than as an honest refusal.
     for (const status of statuses) {
       assert.ok(
-        [ACCEPTED_SIGN_IN_STATUS, ...refused].includes(status),
-        `an unexpected status appeared under pressure: ${status}`,
+        [ACCEPTED_SIGN_IN_STATUS, OVERLOADED_STATUS].includes(status),
+        `an unexpected status appeared under pressure: ${status} (${measured})`,
       );
     }
-    for (const answer of answers.filter((one) => one.status === RATE_LIMITED_STATUS)) {
-      assert.equal(answer.json.code, RATE_LIMITED_CODE, answer.text);
-    }
+    assert.equal(statuses.length, succeeded + unavailable.length, `an attempt of the burst had no answer: ${measured}`);
+    process.stdout.write(
+      `hash ceiling: ${succeeded} accepted and ${unavailable.length} refused of ${REQUEST_BURST_SIZE}\n`,
+    );
   });
 
   test('recovers as soon as the pressure is gone', async () => {

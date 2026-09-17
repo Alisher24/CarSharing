@@ -178,10 +178,6 @@ describe('a cursor belongs to one account, one operation and one set of paramete
   // the operation, the owner and the parameters are checked. A page has to carry a cursor of its own
   // for that to be read at all, so the account under test is given rows of every collection this
   // check walks; they are written rather than ridden, and the check below is about the cursor.
-  //
-  // The parameters of a cursor are held to the page size it was issued under by the history suite,
-  // which reads a page of a size the contract admits a second of; the collections here accept one
-  // page size only, so this check walks the operation and the owner instead.
   test('a cursor of one account is refused by every collection of another', async () => {
     resetRateLimits();
     const owner = await accountWithPages();
