@@ -13,7 +13,7 @@ import { expect, test } from '@playwright/test';
 import { demoCommand, startSimulator, stopSimulator } from '../../scripts/acceptance/simulation.mjs';
 import { somText } from '../../scripts/acceptance/money.mjs';
 import { sql } from '../../scripts/service.mjs';
-import { availableVehicleOfPowertrain, book, email, endRidesOf, signUp, until } from './person.mjs';
+import { availableVehicleOfPowertrain, book, email, endRidesOf, panelSays, signUp, until } from './person.mjs';
 import { restoreScenario } from './scenario.mjs';
 
 /** The prefix of every account these checks register, which is how their rows are found again. */
@@ -140,15 +140,14 @@ test('a ride that ends while the tab hears nothing is shown finished with its re
     await expect(page.locator('.reservation-panel-time')).toContainText(IN_MODE);
 
     // The subscription is answered again. The tab reads what the service holds rather than what it was
-    // told, and the finished ride appears with the reason the service stored and the amount it fixed.
+    // told, and the finished ride appears with the reason the service stored and the amount it fixed:
+    // the reason is what the wait is for, and the rest is read from the same answer.
     await context.unroute(PRIVATE_EVENTS);
-    await expect(page.locator('.reservation-panel-time')).toHaveText(RIDE_FINISHED, {
-      timeout: RECONCILIATION_PATIENCE_MS,
-    });
-    await expect(page.locator('.ride-progress')).toContainText(DEPLETION_REASON);
-    await expect(page.locator('.ride-progress')).toContainText(DEPLETED_SOURCE);
-    await expect(page.locator('.ride-progress')).toContainText(INVOICE_TOTAL);
-    await expect(page.locator('.ride-progress')).toContainText(somText(total));
+    const said = await panelSays(page, DEPLETION_REASON);
+    assert.ok(said.includes(RIDE_FINISHED), `the panel does not say the ride is over:\n${said}`);
+    assert.ok(said.includes(DEPLETED_SOURCE), `the panel names no source that ran out:\n${said}`);
+    assert.ok(said.includes(INVOICE_TOTAL), `the panel states no total:\n${said}`);
+    assert.ok(said.includes(somText(total)), `the panel states another total than the invoice:\n${said}`);
   } finally {
     stopSimulator();
     await context.close();
