@@ -17,6 +17,7 @@ import {
   newCommandKey,
   reserve,
   restoreScenario,
+  until,
 } from './reservations.mjs';
 
 const ACCOUNT_PREFIX = 'failures';
@@ -123,7 +124,10 @@ describe('a command that fails inside its transaction', () => {
     assert.equal(started.status, STATUS_OK, started.text);
 
     // What the ride already holds before the ending is attempted: the signals of starting it. The
-    // ending must add nothing to any of these when it fails in the middle.
+    // ending must add nothing to any of these when it fails in the middle. The starting ride's own
+    // deliveries are finished first, because a task still in flight would be completed while the
+    // ending is refused and the queue would look shorter for a reason that is not the refusal.
+    await until(() => unfinishedTasksOf(rentalId) === 0, 'the starting ride was never delivered');
     const before = stateOfRide(userId, rentalId);
 
     // The ending writes the ride, the invoice, its lines, the notification, the signals and the saved
@@ -243,6 +247,11 @@ function stateOfRide(userId, rentalId) {
        )`,
     ),
   );
+}
+
+/** How many unfinished deliveries one ride still owes, which a check waits to fall to none. */
+function unfinishedTasksOf(rentalId) {
+  return count(`SELECT count(*) FROM outbox WHERE resource_id = '${rentalId}' AND completed_at IS NULL`);
 }
 
 function rideCommand(path, account) {

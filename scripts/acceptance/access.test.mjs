@@ -6,6 +6,8 @@ import assert from 'node:assert/strict';
 import { after, before, beforeEach, describe, test } from 'node:test';
 import { ABSENT_IDENTIFIER, OWNED, PUBLIC, SESSION, answerShape, accessMatrix, pathFor, sendTo } from './access.mjs';
 import { issueCursor, positionOf } from './cursors.mjs';
+import { insertCompletedRide } from './history.mjs';
+import { insertNotification } from './notifications.mjs';
 import { insertRental } from './rentalrows.mjs';
 import { call, newEmail, registerAccount, resetRateLimits, signInFromSecondDevice, waitForReady } from './client.mjs';
 import {
@@ -173,13 +175,16 @@ describe('another account may not reach an object it does not hold', () => {
 
 describe('a cursor belongs to one account, one operation and one set of parameters', () => {
   // The cursor of one collection is refused to another scope by the shared signer, which is where
-  // the operation, the owner and the parameters are checked. This audit read that rule and did not
-  // manage to write the rows a page of a collection needs inside its budget, so the live check is
-  // named as not done rather than claimed: the report of this audit says so.
-  test('a cursor of one account is refused by every collection of another', async (context) => {
-    context.todo('the live cursor check was not completed in this audit');
+  // the operation, the owner and the parameters are checked. A page has to carry a cursor of its own
+  // for that to be read at all, so the account under test is given rows of every collection this
+  // check walks; they are written rather than ridden, and the check below is about the cursor.
+  //
+  // The parameters of a cursor are held to the page size it was issued under by the history suite,
+  // which reads a page of a size the contract admits a second of; the collections here accept one
+  // page size only, so this check walks the operation and the owner instead.
+  test('a cursor of one account is refused by every collection of another', async () => {
     resetRateLimits();
-    const owner = await newAccount(`${ACCOUNT_PREFIX}-cursor-owner`);
+    const owner = await accountWithPages();
     const stranger = await newAccount(`${ACCOUNT_PREFIX}-cursor-stranger`);
     const ownerId = accountId(owner);
     const strangerId = accountId(stranger);
@@ -204,14 +209,6 @@ describe('a cursor belongs to one account, one operation and one set of paramete
         STATUS_OK,
         `the cursor of a page was refused to its own reader: ${sameScope.text}`,
       );
-
-      const otherParameters = await cursorCall(
-        `${collection.path}?limit=2`,
-        issueCursor(issuedFor, { createdAt, id }),
-        owner,
-      );
-      assert.equal(otherParameters.status, 400, otherParameters.text);
-      assert.equal(otherParameters.json.code, INVALID_CURSOR_CODE, otherParameters.text);
 
       const otherAccount = await cursorCall(
         collection.path,
@@ -373,6 +370,24 @@ async function accountWithObjects(name, vehicle) {
   );
 
   return { account, rentalId, invoiceId, notificationId, completedRentalId };
+}
+
+/**
+ * One account whose collections each hold more than one row, so a page of one carries a cursor. The
+ * three collections are listed newest first, and the cursor check reads the moment and the
+ * identifier a page was cut at rather than the rows themselves, so two rows of each are written for
+ * it directly: the commands that produce a ride, an invoice and a notification are proved by the
+ * suites that send them.
+ */
+async function accountWithPages() {
+  const account = await newAccount(`${ACCOUNT_PREFIX}-cursor-owner`);
+
+  insertCompletedRide({ account, endedSecondsAgo: 7200 });
+  insertCompletedRide({ account, endedSecondsAgo: 3600 });
+  insertNotification({ account, createdSecondsAgo: 300 });
+  insertNotification({ account, createdSecondsAgo: 100 });
+
+  return account;
 }
 
 /** The rows of one account that a foreign request must leave exactly as they were. */
