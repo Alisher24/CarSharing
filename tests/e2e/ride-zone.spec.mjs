@@ -13,7 +13,16 @@ import assert from 'node:assert/strict';
 import { expect, test } from '@playwright/test';
 import { stopSimulator } from '../../scripts/acceptance/simulation.mjs';
 import { sql } from '../../scripts/service.mjs';
-import { availableModel, book, email, endRidesOf, RECONCILIATION_PATIENCE_MS, signUp } from './person.mjs';
+import {
+  availableModel,
+  book,
+  email,
+  endRidesOf,
+  PANEL,
+  panelSays,
+  RECONCILIATION_PATIENCE_MS,
+  signUp,
+} from './person.mjs';
 import { restoreScenario, vehicleIdOf } from './scenario.mjs';
 import {
   confirmedPositionOf,
@@ -44,9 +53,6 @@ const RIDE_FINISHED = 'Поездка завершена';
 const REFUSED_MOVE = 'Автомобиль вне зоны обслуживания';
 const REFUSED_RETURN = 'вернитесь в зону и завершите поездку';
 const OUTSIDE_ZONE_REFUSAL = `${REFUSED_MOVE}: ${REFUSED_RETURN}`;
-
-/** The panel above the map, which is where every ride of these checks is driven from. */
-const PANEL = '.reservation-panel';
 
 /** How long a check waits for the billed time to grow, which is several times one started minute. */
 const CHARGE_PATIENCE_MS = 90_000;
@@ -105,7 +111,8 @@ test('a refused ending outside the zone is told to the person and the ride keeps
 
     // The service refused the ending, and the browser says what it objected to rather than leaving the
     // person to guess. The control that ends the ride is still there, and the ride is still running.
-    await expect(page.locator('.reservation-panel-notice')).toHaveText(OUTSIDE_ZONE_REFUSAL);
+    const said = await panelSays(page, OUTSIDE_ZONE_REFUSAL);
+    assert.ok(said.includes(OUTSIDE_ZONE_REFUSAL), `the panel never said why the ending was refused:\n${said}`);
     await expect(panelAction(page, FINISH_ACTION)).toBeEnabled();
     await expect(page.locator('.reservation-panel-finished')).toHaveCount(0);
     assert.equal(stageOf(vehicleId), 'active', 'the refused ending moved the ride out of its stage');

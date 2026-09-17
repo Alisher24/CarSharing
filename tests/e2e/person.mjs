@@ -119,6 +119,40 @@ export async function signOut(page, address) {
 }
 
 /**
+ * Waits until the panel above the map says what a check expects of the command it sent, and answers
+ * what it said.
+ *
+ * The text is read from the whole panel and polled, rather than asserted on the notice element: the
+ * notice is replaced by the next render — every answer to a command reads the state again — so an
+ * assertion that looks for the element at one moment can miss a message that really was shown. The
+ * panel's text keeps what it said, so a message that appeared is still read here.
+ *
+ * A panel that never says it fails with the whole text it did show, because what a panel says instead
+ * is the first thing a reader of the failure needs.
+ */
+export async function panelSays(page, expected, patienceMs = RECONCILIATION_PATIENCE_MS) {
+  let said = '';
+  try {
+    await expect
+      .poll(
+        async () => {
+          said = await page.locator(PANEL).innerText();
+          return said.includes(expected);
+        },
+        { timeout: patienceMs },
+      )
+      .toBe(true);
+  } catch {
+    throw new Error(`the panel never said ${JSON.stringify(expected)}; it said:\n${said}`);
+  }
+
+  return said;
+}
+
+/** The panel above the map, which every screen showing a rental carries. */
+export const PANEL = '.reservation-panel';
+
+/**
  * Removes what the accounts of one prefix hold, so the prepared demonstration can be put back: the
  * restoration refuses while a rental of a person's stands on one of its vehicles. Every suite names
  * its own prefix, so this is one statement of the tables a suite owes rather than one copy per suite.
