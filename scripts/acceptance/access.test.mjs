@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, describe, test } from 'node:test';
 import { ABSENT_IDENTIFIER, OWNED, PUBLIC, SESSION, answerShape, accessMatrix, pathFor, sendTo } from './access.mjs';
-import { issueCursor, positionOf } from './cursors.mjs';
+import { CURSOR_ALPHABET, editPosition, issueCursor, payloadOf, positionOf, signCursorPayload } from './cursors.mjs';
 import { insertCompletedRide } from './history.mjs';
 import { insertNotification } from './notifications.mjs';
 import { insertRental } from './rentalrows.mjs';
@@ -224,7 +224,67 @@ describe('a cursor belongs to one account, one operation and one set of paramete
     assert.equal(checked, collections.length, 'not every collection was checked');
     process.stdout.write(`access matrix: ${checked} collections refused a cursor of another scope\n`);
   });
+
+  // The checks above present cursors this suite signed for another scope. These present the cursor a
+  // page really answered, edited into a position it never named, and then the same edit signed again
+  // with the key the stack mounted. The second half is what makes the first mean something: a check
+  // that stopped at the refusal could not tell a signature that does not match from a payload the
+  // service cannot read, and a service that skipped the signature check would pass it.
+  test('a cursor whose position was edited is refused, and the same edit signed again is served', async () => {
+    resetRateLimits();
+    const owner = await accountWithPages();
+    const first = await call('/api/v1/me/notifications?limit=1', { cookie: owner.cookie });
+    assert.equal(first.status, STATUS_OK, first.text);
+    const issued = first.json.next_cursor;
+    assert.ok(issued, 'the collection answered no cursor for a page with more to read');
+    assert.match(issued, CURSOR_ALPHABET, `the cursor is not written in the declared alphabet: ${issued}`);
+
+    // The position is replaced by another identifier of the shape the service publishes, and the
+    // signature stays as the page issued it, so the payload is one the service could read.
+    const edited = editPosition(issued, otherIdentifier(issued));
+    assert.notEqual(edited, issued, 'the edit changed nothing, so the check would prove nothing');
+    const refused = await cursorCall('/api/v1/me/notifications', edited, owner);
+    assert.equal(refused.status, STATUS_BAD_REQUEST, `an edited cursor answered ${refused.status}: ${refused.text}`);
+    assert.equal(refused.json.code, INVALID_CURSOR_CODE, refused.text);
+
+    // The same payload, signed again with the key the stack mounted, is served: the refusal above was
+    // the signature's, not the service's inability to read what the cursor carries.
+    const resigned = signCursorPayload(payloadOf(edited));
+    assert.deepEqual(payloadOf(resigned), payloadOf(edited), 'signing the payload changed it');
+    assert.notEqual(resigned, edited, 'the resigned cursor is the edited one, so the check compares nothing');
+    const served = await cursorCall('/api/v1/me/notifications', resigned, owner);
+    assert.equal(served.status, STATUS_OK, `a cursor signed again was refused: ${served.text}`);
+
+    for (const [description, cursor] of [
+      ['truncated', issued.slice(0, -4)],
+      ['not a cursor', 'not-a-cursor-at-all'],
+      ['empty', ''],
+    ]) {
+      const answer = await cursorCall('/api/v1/me/notifications', cursor, owner);
+      assert.equal(
+        answer.status,
+        STATUS_BAD_REQUEST,
+        `a ${description} cursor answered ${answer.status}: ${answer.text}`,
+      );
+      assert.equal(answer.json.code, INVALID_CURSOR_CODE, `a ${description} cursor: ${answer.text}`);
+    }
+
+    process.stdout.write(`access matrix: an edited cursor is refused and the same edit signed again is served\n`);
+  });
 });
+
+/** An identifier of the shape the service publishes that the cursor does not already name. */
+function otherIdentifier(cursor) {
+  const named = payloadOf(cursor).id;
+  let candidate = named;
+  while (candidate === named) {
+    const digits = Math.floor(Math.random() * 16 ** 12)
+      .toString(16)
+      .padStart(12, '0');
+    candidate = `01994342-6ba7-7000-8000-${digits}`;
+  }
+  return candidate;
+}
 
 describe('a stored command result belongs to the account that made the command', () => {
   test('another account with the same key never receives the stored body', async () => {
@@ -270,23 +330,37 @@ describe('a stored command result belongs to the account that made the command',
 describe('an unusable email is not a way of asking which addresses have accounts', () => {
   // The boundary answers a malformed address before the operation sees it, so a caller can tell it
   // from an address no account holds by the status alone: 422 against 401, where the operation's own
-  // answer is 401 for both. The suite records the difference rather than demanding a behaviour the
-  // contract does not have; the finding is named in the report of this audit.
-  test('records how a malformed address is answered', async (context) => {
+  // answer is 401 for both. The difference is observable from outside and is recorded here as the
+  // behaviour this build has rather than demanded of it; the two answers are of one order in time, so
+  // what they differ in is the status and not how long the service took to decide.
+  test('answers a malformed address as a validation failure and an unknown one as 401', async () => {
     resetRateLimits();
+    const malformedAddress = 'not-an-address';
+    const unknownAddress = newEmail('never-registered');
     const malformed = await call('/api/v1/auth/login', {
       method: 'POST',
-      body: { email: 'not-an-address', password: 'correcthorsebattery' },
+      body: { email: malformedAddress, password: 'correcthorsebattery' },
     });
     const unknown = await call('/api/v1/auth/login', {
       method: 'POST',
-      body: { email: newEmail('never-registered'), password: 'correcthorsebattery' },
+      body: { email: unknownAddress, password: 'correcthorsebattery' },
     });
     process.stdout.write(
       `malformed address: ${malformed.status} ${malformed.json?.code ?? ''} against ` +
         `${unknown.status} ${unknown.json?.code ?? ''} for an address no account holds\n`,
     );
-    context.todo('the boundary answers a malformed address as a validation failure and an unknown one as 401');
+    assert.equal(malformed.status, STATUS_UNPROCESSABLE, malformed.text);
+    assert.equal(malformed.json.code, 'VALIDATION_FAILED', malformed.text);
+    assert.equal(unknown.status, STATUS_AUTHENTICATION_REQUIRED, unknown.text);
+    assert.equal(unknown.json.code, 'INVALID_CREDENTIALS', unknown.text);
+
+    // Neither answer names an account or repeats the address it was given.
+    for (const [address, answer] of [
+      [malformedAddress, malformed],
+      [unknownAddress, unknown],
+    ]) {
+      assert.ok(!answer.text.includes(address), `the refusal repeats the address: ${answer.text}`);
+    }
   });
 
   test('answers a registered and an unregistered address alike and in comparable time', async () => {

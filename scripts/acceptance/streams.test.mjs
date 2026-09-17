@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
 import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
-import { call, serviceOrigin, sql, waitForReady } from './client.mjs';
+import { call, compose, serviceOrigin, sql, waitForReady } from './client.mjs';
 import { changeOf, closeStream, frameText, waitForEnd, waitForFrame, watchEventStream } from './events.mjs';
 import { newAccount, newCommandKey, reserve, restoreScenario } from './reservations.mjs';
 
@@ -31,6 +31,13 @@ const KEEPALIVE_PATIENCE_MS = 25_000;
 
 /** How long a check waits for an observable absence before it believes the stream carried nothing. */
 const SILENCE_MS = 3_000;
+
+/**
+ * How long a stream may stay open after the database left. The service answers a read it cannot make
+ * with a refusal rather than waiting for the pool, so the subscription ends within seconds; the
+ * patience is that bound with room for a machine under load.
+ */
+const OUTAGE_PATIENCE_MS = 20_000;
 
 /**
  * How many signals one connection is made to lag behind by. The queue of one connection is far
@@ -162,6 +169,29 @@ describe('what closes a private stream', () => {
 
     await waitForEnd(stream);
     assert.equal(stream.ended, true, 'the stream stayed open after the session row was removed');
+  });
+
+  // A stream that cannot decide who is reading it must end rather than stay open on a subscription
+  // the service can no longer authorise: a client that keeps a dead connection believes it is being
+  // told about changes, and reads nothing for as long as the connection is there.
+  test('losing the database closes a private stream instead of leaving it hanging', async () => {
+    const account = await newAccount(`${ACCOUNT_PREFIX}-outage`);
+    const stream = await watchEventStream(PRIVATE_EVENTS_PATH, { cookie: account.cookie });
+    await waitForFrame(stream, (frame) => frame.event === READY_EVENT);
+
+    compose('stop', 'postgres');
+    const stoppedAt = performance.now();
+    try {
+      await waitForEnd(stream, OUTAGE_PATIENCE_MS);
+      const closedIn = performance.now() - stoppedAt;
+      process.stdout.write(
+        `stream outage: the private stream ended ${closedIn.toFixed(0)} ms after the database left\n`,
+      );
+      assert.equal(stream.ended, true, 'the private stream stayed open while the database was gone');
+    } finally {
+      compose('start', 'postgres');
+      await waitForReady();
+    }
   });
 });
 

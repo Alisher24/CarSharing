@@ -35,7 +35,11 @@ export function issueCursor(scope, { createdAt, id }) {
   );
 }
 
-/** Edits one character of a cursor's payload, leaving the signature it was issued with. */
+/**
+ * Edits one character of a cursor's payload, leaving the signature it was issued with. The character
+ * that changes is the last one of the encoded payload, which is padding rather than content: a caller
+ * that needs a payload which still reads after the edit edits the value it carries instead.
+ */
 export function tamper(cursor) {
   return cursor.slice(0, -1) + (cursor.endsWith('A') ? 'B' : 'A');
 }
@@ -44,6 +48,41 @@ export function tamper(cursor) {
 export function positionOf(cursor) {
   const payload = JSON.parse(Buffer.from(cursor.slice(SIGNATURE_LENGTH), 'base64url').toString('utf8'));
   return { createdAt: payload.t, id: payload.id };
+}
+
+/**
+ * One cursor's payload, decoded, so a check can read what it carries and hand an edited copy back.
+ * The payload is the part the signature covers: the rest of the cursor is that signature.
+ */
+export function payloadOf(cursor) {
+  return JSON.parse(Buffer.from(cursor.slice(SIGNATURE_LENGTH), 'base64url').toString('utf8'));
+}
+
+/**
+ * One cursor whose position identifier was replaced, keeping the signature it was issued with. The
+ * replacement is a plain identifier rather than another spelling of the same value, because what a
+ * check needs is a payload the service would read if the signature matched: a value it could not read
+ * at all would be refused for a reason other than the signature.
+ */
+export function editPosition(cursor, identifier) {
+  const payload = payloadOf(cursor);
+  return `${cursor.slice(0, SIGNATURE_LENGTH)}${encode({ ...payload, id: identifier })}`;
+}
+
+/**
+ * One payload signed the way the service signs it, which is what makes it a cursor the service accepts.
+ *
+ * The service signs the bytes of the payload it wrote, and those bytes came from a JSON encoder, so a
+ * payload this helper signs is one whose own encoding is the encoding the service would produce: the
+ * key order of the cursor it was decoded from, and no whitespace. A payload whose fields were
+ * rearranged by hand would be signed correctly and still not be the payload the service wrote.
+ */
+export function signCursorPayload(payload) {
+  return signPayload(JSON.stringify(payload));
+}
+
+function encode(payload) {
+  return Buffer.from(JSON.stringify(payload)).toString('base64url');
 }
 
 function signPayload(payload) {

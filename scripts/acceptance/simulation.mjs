@@ -33,12 +33,18 @@ export function demoCommand(...arguments_) {
 
 /** Stops the simulator, which is how a check makes the fleet stand still. */
 export function stopSimulator() {
-  compose('stop', 'simulator');
+  compose('--profile', 'demo', 'stop', 'simulator');
 }
 
-/** Starts the simulator again, which is how a check resumes the fleet. */
+/**
+ * Starts the simulator, which is how a check resumes the fleet. This is the command the README gives to
+ * start the demonstration clock: it names the profile the simulator belongs to and brings the service
+ * up, so a stack where the container was never created starts it as well as one where it was merely
+ * stopped. A `start` without the profile knows no such service, and the check that needed a moving
+ * fleet would wait for a tick that never comes.
+ */
 export function startSimulator() {
-  compose('start', 'simulator');
+  compose('--profile', 'demo', 'up', '--detach', 'simulator');
 }
 
 /**
