@@ -89,7 +89,85 @@ describe('the tables nothing else removes from are swept', () => {
     assert.equal(sessionExists(aged), true, 'the sweep removed a session that had not expired');
     sql(`DELETE FROM ${SESSION_TABLE} WHERE token = '${aged}'`);
   });
+
+  // The two checks above prove that a row inside its retention survives and a row past it goes. What
+  // this one measures is the growth itself: how many rows of each table one burst of subjects adds and
+  // what the sweep leaves behind afterwards. The subject of a counter is chosen by whoever sends the
+  // request and the token of a session by whoever signs in, so a table nothing sweeps grows with every
+  // attempt and every sign-in rather than with the installation.
+  //
+  // Everything the burst writes is already past its retention, so the sweep may take a row before the
+  // count is read: what the reading asserts is that the burst was visible at all, and the bound is
+  // asserted after the sweep has run.
+  test('one burst of subjects grows the tables, and the sweep takes them back to the bound', async () => {
+    resetRateLimits();
+    const baseline = { counters: counterCount(), sessions: sessionCount() };
+
+    for (let index = 0; index < WRITTEN_SUBJECTS; index += 1) {
+      writeCounter(SIGN_IN_EMAIL_SCOPE, newEmail(`growth-${index}`), 0);
+      sql(
+        `INSERT INTO ${SESSION_TABLE} (token, data, expiry)
+         VALUES ('growth-${index}-${Date.now()}', '{}'::bytea, now() - interval '1 minute')`,
+      );
+    }
+    const written = { counters: counterCount(), sessions: sessionCount() };
+    assert.ok(
+      written.counters > baseline.counters || expiredCounters() > 0,
+      `writing ${WRITTEN_SUBJECTS} counters left the table at ${written.counters}`,
+    );
+    assert.ok(
+      written.sessions > baseline.sessions || expiredSessions() > 0,
+      `writing ${WRITTEN_SUBJECTS} sessions left the table at ${written.sessions}`,
+    );
+
+    // Everything written is past its retention, so the sweep takes all of it and the table returns to
+    // what it held before the burst: that is the bound the sweeps exist to keep.
+    await untilSwept(() => expiredCounters() === 0 && expiredSessions() === 0, 'the sweep never took the burst back');
+    process.stdout.write(
+      `retention growth: counters ${baseline.counters} → ${written.counters} → ${counterCount()}, ` +
+        `sessions ${baseline.sessions} → ${written.sessions} → ${sessionCount()}\n`,
+    );
+    assert.ok(
+      Math.abs(counterCount() - baseline.counters) <= MEASUREMENT_SLACK,
+      `the counter table did not return to its bound: ${counterCount()} against ${baseline.counters}`,
+    );
+    assert.ok(
+      Math.abs(sessionCount() - baseline.sessions) <= MEASUREMENT_SLACK,
+      `the session table did not return to its bound: ${sessionCount()} against ${baseline.sessions}`,
+    );
+  });
 });
+
+/** How many subjects one measurement writes, which is a burst rather than a single row. */
+const WRITTEN_SUBJECTS = 25;
+
+/**
+ * How many rows the measurement tolerates beside the ones it wrote. Other suites share the stack and
+ * add a handful of subjects of their own between the two readings, which is not what is measured: what
+ * is measured is that a table does not keep the burst.
+ */
+const MEASUREMENT_SLACK = 40;
+
+function counterCount() {
+  return Number(sql(`SELECT count(*) FROM ${RATE_LIMIT_TABLE}`));
+}
+
+function sessionCount() {
+  return Number(sql(`SELECT count(*) FROM ${SESSION_TABLE}`));
+}
+
+function expiredCounters() {
+  return Number(
+    sql(
+      `SELECT count(*) FROM ${RATE_LIMIT_TABLE}
+       WHERE window_started_at < now() - interval '${COUNTER_RETENTION_HOURS} hours'`,
+    ),
+  );
+}
+
+function expiredSessions() {
+  return Number(sql(`SELECT count(*) FROM ${SESSION_TABLE} WHERE expiry < now()`));
+}
 
 /** Writes one counter whose window began the stated number of hours ago. */
 function writeCounter(scope, subject, hoursAgo) {

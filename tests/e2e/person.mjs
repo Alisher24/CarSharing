@@ -3,10 +3,16 @@
 // and a control renamed in one place must not leave the other asserting a screen that no longer
 // exists.
 import { expect } from '@playwright/test';
-import { SERVICE_ORIGIN } from '../../scripts/service.mjs';
+import { SERVICE_ORIGIN, sql } from '../../scripts/service.mjs';
 
 /** The password every account of these checks is registered with. */
 const PASSWORD = 'correcthorsebattery';
+
+/** How long a change may take to appear through reconciliation alone: several times the delivery bound. */
+export const RECONCILIATION_PATIENCE_MS = 20_000;
+
+/** How often a check that waits for the stack asks again, which is what `until` polls with. */
+const POLL_MS = 200;
 
 /** What the booking control of a free vehicle says, before anything was asked. */
 export const BOOK_ACTION = 'Забронировать на 15 минут';
@@ -28,11 +34,34 @@ export function email(prefix) {
 
 /** One vehicle the service publishes as free to take, by the model it displays. */
 export async function availableModel() {
+  return (await availableVehicle()).model;
+}
+
+/**
+ * One vehicle the service publishes as free to take, whole. A check that prepares the vehicle through
+ * the demonstration control addresses it by identifier, and the identifier the catalog publishes is
+ * the one that control takes.
+ */
+export async function availableVehicle() {
   const answer = await fetch(`${SERVICE_ORIGIN}/api/v1/vehicles`).then((response) => response.json());
   const [free] = answer.items.filter((vehicle) => vehicle.status === 'available');
   if (free === undefined) throw new Error('the demonstration published no free vehicle');
 
-  return free.model;
+  return free;
+}
+
+/**
+ * The free vehicle of one powertrain, which a check that spends a named source asks for: an electric
+ * vehicle is moved by its battery alone, so draining that one reserve is what ends its ride.
+ */
+export async function availableVehicleOfPowertrain(powertrainType) {
+  const answer = await fetch(`${SERVICE_ORIGIN}/api/v1/vehicles`).then((response) => response.json());
+  const found = answer.items.find(
+    (vehicle) => vehicle.status === 'available' && vehicle.powertrain_type === powertrainType,
+  );
+  if (found === undefined) throw new Error(`the demonstration published no free ${powertrainType} vehicle`);
+
+  return found;
 }
 
 /** The row one model stands in, which is where the list states what a vehicle is doing. */
@@ -87,4 +116,33 @@ export async function signOut(page, address) {
   await openCabinet(page, address);
   await page.getByRole('button', { name: 'Выйти' }).click();
   await expect(page.locator('[data-testid="account-email"]')).toHaveCount(0);
+}
+
+/**
+ * Removes what the accounts of one prefix hold, so the prepared demonstration can be put back: the
+ * restoration refuses while a rental of a person's stands on one of its vehicles. Every suite names
+ * its own prefix, so this is one statement of the tables a suite owes rather than one copy per suite.
+ */
+export function endRidesOf(prefix) {
+  const mine = `(SELECT id FROM users WHERE email LIKE '${prefix}-%')`;
+  sql(`DELETE FROM outbox WHERE recipient_id IN ${mine}`);
+  sql(`DELETE FROM notifications WHERE user_id IN ${mine}`);
+  sql(`DELETE FROM invoices WHERE user_id IN ${mine}`);
+  sql(`DELETE FROM idempotency_requests WHERE user_id IN ${mine}`);
+  sql(`DELETE FROM rentals WHERE user_id IN ${mine}`);
+}
+
+/**
+ * Waits until a condition the stack reaches on its own holds, or fails with what it waited for. The
+ * condition answers with what it observed, and its answer is awaited before it is judged: a condition
+ * that reads a service is asynchronous, and asking it twice at once would be two reads.
+ */
+export async function until(reached, complaint, patienceMs = RECONCILIATION_PATIENCE_MS) {
+  const deadline = Date.now() + patienceMs;
+  for (;;) {
+    const value = await reached();
+    if (value) return value;
+    if (Date.now() > deadline) throw new Error(`${complaint} within ${patienceMs} ms`);
+    await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+  }
 }
