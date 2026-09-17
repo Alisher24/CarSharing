@@ -46,12 +46,14 @@ const ACCOUNT_PREFIX = 'simulation';
 /** Where a ride is started, and where the invoice of one is read. */
 const startPath = (rentalId) => `/api/v1/reservations/${rentalId}/start`;
 const invoicePath = (invoiceId) => `/api/v1/me/invoices/${invoiceId}`;
+const pausePath = (rentalId) => `/api/v1/rides/${rentalId}/pause`;
 
 /** The moment the contract publishes, which every answered moment is compared against. */
 const MOMENT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
 
-/** The rate the demonstration charges for a started minute of driving, which every invoice states. */
+/** The rates the demonstration charges for a started minute of each mode, which every invoice states. */
 const DRIVING_RATE_TYIYN = 1234;
+const PAUSED_RATE_TYIYN = 321;
 
 /**
  * What a source is drained to when a check wants a ride to run out while it watches. A whole
@@ -182,6 +184,96 @@ describe('the simulated fleet', () => {
     assert.equal(serviceRequired(vehicleId), false);
     assert.equal((await publishedVehicle(vehicleId)).status, 'available');
     assert.equal(storedModel(vehicleId).depleted, false);
+  });
+
+  // The ride is on pause while its sources run out. A paused ride holds one open interval of the
+  // paused mode, so the ending has to close it at the moment of the exhaustion rather than at the
+  // moment the service noticed, and the invoice has to price the paused minutes alone.
+  test('ends a paused ride at the moment its sources ran out', async () => {
+    const { account, vehicleId, rentalId } = await riding();
+    const paused = await rideCommand('pause', rentalId, account);
+    assert.equal(paused.status, 200, paused.text);
+    assert.equal((await currentOf(account)).json.rental.state, 'paused');
+    await until(() => storedModel(vehicleId) !== undefined, 'the model never met the vehicle');
+    await demoCommand('set-energy-remaining', '--vehicle', vehicleId, '--source', BATTERY, '--remaining', DRAINED_TO);
+
+    const ending = await until(() => {
+      const stored = storedEnding(rentalId);
+      return stored?.reason === 'energy_depleted' ? stored : undefined;
+    }, 'the paused ride whose sources ran out was never ended');
+    assert.deepEqual(ending.sources, [BATTERY]);
+    assert.equal(invoicesOf(rentalId), 1, 'the ending did not issue exactly one invoice');
+    assert.equal(completionsOf(rentalId), 1, 'the ending did not report itself exactly once');
+
+    // The interval of the pause was closed by the moment of the exhaustion: a paused ride is exactly
+    // one open interval, and the ending is what closes it.
+    const openIntervals = sql(
+      `SELECT count(*) FROM ride_segments WHERE rental_id = '${rentalId}' AND ended_at IS NULL`,
+    );
+    assert.equal(openIntervals, '0', 'the ending left an interval of the ride open');
+    // Every interval is closed, and the ride ended in the mode it was holding: the last interval is
+    // the pause, which is what the ending closed.
+    const lastMode = sql(
+      `SELECT mode FROM ride_segments WHERE rental_id = '${rentalId}' ORDER BY started_at DESC LIMIT 1`,
+    );
+    assert.equal(lastMode, 'paused', 'the ride did not end in the mode it was holding');
+    const pausedIntervals = sql(
+      `SELECT count(*) FROM ride_segments WHERE rental_id = '${rentalId}' AND mode = 'paused'`,
+    );
+    assert.ok(Number(pausedIntervals) >= 1, 'the ride of this check recorded no pause at all');
+    // The pause outlasted the driving that preceded it: this check pauses the ride and drains it while
+    // it stands, so a bill for driving would be a bill for time the vehicle did not move.
+    const pausedDuration = sql(
+      `SELECT sum(extract(epoch FROM (ended_at - started_at)))::bigint FROM ride_segments
+       WHERE rental_id = '${rentalId}' AND mode = 'paused'`,
+    );
+    const drivingDuration = sql(
+      `SELECT coalesce(sum(extract(epoch FROM (ended_at - started_at)))::bigint, 0) FROM ride_segments
+       WHERE rental_id = '${rentalId}' AND mode = 'driving'`,
+    );
+    assert.ok(
+      Number(pausedDuration) >= Number(drivingDuration),
+      `the paused interval was shorter than the driving one: ${pausedDuration} against ${drivingDuration}`,
+    );
+
+    // The invoice prices the paused mode alone, to the same moment the ride ended.
+    const notification = completionNotification(rentalId);
+    assert.equal(notification.endedAt, ending.endedAt);
+    assert.equal(notification.reason, 'energy_depleted');
+    const invoice = await call(invoicePath(notification.invoiceId), { cookie: account.cookie });
+    assert.equal(invoice.status, 200, invoice.text);
+    assert.equal(invoice.json.invoice.completion.reason, 'energy_depleted');
+    assert.deepEqual(invoice.json.invoice.completion.exhausted_sources, [BATTERY]);
+    // Both modes are priced at their own rate on the started minutes each recorded, and the total is
+    // the sum of the two lines rather than a figure of its own.
+    const driving = invoice.json.invoice.lines.find((line) => line.mode === 'driving');
+    const pausedLine = invoice.json.invoice.lines.find((line) => line.mode === 'paused');
+    assert.equal(driving.rate_tyiyn_per_started_minute, String(DRIVING_RATE_TYIYN), invoice.text);
+    assert.equal(pausedLine.rate_tyiyn_per_started_minute, String(PAUSED_RATE_TYIYN), invoice.text);
+    assert.equal(
+      driving.amount_tyiyn,
+      String(Number(driving.billed_started_minutes) * DRIVING_RATE_TYIYN),
+      `the driving line is not its minutes at its rate: ${invoice.text}`,
+    );
+    assert.equal(
+      pausedLine.amount_tyiyn,
+      String(Number(pausedLine.billed_started_minutes) * PAUSED_RATE_TYIYN),
+      `the paused line is not its minutes at its rate: ${invoice.text}`,
+    );
+    assert.ok(
+      Number(pausedLine.billed_started_minutes) >= 1,
+      `the invoice billed no paused minute at all: ${invoice.text}`,
+    );
+    assert.equal(
+      invoice.json.invoice.total_amount_tyiyn,
+      String(Number(driving.amount_tyiyn) + Number(pausedLine.amount_tyiyn)),
+      `the total is not the sum of the lines: ${invoice.text}`,
+    );
+    assert.equal(attemptsOwed(notification.invoiceId), 1, 'the first payment attempt is not owed');
+
+    // The vehicle is out of service, as after any exhaustion of its sources.
+    assert.equal(serviceRequired(vehicleId), true);
+    await demoCommand('mark-serviced', '--vehicle', vehicleId);
   });
 
   test('ends a ride at the read when the simulator is stopped', async () => {
@@ -322,6 +414,17 @@ async function riding() {
   assert.equal(started.status, 200, started.text);
   vehiclesUsed.add(vehicleId);
   return { account, vehicleId, rentalId };
+}
+
+/** Sends one ride command for one rental, which the checks above use to reach a ride in progress. */
+function rideCommand(operation, rentalId, account) {
+  const path = { pause: pausePath(rentalId), resume: `/api/v1/rides/${rentalId}/resume` }[operation];
+  return call(path, {
+    method: 'POST',
+    cookie: account.cookie,
+    csrfToken: account.csrfToken,
+    headers: { [IDEMPOTENCY_HEADER]: newCommandKey() },
+  });
 }
 
 /**

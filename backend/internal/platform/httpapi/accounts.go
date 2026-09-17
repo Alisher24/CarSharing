@@ -78,11 +78,6 @@ func (a accounts) Register(
 		return refused, err
 	}
 
-	failure := a.recordRegistrationAttempt(ctx)
-	if failure != nil {
-		return *failure, nil
-	}
-
 	user, issued, err := a.registerAccount(ctx, email, request.Body.Password)
 	if errors.Is(err, auth.ErrEmailTaken) {
 		// The generated response type carries the 409 itself, so this code never reaches
@@ -124,33 +119,20 @@ func (a accounts) registrationPreflight(
 		}, nil
 	}
 
-	wait, allowed, err := a.throttle.RegistrationAllowed(ctx, clientAddress(ctx))
+	refusal := &auth.ErrRegistrationRefused{}
+	err = a.throttle.ClaimRegistration(ctx, clientAddress(ctx))
+	if errors.As(err, &refusal) {
+		seconds := retryAfterSeconds(refusal.Wait)
+		return "", servedapi.Register429JSONResponse{
+			Body:    apiErrorBody(ctx, codeRateLimited, messageRateLimited),
+			Headers: servedapi.Register429ResponseHeaders{RetryAfter: &seconds},
+		}, nil
+	}
 	if err != nil {
 		return "", servedapi.Register503JSONResponse{Body: serviceUnavailable(ctx)}, nil
 	}
 
-	if allowed {
-		return email, nil, nil
-	}
-
-	seconds := retryAfterSeconds(wait)
-	return "", servedapi.Register429JSONResponse{
-		Body:    apiErrorBody(ctx, codeRateLimited, messageRateLimited),
-		Headers: servedapi.Register429ResponseHeaders{RetryAfter: &seconds},
-	}, nil
-}
-
-// recordRegistrationAttempt spends one attempt of the requesting address's budget. The attempt is
-// counted before it is carried out, so one that fails or is refused still spends the budget.
-func (a accounts) recordRegistrationAttempt(ctx context.Context) *servedapi.RegisterResponseObject {
-	if err := a.throttle.RecordRegistrationAttempt(ctx, clientAddress(ctx)); err != nil {
-		refused := servedapi.RegisterResponseObject(servedapi.Register503JSONResponse{
-			Body: serviceUnavailable(ctx),
-		})
-		return &refused
-	}
-
-	return nil
+	return email, nil, nil
 }
 
 // registerAccount creates the account and the session that carries it in one transaction, so a
@@ -183,30 +165,33 @@ func (a accounts) Login(
 	}
 
 	address := clientAddress(ctx)
-	wait, allowed, err := a.throttle.SignInAllowed(ctx, email, address)
+	// The budget is spent before the password is verified, so an attempt that is already over a
+	// limit never pays the memory-hard cost of a hash, and simultaneous attempts cannot each be told
+	// that the budget still has room.
+	attempt, err := a.throttle.ClaimSignIn(ctx, email, address)
 	if err != nil {
-		return loginUnavailable(ctx), nil
-	}
-
-	// The limit is consulted before the password is verified, so a throttled attempt never pays
-	// the memory-hard cost of a hash.
-	if !allowed {
-		seconds := retryAfterSeconds(wait)
+		reached := &auth.LimitReachedError{}
+		if !errors.As(err, &reached) {
+			return loginUnavailable(ctx), nil
+		}
+		seconds := retryAfterSeconds(reached.Reached.Wait)
 		return servedapi.Login429JSONResponse{
 			Body:    apiErrorBody(ctx, codeRateLimited, messageRateLimited),
 			Headers: servedapi.Login429ResponseHeaders{RetryAfter: &seconds},
 		}, nil
 	}
 
-	if err = a.throttle.RecordSignInAttempt(ctx, address); err != nil {
+	user, issued, err := a.signIn(ctx, email, request.Body.Password)
+	if errors.Is(err, auth.ErrInvalidCredentials) {
+		return a.invalidCredentials(ctx), nil
+	}
+	if err != nil {
 		return loginUnavailable(ctx), nil
 	}
 
-	user, issued, err := a.signIn(ctx, email, request.Body.Password)
-	if errors.Is(err, auth.ErrInvalidCredentials) {
-		return a.recordFailedSignIn(ctx, email, address)
-	}
-	if err != nil {
+	// The limits that record failures were spent by the claim; a proven password gives them back, so
+	// guessing costs the budget and signing in does not.
+	if err = attempt.Succeeded(ctx, a.throttle); err != nil {
 		return loginUnavailable(ctx), nil
 	}
 
@@ -240,19 +225,6 @@ func (a accounts) signIn(
 		return err
 	})
 	return user, issued, err
-}
-
-// recordFailedSignIn answers a refused sign-in after counting it. The count is recorded outside the
-// transaction the refused attempt just rolled back, which would otherwise undo the counter and
-// leave the guess free; a counter that cannot be written is a service failure rather than a refusal,
-// because the attempt was not charged for.
-func (a accounts) recordFailedSignIn(
-	ctx context.Context, email auth.Email, address string,
-) (servedapi.LoginResponseObject, error) {
-	if err := a.throttle.RecordSignInFailure(ctx, email, address); err != nil {
-		return loginUnavailable(ctx), nil
-	}
-	return a.invalidCredentials(ctx), nil
 }
 
 // Logout revokes exactly the session this browser presented. It answers the same way whether or

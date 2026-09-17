@@ -453,6 +453,39 @@ describe('repeating a command whose answer was lost', () => {
     assert.deepEqual(repeat.json, first.json);
   });
 
+  test('keeps a result inside its retention and removes the one past it', async () => {
+    const account = await newAccount('repeat-expiry');
+    const userId = await accountId(account.email);
+    const inside = newCommandKey();
+    const past = newCommandKey();
+
+    // Two stored results of one account: one whose retention has passed and one whose retention has
+    // not. The worker's sweep is what removes a result, so the rows are written the way a completed
+    // command writes them and the check waits for the sweep rather than calling it.
+    for (const [key, age] of [
+      [inside, '1 hour'],
+      [past, '25 hours'],
+    ]) {
+      sql(
+        `INSERT INTO idempotency_requests (owner, user_id, command_key, fingerprint, claimed_at,
+                                            status_code, body, completed_at, retain_until)
+         VALUES ('account:${userId}', '${userId}', '${key}', 'probe', now() - interval '${age}',
+                 200, '{}'::jsonb, now() - interval '${age}',
+                 now() - interval '${age}' + interval '24 hours')`,
+      );
+    }
+    assert.equal(storedResults(userId), 2, 'the two results were not written');
+
+    await untilStoredResults(userId, 1);
+    const left = sql(`SELECT command_key FROM idempotency_requests WHERE user_id = '${userId}'`);
+    assert.equal(left, inside, 'the sweep removed the result inside its retention or kept the expired one');
+
+    // A result the sweep removed is one no command may replay, and the account is not left unable to
+    // make a new one: the key it used is free again.
+    const created = await reserve(await availableVehicle(), newCommandKey(), account);
+    assert.equal(created.status, 201, created.text);
+  });
+
   test('stores a result for at least a day after it was written', async () => {
     const account = await newAccount('repeat-retention');
     const created = await reserve(await availableVehicle(), newCommandKey(), account);
@@ -489,6 +522,23 @@ describe('repeating a command whose answer was lost', () => {
     assert.equal(answer.status, 201, answer.text);
   });
 });
+
+/** Waits for the worker's sweep to leave the stated number of results, or reports what it left. */
+async function untilStoredResults(userId, expected) {
+  const deadline = Date.now() + RETENTION_PATIENCE_MS;
+  for (;;) {
+    const stored = storedResults(userId);
+    if (stored === expected) return;
+    if (Date.now() > deadline) {
+      throw new Error(`the sweep left ${stored} results where ${expected} were expected`);
+    }
+    await delay(RETENTION_POLL_MS);
+  }
+}
+
+/** How long a check waits for the worker's sweep, and how often it asks again. */
+const RETENTION_PATIENCE_MS = 40_000;
+const RETENTION_POLL_MS = 500;
 
 /** The price list the catalog offers, as the answer publishes it. */
 async function offeredTariff() {

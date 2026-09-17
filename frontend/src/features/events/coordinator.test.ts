@@ -129,6 +129,49 @@ describe('remembering a change', () => {
     assert.equal(read.due('vehicles'), true, 'the answer did not publish the change');
   });
 
+  // The two collections of the cabinet are private documents like any other, so what a repeated or
+  // reordered signal does to them is the same thing it does to the catalog: a version is remembered
+  // per object and never moves backwards, and a lower one asks for no read at all.
+  test('a reordered signal about a private document does not roll its reading back', () => {
+    const read = coordinator();
+    read.observe('invoices', 'i1', '7');
+    firstRead(read, 'invoices', new Map([['i1', '7']]));
+
+    read.observe('invoices', 'i1', '6');
+    read.observe('invoices', 'i1', '5');
+    read.observe('invoices', 'i1', '7');
+
+    assert.equal(read.due('invoices'), false, 'a reordered or repeated signal asked for a read');
+  });
+
+  test('a signal about one private document does not ask for the other', () => {
+    const read = coordinator();
+    firstRead(read, 'invoices');
+    firstRead(read, 'rentals');
+
+    read.observe('invoices', 'i1', '7');
+
+    assert.equal(read.due('invoices'), true, 'the change did not ask for its own document');
+    assert.equal(read.due('rentals'), false, 'a change to one collection asked for the other');
+  });
+
+  // A reading that arrives after the one on screen must be stored even though an earlier signal was
+  // about a lower version: what decides is the order the reads were opened in, not the versions the
+  // signals carried.
+  test('the answer of the newest read is stored whatever versions the signals named', () => {
+    const read = coordinator();
+    firstRead(read, 'invoices', new Map([['i1', '7']]));
+
+    read.observe('invoices', 'i1', '6');
+    const newer = read.begin('invoices');
+    assert.notEqual(newer, undefined);
+
+    assert.equal(read.accepts(newer!), true, 'the answer of the newest read was refused');
+    read.stored(newer!);
+    read.settle('invoices');
+    assert.equal(read.due('invoices'), false, 'the answer did not settle the document');
+  });
+
   test('a change the answer covers is not read for again', () => {
     const read = coordinator();
     read.observe('vehicles', 'v1', '42');

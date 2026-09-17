@@ -19,6 +19,20 @@ export const CURRENT_USER_PATH = '/api/v1/me';
 
 const SESSION_COOKIE_PREFIX = `${SESSION_COOKIE_NAME}=`;
 
+/** The scope the registration budget is counted under, which the harness has to restore. */
+const REGISTRATION_SCOPE = 'registration_address';
+
+/** The code the service answers with when it could not decide an attempt at all. */
+const SERVICE_UNAVAILABLE_CODE = 'SERVICE_UNAVAILABLE';
+
+/** How many times a check asks again for a decision the service was too busy to make. */
+const BUSY_ATTEMPTS = 10;
+const BUSY_RETRY_DELAY_MS = 200;
+
+/** How long a suite that follows a burst waits for the hasher to have room again. */
+const SETTLE_ATTEMPTS = 60;
+const SETTLE_RETRY_DELAY_MS = 500;
+
 export const serviceOrigin = SERVICE_ORIGIN;
 
 export { compose, composeWith, sql };
@@ -119,11 +133,21 @@ export async function registerAccount(prefix, overrides = {}) {
 /**
  * Signs one address in again without presenting the first session, as a second device would. The
  * replacement retires tokens the first session was issued, so the caller compares the two.
+ *
+ * A suite that has just sent a burst of sign-ins may find every hashing slot busy, which the service
+ * answers as a service failure rather than as a wrong password. That is the service saying it could
+ * not decide the attempt, so the caller asks again rather than reading it as an answer.
  */
 export async function signInFromSecondDevice(email) {
-  const response = await call(SIGN_IN_PATH, signInRequest(email, true));
-  assert.equal(response.status, 200, response.text);
-  return { response, cookie: sessionCookie(response), csrfToken: response.json.csrf_token };
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await call(SIGN_IN_PATH, signInRequest(email, true));
+    const busy = response.json?.code === SERVICE_UNAVAILABLE_CODE;
+    if (!busy || attempt >= BUSY_ATTEMPTS) {
+      assert.equal(response.status, 200, response.text);
+      return { response, cookie: sessionCookie(response), csrfToken: response.json.csrf_token };
+    }
+    await delay(BUSY_RETRY_DELAY_MS);
+  }
 }
 
 /** Waits for the API to answer, so a suite started beside a restart does not race it. */
@@ -143,6 +167,36 @@ export async function waitForReady() {
 }
 
 /**
+ * Waits for the hasher to have room again and clears the budgets a burst spent.
+ *
+ * One API process admits a fixed number of hashes at a time and refuses the rest rather than queueing
+ * them, which is what a suite that asks for a burst on purpose observes. The burst is a fact of this
+ * shared stack, so a suite that follows one waits here: an attempt answered `503` is the service
+ * saying it could not decide rather than an answer about credentials, and a budget a burst spent is
+ * not something the next suite should inherit. The wait is bounded, so a stack that never recovers
+ * fails the suite that called this rather than hanging it.
+ */
+export async function settleAfterBurst() {
+  const email = newEmail('settle');
+  const registration = await call(REGISTRATION_PATH, registrationRequest(email));
+  resetRateLimits();
+  if (registration.status !== 201) return;
+
+  for (let attempt = 0; attempt < SETTLE_ATTEMPTS; attempt += 1) {
+    const response = await call(SIGN_IN_PATH, signInRequest(email, true));
+    // A granted attempt is answered with the session it issued; a refused one with invalid
+    // credentials, because the address this probe signs is one no account holds. Both mean the
+    // attempt was decided, which is what this wait is about.
+    if (response.json?.code !== SERVICE_UNAVAILABLE_CODE) {
+      resetRateLimits();
+      return;
+    }
+    await delay(SETTLE_RETRY_DELAY_MS);
+  }
+  throw new Error('the hasher never had room again after a burst');
+}
+
+/**
  * Polls a request until the service refuses it, which is how a suite observes a limit it has just
  * exhausted. Every attempt before that must answer as the expected status, so a refusal is what
  * ends the wait rather than an unrelated failure.
@@ -157,10 +211,19 @@ export async function callUntilRefused(action, { allowedAttempts, expectedStatus
 }
 
 /**
- * Clears every rate-limit counter. The suites share one address, so without this the limits would
- * refuse the accounts a later suite needs. Clearing a counter is the harness standing in for the
- * passage of time, which is also how access returns in production.
+ * Clears every rate-limit counter, which is the harness standing in for the passage of time: in
+ * production a window ends on its own, and here a suite ends it between checks. A check that needs an
+ * address to be known again passes it, and the budget is then spent at the age a window that has just
+ * ended has: the next attempt against it starts a fresh window and is the first of that budget.
+ *
+ * A counter cannot hold zero attempts — an attempt is the whole of what it holds — so a budget cannot
+ * be handed back as an empty row. Handing it back as an old window is what the passage of time does.
  */
-export function resetRateLimits() {
+export function resetRateLimits(observedAddress) {
   sql('DELETE FROM rate_limit_counters');
+  if (observedAddress === undefined) return;
+  sql(
+    `INSERT INTO rate_limit_counters (scope, subject, window_started_at, attempts)
+     VALUES ('${REGISTRATION_SCOPE}', '${observedAddress}', now() - interval '2 hours', 1)`,
+  );
 }
