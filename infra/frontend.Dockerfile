@@ -3,6 +3,10 @@ WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
+# The build stage runs the unit tests, and one of them holds the entry rules to the bounds the
+# Credentials schema states: the contract belongs in the image beside the frontend, exactly as the
+# repository keeps it beside the frontend directory, or that check would report a missing document.
+COPY openapi/public.yaml /openapi/public.yaml
 CMD ["npm", "run", "dev"]
 
 FROM dev AS build

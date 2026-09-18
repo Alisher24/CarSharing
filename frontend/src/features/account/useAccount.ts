@@ -80,6 +80,16 @@ export function useAccount() {
     setAccount({ state: 'signed-in', snapshot: result.snapshot });
   }, []);
 
+  /**
+   * forgetRefusal drops the answer of a submission the person is no longer asking about — they have
+   * chosen the other operation, and the refusal of the first one is not theirs to read any more. A
+   * submission still on its way is left alone: its answer is coming and would be written over a
+   * state that had already been cleared.
+   */
+  const forgetRefusal = useCallback(() => {
+    setSubmission((held) => (held.state === 'sending' ? held : { state: 'idle' }));
+  }, []);
+
   const leave = useCallback(async () => {
     if (account.state !== 'signed-in') return;
 
@@ -92,7 +102,7 @@ export function useAccount() {
     if (revoked) setAccount({ state: 'signed-out' });
   }, [account]);
 
-  return { account, submission, submit, leave, recheck };
+  return { account, submission, submit, forgetRefusal, leave, recheck };
 }
 
 /**

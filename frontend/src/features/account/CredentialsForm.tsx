@@ -1,77 +1,113 @@
-import { useState, type FormEvent } from 'react';
-import type { AccountIntent } from './accountIntent';
+import type { FormEvent } from 'react';
+import { ENTRY_ACTIONS, ENTRY_INTENTS, ENTRY_TAB_TITLES, ENTRY_TABS_LABEL } from './accountCopy';
+import { CredentialInput } from './CredentialInput';
+import { CREDENTIAL_FIELDS } from './credentialRules';
 import { refusalText } from './refusalText';
+import { useCredentialChecks } from './useCredentialChecks';
+import type { AccountIntent } from './accountIntent';
 import type { Submission } from './useAccount';
 import type { Credentials } from '../../shared/api/session';
 
 type CredentialsFormProps = {
+  /** Which operation the form is asking for, which is the tab the person chose. */
+  intent: AccountIntent;
   submission: Submission;
   onSubmit: (intent: AccountIntent, credentials: Credentials) => Promise<void>;
+
+  /** Which of the two operations the person chose, which decides the action and the window's title. */
+  onChooseIntent: (intent: AccountIntent) => void;
+
+  /** Drops the answer of the submission the person is no longer asking about. */
+  onForgetRefusal: () => void;
 };
 
 /**
- * CredentialsForm is the one way into the application: the panel above the map shows it, and so does
- * the cabinet when it is opened without a session. It is one component rather than two, so a person
- * who follows a link to their own invoice reads the same form and stays at the address they were
- * going to.
+ * CredentialsForm is the one form of the entry window: the tab naming the operation, the two fields,
+ * and the single action that operation is asked with.
  *
- * The form carries no default action: the person chooses between registering and signing in, so the
- * browser must not choose one for them. Each button states the operation it performs, so which one
- * was pressed is remembered nowhere between the press and the request.
+ * What stops the form from being sent is the first field that is wrong, and the cursor is put on it,
+ * so nobody has to look for what the server would have said anyway. None of it decides anything for
+ * the server: every rule is one the contract already states, and a refusal the server answers with
+ * is shown exactly as it was.
  */
-export function CredentialsForm({ submission, onSubmit }: CredentialsFormProps) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+export function CredentialsForm({
+  intent,
+  submission,
+  onSubmit,
+  onChooseIntent,
+  onForgetRefusal,
+}: CredentialsFormProps) {
+  const checks = useCredentialChecks();
   const sending = submission.state === 'sending';
   const failure = refusalText(submission);
 
-  function send(intent: AccountIntent) {
-    void onSubmit(intent, { email, password });
+  function send(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const stopped = checks.checkAll();
+
+    if (stopped === null) {
+      void onSubmit(intent, checks.values);
+      return;
+    }
+
+    checks.focus(stopped.field);
+  }
+
+  // Choosing the tab that is already chosen is not a change, so pressing it again takes nothing from
+  // the person. Changing it is not a fault either: the marks of the tab being left and the refusal it
+  // brought are dropped with it, and what was typed stays where it was.
+  function choose(next: AccountIntent) {
+    if (next === intent) return;
+
+    checks.forgetChecks();
+    onChooseIntent(next);
+    onForgetRefusal();
   }
 
   return (
-    <>
-      <form className="account-form" onSubmit={preventDefault}>
-        <label htmlFor="account-email-field">Электронная почта</label>
-        <input
-          className="account-field"
-          id="account-email-field"
-          name="email"
-          type="email"
-          autoComplete="email"
-          required
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
+    <form className="account-form" noValidate onSubmit={send}>
+      <EntryTabs intent={intent} onChoose={choose} />
+      {CREDENTIAL_FIELDS.map((field) => (
+        <CredentialInput
+          key={field}
+          field={field}
+          intent={intent}
+          value={checks.values[field]}
+          error={checks.errors[field]}
+          input={checks.inputs[field]}
+          onChange={(value) => checks.change(field, value)}
+          onBlur={() => checks.markChecked(field)}
         />
-        <label htmlFor="account-password-field">Пароль</label>
-        <input
-          className="account-field"
-          id="account-password-field"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-        />
-        <div className="account-actions">
-          <button className="action-button" type="button" disabled={sending} onClick={() => send('register')}>
-            Зарегистрироваться
-          </button>
-          <button className="action-button" type="button" disabled={sending} onClick={() => send('sign-in')}>
-            Войти
-          </button>
-        </div>
-      </form>
+      ))}
       {failure && (
         <p className="account-error" role="alert" data-testid="account-error">
           {failure}
         </p>
       )}
-    </>
+      <div className="account-actions">
+        <button className="action-button" type="submit" disabled={sending}>
+          {ENTRY_ACTIONS[intent]}
+        </button>
+      </div>
+    </form>
   );
 }
 
-function preventDefault(event: FormEvent) {
-  event.preventDefault();
+/** The two tabs, which are how the person says what they are doing before they do it. */
+function EntryTabs({ intent, onChoose }: { intent: AccountIntent; onChoose: (intent: AccountIntent) => void }) {
+  return (
+    <div className="account-tabs" role="group" aria-label={ENTRY_TABS_LABEL}>
+      {ENTRY_INTENTS.map((offered) => (
+        <button
+          key={offered}
+          className="account-tab"
+          type="button"
+          aria-pressed={offered === intent}
+          onClick={() => onChoose(offered)}
+        >
+          {ENTRY_TAB_TITLES[offered]}
+        </button>
+      ))}
+    </div>
+  );
 }
