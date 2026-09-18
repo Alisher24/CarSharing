@@ -96,36 +96,32 @@ describe('the tables nothing else removes from are swept', () => {
   // request and the token of a session by whoever signs in, so a table nothing sweeps grows with every
   // attempt and every sign-in rather than with the installation.
   //
-  // Everything the burst writes is already past its retention, so the sweep may take a row before the
-  // count is read: what the reading asserts is that the burst was visible at all, and the bound is
-  // asserted after the sweep has run.
+  // Everything the burst writes is already past its retention, so the sweep may take rows of it at any
+  // moment. The burst and the reading of it are therefore one transaction, which no sweep can fall
+  // inside: read row by row instead, the reading would measure where in the ten-second schedule the
+  // burst landed rather than whether it was written.
   test('one burst of subjects grows the tables, and the sweep takes them back to the bound', async () => {
     resetRateLimits();
     const baseline = { counters: counterCount(), sessions: sessionCount() };
 
-    for (let index = 0; index < WRITTEN_SUBJECTS; index += 1) {
-      writeCounter(SIGN_IN_EMAIL_SCOPE, newEmail(`growth-${index}`), 0);
-      sql(
-        `INSERT INTO ${SESSION_TABLE} (token, data, expiry)
-         VALUES ('growth-${index}-${Date.now()}', '{}'::bytea, now() - interval '1 minute')`,
-      );
-    }
-    const written = { counters: counterCount(), sessions: sessionCount() };
-    assert.ok(
-      written.counters > baseline.counters || expiredCounters() > 0,
-      `writing ${WRITTEN_SUBJECTS} counters left the table at ${written.counters}`,
+    const landed = writeBurst();
+    assert.equal(
+      landed.counters,
+      WRITTEN_SUBJECTS,
+      `the counter burst landed at ${landed.counters} of ${WRITTEN_SUBJECTS}`,
     );
-    assert.ok(
-      written.sessions > baseline.sessions || expiredSessions() > 0,
-      `writing ${WRITTEN_SUBJECTS} sessions left the table at ${written.sessions}`,
+    assert.equal(
+      landed.sessions,
+      WRITTEN_SUBJECTS,
+      `the session burst landed at ${landed.sessions} of ${WRITTEN_SUBJECTS}`,
     );
 
     // Everything written is past its retention, so the sweep takes all of it and the table returns to
     // what it held before the burst: that is the bound the sweeps exist to keep.
     await untilSwept(() => expiredCounters() === 0 && expiredSessions() === 0, 'the sweep never took the burst back');
     process.stdout.write(
-      `retention growth: counters ${baseline.counters} → ${written.counters} → ${counterCount()}, ` +
-        `sessions ${baseline.sessions} → ${written.sessions} → ${sessionCount()}\n`,
+      `retention growth: counters ${baseline.counters} → ${landed.counters} → ${counterCount()}, ` +
+        `sessions ${baseline.sessions} → ${landed.sessions} → ${sessionCount()}\n`,
     );
     assert.ok(
       Math.abs(counterCount() - baseline.counters) <= MEASUREMENT_SLACK,
@@ -147,6 +143,46 @@ const WRITTEN_SUBJECTS = 25;
  * is measured is that a table does not keep the burst.
  */
 const MEASUREMENT_SLACK = 40;
+
+/** The addresses one measurement writes counters under, which no other suite uses. */
+function growthCounterSubjects() {
+  return Array.from({ length: WRITTEN_SUBJECTS }, (_, index) => newEmail(`growth-${index}`));
+}
+
+/** The tokens one measurement writes sessions under, which no other suite uses. */
+function growthSessionTokens() {
+  return Array.from({ length: WRITTEN_SUBJECTS }, (_, index) => `growth-${index}-${Date.now()}`);
+}
+
+/**
+ * Writes one burst into both tables and reads back what it holds of it, as one transaction: the rows
+ * are already past their retention, so a sweep that fell between the write and the reading would make
+ * the measurement describe the schedule instead of the burst. Both counts are of the burst's own rows,
+ * which no other suite writes.
+ */
+function writeBurst() {
+  const subjects = growthCounterSubjects()
+    .map((subject) => `'${subject}'`)
+    .join(', ');
+  const tokens = growthSessionTokens()
+    .map((token) => `'${token}'`)
+    .join(', ');
+  const counted = sql(
+    `INSERT INTO ${RATE_LIMIT_TABLE} (scope, subject, window_started_at, attempts)
+     SELECT '${SIGN_IN_EMAIL_SCOPE}', subject, now() - interval '1 minute', 1
+     FROM unnest(ARRAY[${subjects}]::text[]) AS subject;
+     INSERT INTO ${SESSION_TABLE} (token, data, expiry)
+     SELECT token, '{}'::bytea, now() - interval '1 minute'
+     FROM unnest(ARRAY[${tokens}]::text[]) AS token;
+     SELECT
+       (SELECT count(*) FROM ${RATE_LIMIT_TABLE} WHERE subject IN (${subjects})) AS counters,
+       (SELECT count(*) FROM ${SESSION_TABLE} WHERE token IN (${tokens})) AS sessions`,
+  );
+  // The two writes announce themselves with a command tag before the reading, so the row is the last
+  // line of what the statement printed.
+  const [counters, sessions] = counted.split('\n').at(-1).split('|').map(Number);
+  return { counters, sessions };
+}
 
 function counterCount() {
   return Number(sql(`SELECT count(*) FROM ${RATE_LIMIT_TABLE}`));
