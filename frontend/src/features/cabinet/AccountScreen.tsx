@@ -1,9 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
 import { INVOICES_ADDRESS, RIDES_ADDRESS, sectionOf, type CabinetSection } from '../../app/addresses.ts';
-import type { Credentials, SessionSnapshot } from '../../shared/api/session.ts';
-import { CredentialsForm } from '../account/CredentialsForm.tsx';
-import type { AccountIntent } from '../account/accountIntent.ts';
+import type { SessionSnapshot } from '../../shared/api/session.ts';
 import type { Account, Submission } from '../account/useAccount.ts';
 import { CABINET_HEADING, INVOICES_TAB, LEAVE_ACTION, RIDES_TAB, SIGN_IN_TO_READ } from './cabinetCopy.ts';
 
@@ -12,8 +10,9 @@ const CABINET_TITLE_ID = 'cabinet-title';
 
 type AccountScreenProps = {
   account: Account;
+
+  /** How the last submission ended, which is what the control that ends the session waits on. */
   submission: Submission;
-  onSubmit: (intent: AccountIntent, credentials: Credentials) => Promise<void>;
   onLeave: () => Promise<void>;
 
   /** The feed the address leads to, which is shown once there is a session to read it with. */
@@ -24,11 +23,11 @@ type AccountScreenProps = {
  * AccountScreen is the cabinet: who is signed in, the way out, the two feeds of the account's own
  * history, and whichever of them the address names.
  *
- * Without a session it shows the entry form in place of the feed rather than sending a person back
- * to the map. The address stays what it was, so somebody who followed a link to one of their
+ * Without a session it says what the address is for and lets the entry window, which is shown over
+ * it, do the asking. The address stays what it was, so somebody who followed a link to one of their
  * invoices reads that invoice the moment they are let in.
  */
-export function AccountScreen({ account, submission, onSubmit, onLeave, children }: AccountScreenProps) {
+export function AccountScreen({ account, submission, onLeave, children }: AccountScreenProps) {
   const section = sectionOf(useLocation().pathname);
 
   return (
@@ -42,10 +41,7 @@ export function AccountScreen({ account, submission, onSubmit, onLeave, children
           {children}
         </SignedIn>
       ) : (
-        <div className="cabinet-entry">
-          <p className="cabinet-invitation">{SIGN_IN_TO_READ}</p>
-          <CredentialsForm submission={submission} onSubmit={onSubmit} />
-        </div>
+        <p className="cabinet-invitation">{SIGN_IN_TO_READ}</p>
       )}
     </section>
   );

@@ -1,0 +1,135 @@
+/* The entry window and the form inside it: the one way into the application. The window is a native
+   dialog, so the layer over the page, the focus kept inside it and closing on Esc belong to the
+   browser; what is written here is how it looks and where its edges stop. */
+
+.entry-window {
+  width: min(420px, calc(100vw - 2 * var(--space-lg)));
+  max-width: none;
+  max-height: calc(100svh - 2 * var(--space-xl));
+  padding: 0;
+  overflow: auto;
+  color: var(--color-ink);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.entry-window::backdrop {
+  background: rgb(25 63 54 / 55%);
+}
+
+/* The page under an open window stays visible and live — the map, the rental and the feeds are not
+   paused by somebody signing in — but it does not scroll away behind it. */
+body:has(.entry-window[open]) {
+  overflow: hidden;
+}
+
+.entry-header {
+  display: flex;
+  gap: var(--space-md);
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: var(--space-lg) var(--space-lg) 0;
+}
+
+.entry-title {
+  margin: 0;
+  font-size: var(--font-size-lead);
+  letter-spacing: var(--tracking-tight);
+}
+
+.entry-close {
+  padding: 0 var(--space-xs);
+  font-size: var(--font-size-title);
+  line-height: 1;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+
+.entry-close:hover {
+  color: var(--color-ink);
+}
+
+.entry-content {
+  padding: var(--space-lg);
+}
+
+.account-form {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.account-tabs {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+/* A label sits closer to the field it names than to the field above it, so which line belongs to
+   which box is read rather than guessed. */
+.account-label {
+  margin-top: var(--space-sm);
+  font-size: var(--font-size-detail);
+  color: var(--color-ink-soft);
+}
+
+.account-tab {
+  padding: 8px 16px;
+  font-size: var(--font-size-detail);
+  color: var(--color-ink-muted);
+  cursor: pointer;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+}
+
+.account-tab:hover {
+  color: var(--color-ink);
+  background: var(--color-surface-highlight);
+}
+
+/* The tab the form is on is the one the action belongs to, so it is the one that looks pressed. */
+.account-tab[aria-pressed='true'] {
+  color: var(--color-on-ink);
+  background: var(--color-ink);
+  border-color: var(--color-ink);
+}
+
+.account-field {
+  padding: 10px;
+  font: inherit;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+/* A refused field is marked and explained under itself: the border says where to look, the line
+   says what is wrong, and neither is the only way to know. */
+.account-field[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+.account-field-error {
+  margin: 0 0 var(--space-xs);
+  font-size: var(--font-size-detail);
+  color: var(--color-danger);
+}
+
+.account-hint {
+  margin: 0 0 var(--space-xs);
+  font-size: var(--font-size-detail);
+  color: var(--color-ink-faint);
+}
+
+.account-error {
+  margin: 0;
+  color: var(--color-danger);
+}
+
+.account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: var(--space-sm);
+}

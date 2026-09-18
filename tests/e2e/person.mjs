@@ -27,6 +27,11 @@ export const CANCEL_ACTION = 'Отменить бронь';
 export const SIGN_IN_ACTION = 'Вход';
 export const CABINET_ACTION = 'Кабинет';
 
+/** What the two tabs of the entry window are called, and what the action of each one offers. */
+const REGISTER_TAB = 'Регистрация';
+const REGISTER_ACTION = 'Зарегистрироваться';
+const SIGN_IN_ACTION_TEXT = 'Войти';
+
 /** What a fresh address of one check looks like, so no check depends on another one's leavings. */
 export function email(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.test`;
@@ -88,7 +93,7 @@ export async function book(page, model) {
 }
 
 /**
- * Registers a fresh account through the entry panel above the map, as a person would. The panel
+ * Registers a fresh account through the entry window the header opens, as a person would. The window
  * closes itself: the one control of the header states what a person can do next, so a session turns
  * it into the way into the cabinet.
  */
@@ -98,11 +103,20 @@ export async function signUp(page, address) {
   await expect(page.getByRole('link', { name: CABINET_ACTION })).toBeVisible();
 }
 
-/** Fills whichever entry form is on screen and registers, which is what a person does to get in. */
+/** Fills the entry window and registers, which is what a person does to get in. */
 export async function register(page, address) {
+  // The window opens on the tab that signs somebody in, so registering chooses its tab first.
+  await page.getByRole('button', { name: REGISTER_TAB }).click();
   await page.locator('#account-email-field').fill(address);
   await page.locator('#account-password-field').fill(PASSWORD);
-  await page.getByRole('button', { name: 'Зарегистрироваться' }).click();
+  await page.getByRole('button', { name: REGISTER_ACTION }).click();
+}
+
+/** Fills the entry window and signs an account that exists in, which is what coming back looks like. */
+export async function signIn(page, address) {
+  await page.locator('#account-email-field').fill(address);
+  await page.locator('#account-password-field').fill(PASSWORD);
+  await page.getByRole('button', { name: SIGN_IN_ACTION_TEXT }).click();
 }
 
 /** Opens the cabinet, which is where the account and the way out of it live. */

@@ -93,12 +93,12 @@ test('a cabinet address opened without a session keeps the address the person wa
   const page = await context.newPage();
 
   try {
-    // Nobody is signed in, so the cabinet shows the entry form in place of the feed rather than
-    // sending a person back to the map and losing where they were going.
+    // Nobody is signed in, so the cabinet shows the entry window over the feed rather than sending a
+    // person back to the map and losing where they were going. The header still offers the way in.
     await page.goto(RIDES_ADDRESS);
     await expect(page.locator('.cabinet')).toBeVisible();
     await expect(page.locator('#account-email-field')).toBeVisible();
-    await expect(page.getByRole('button', { name: SIGN_IN_ACTION })).toBeVisible();
+    await expect(page.getByRole('banner').getByRole('button', { name: SIGN_IN_ACTION })).toBeVisible();
 
     await register(page, email('cabinet'));
 

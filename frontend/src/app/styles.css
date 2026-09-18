@@ -125,12 +125,6 @@ a:focus-visible {
   font-size: var(--font-size-body);
 }
 
-.section-label {
-  font-size: var(--font-size-micro);
-  font-weight: 650;
-  letter-spacing: var(--tracking-label);
-}
-
 .location-mark {
   font-size: 16px;
 }
@@ -186,32 +180,6 @@ a:focus-visible {
 .action-button-mark {
   font-size: 19px;
   line-height: 16px;
-}
-
-.account {
-  display: grid;
-  gap: var(--space-md);
-}
-
-.account-form {
-  display: grid;
-  gap: var(--space-xs);
-}
-
-.account-field {
-  padding: 10px;
-  font: inherit;
-}
-
-.account-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.account-error {
-  margin: 0;
-  color: var(--color-danger);
 }
 
 @media (width <= 850px) {

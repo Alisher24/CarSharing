@@ -34,7 +34,7 @@ A feature directory holds four kinds of file, and the split is the convention:
 - hooks — `use*.ts` — which own effects, state and the streams;
 - components — `*.tsx` — which receive what they show as props and compute nothing that outlives them.
 
-Exactly one kind of file is unit-tested: 21 `*.test.ts` files, no `*.test.tsx`, and neither jsdom nor
+Exactly one kind of file is unit-tested: 26 `*.test.ts` files, no `*.test.tsx`, and neither jsdom nor
 a testing library is installed. Components and hooks are covered by the browser suite in `tests/e2e/`,
 so a decision worth a test belongs in a pure module. A test opens with `node:test`'s `describe`/`test`
 and `node:assert/strict`, and takes time as an argument (`countdownAt(held, new Date(...))`) rather than
@@ -92,8 +92,9 @@ choice is made; replacing it with the client is a regression, not a simplificati
 
 ## Styles
 
-The stylesheets are global: `main.tsx` imports `src/app/styles.css` (the shell and the `:root` tokens)
-and `src/app/fleet.css` (the map screen), and no component carries a stylesheet of its own — the only
+The stylesheets are global: `main.tsx` imports `src/app/styles.css` (the shell and the `:root` tokens),
+`src/app/fleet.css` (the map screen), `src/app/cabinet.css` (the cabinet) and `src/app/account.css`
+(the entry window and the form inside it), and no component carries a stylesheet of its own — the only
 other CSS import in `src` is Leaflet's, inside `FleetMap.tsx`. Class names are kebab-case and
 hyphen-chained, and state is an attribute selector rather than a modifier class:
 `.fleet-row-status[data-status='available']`, `.filter-chip[aria-pressed='true']`.

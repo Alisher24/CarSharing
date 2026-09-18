@@ -25,6 +25,10 @@ export type Application = {
   account: Account;
   submission: Submission;
   submit: (intent: AccountIntent, credentials: Credentials) => Promise<void>;
+
+  /** Drops the refusal of a submission the person has moved on from, such as by changing the tab. */
+  forgetRefusal: () => void;
+
   leave: () => Promise<void>;
 
   /** The private stream, which every reader of the account's own records takes its signals from. */
@@ -40,7 +44,7 @@ export type Application = {
 /** useApplication assembles what every address of the application is shown from. */
 export function useApplication(): Application {
   const connection = useConnection();
-  const { account, submission, submit, leave, recheck } = useAccount();
+  const { account, submission, submit, forgetRefusal, leave, recheck } = useAccount();
   const events = useEvents();
   const catalog = useCatalog(events);
 
@@ -61,6 +65,7 @@ export function useApplication(): Application {
     account,
     submission,
     submit,
+    forgetRefusal,
     leave,
     privateEvents,
     catalog,

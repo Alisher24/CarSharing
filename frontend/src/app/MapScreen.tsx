@@ -1,5 +1,4 @@
 import { useCallback, useState } from 'react';
-import { AccountPanel } from '../features/account/AccountPanel';
 import { FleetView } from '../features/fleet/FleetView';
 import type { VehicleBooking } from '../features/fleet/VehicleCard';
 import { ReservationPanel } from '../features/reservation/ReservationPanel';
@@ -13,9 +12,6 @@ import type { CurrentSnapshot } from '../shared/api/current';
 
 type MapScreenProps = {
   application: Application;
-
-  /** Whether the entry panel is open, which the one control in the header decides. */
-  entryOpen: boolean;
 };
 
 /**
@@ -26,8 +22,8 @@ type MapScreenProps = {
  * Which vehicle is selected is held here rather than by the fleet, because the panel of the rental in
  * force selects one too: «показать машину» and a click in the list are two ways to the same card.
  */
-export function MapScreen({ application, entryOpen }: MapScreenProps) {
-  const { account, submission, submit, catalog, current, reservations, ride, notifications } = application;
+export function MapScreen({ application }: MapScreenProps) {
+  const { account, catalog, current, reservations, ride, notifications } = application;
   const [selectedId, setSelectedId] = useState<string>();
 
   const select = useCallback((vehicleId: string) => setSelectedId(vehicleId), []);
@@ -36,8 +32,6 @@ export function MapScreen({ application, entryOpen }: MapScreenProps) {
 
   return (
     <>
-      {entryOpen && <AccountPanel account={account} submission={submission} onSubmit={submit} />}
-
       <ReservationPanel
         resource={current.resource}
         account={account}

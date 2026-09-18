@@ -5,6 +5,7 @@ import { App } from './app/App';
 import './app/styles.css';
 import './app/fleet.css';
 import './app/cabinet.css';
+import './app/account.css';
 
 const container = document.getElementById('root');
 if (!container) throw new Error('index.html must provide the #root element');
