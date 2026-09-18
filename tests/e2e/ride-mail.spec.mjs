@@ -2,8 +2,9 @@
 // and no second letter however often the delivery is attempted.
 //
 // The letter is the surface no HTTP check can stand in for. An HTTP suite proves the row the mail stub
-// stored; what this checks is that a person arrives at it the way the README says to — the inbox
-// address, the letter it shows, and the amount that matches what the panel says the ride cost.
+// stored and the page the listener answers; what this checks is that a person arrives at it the way
+// the README says to — the inbox address, the letter the page lists, and the amount the page states
+// matching what the panel says the ride cost.
 //
 // The retry is armed before the ending, so the delivery that stores the letter is the one whose answer
 // is lost: the worker repeats it and the stub answers the receipt of the delivery it already holds.
@@ -13,6 +14,8 @@ import {
   armedFaults,
   armLostAnswer,
   forgetSuiteMail,
+  INBOX_PATH,
+  inboxLetterPath,
   letterTask,
   lettersAbout,
   mailbox,
@@ -20,7 +23,7 @@ import {
   storedLetter,
 } from '../../scripts/acceptance/mail.mjs';
 import { somText } from '../../scripts/acceptance/money.mjs';
-import { sql } from '../../scripts/service.mjs';
+import { MAILBOX_ORIGIN, sql } from '../../scripts/service.mjs';
 import { availableModel, book, email, endRidesOf, RECONCILIATION_PATIENCE_MS, signUp, until } from './person.mjs';
 import { restoreScenario } from './scenario.mjs';
 
@@ -30,6 +33,9 @@ const ACCOUNT_PREFIX = 'mail';
 /** The controls of a ride, in the words the interface fixes for them. */
 const START_ACTION = 'Начать поездку';
 const FINISH_ACTION = 'Завершить поездку';
+
+/** What the page of the inbox states itself to be, which every page of it carries in its header. */
+const INBOX_TITLE = 'Ящик почтовой заглушки';
 
 /**
  * What the panel says once the service confirmed that the ride is over, and what it writes before the
@@ -104,6 +110,36 @@ test('one ride leaves one letter in the inbox, however often the delivery is rep
     );
     await expect(page.locator('.ride-progress')).toContainText(INVOICE_TOTAL);
     await expect(page.locator('.ride-progress')).toContainText(somText(totalOf(invoiceId)));
+
+    // The same letter is read as a page in the browser a person opens: the list the inbox address
+    // answers carries it, and the page of the letter states the total the panel states — read from
+    // the page rather than from the JSON of the same letter. Every suite of this run leaves letters
+    // in the one box, so the row is found by the letter this check delivered rather than by a subject
+    // other rides share.
+    await page.goto(MAILBOX_ORIGIN + INBOX_PATH);
+    const row = page
+      .locator('.inbox-letters tr')
+      .filter({ has: page.locator(`a[href="${inboxLetterPath(letter.id)}"]`) });
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText(letter.subject);
+    await row.getByRole('link').click();
+    await expect(page).toHaveURL(MAILBOX_ORIGIN + inboxLetterPath(letter.id));
+    await expect(page.locator('.inbox-text')).toContainText(somText(totalOf(invoiceId)));
+
+    // A page reaches nothing outside itself, which is what its policy states and what a person's
+    // browser really asks for: a context of its own records every request the page makes, and the
+    // page it opens is the only one.
+    const alone = await browser.newContext();
+    try {
+      const inbox = await alone.newPage();
+      const asked = [];
+      inbox.on('request', (request) => asked.push(request.url()));
+      await inbox.goto(MAILBOX_ORIGIN + inboxLetterPath(letter.id));
+      await expect(inbox.locator('.inbox-title')).toHaveText(INBOX_TITLE);
+      assert.deepEqual(asked, [MAILBOX_ORIGIN + inboxLetterPath(letter.id)]);
+    } finally {
+      await alone.close();
+    }
   } finally {
     await context.close();
   }

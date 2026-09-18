@@ -1,0 +1,30 @@
+{{define "inboxLetters"}}
+  {{with .Data}}
+    {{if .Letters}}
+      <table class="inbox-letters">
+        <thead>
+          <tr>
+            <th>{{$.Labels.Moment}}</th>
+            <th>{{$.Labels.Recipient}}</th>
+            <th>{{$.Labels.Subject}}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Letters}}
+            <tr>
+              <td class="inbox-moment">{{.AcceptedAt}}</td>
+              <td>{{.To}}</td>
+              <td><a href="{{.Link}}">{{.Subject}}</a></td>
+            </tr>
+          {{end}}
+        </tbody>
+      </table>
+      {{if .Next}}
+        <p class="inbox-next"><a href="{{.Next}}">{{$.Labels.Next}}</a></p>
+      {{end}}
+    {{else}}
+      <p class="inbox-empty">{{$.Labels.NoLetters}}</p>
+      <p class="inbox-empty-hint">{{$.Labels.NoLettersHint}}</p>
+    {{end}}
+  {{end}}
+{{end}}
