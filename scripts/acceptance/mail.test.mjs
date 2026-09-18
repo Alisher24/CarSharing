@@ -14,6 +14,7 @@ import { serviceOrigin, waitForReady } from './client.mjs';
 import {
   APPLICATION_ROLE,
   DELIVERY_PATH,
+  INBOX_PATH,
   MAIL_ACTION_PATH,
   MAIL_ROLE,
   MESSAGES_PATH,
@@ -25,6 +26,7 @@ import {
   deliveredLetter,
   deliveryKeyOf,
   forgetSuiteMail,
+  inboxLetterPath,
   internalCall,
   letterTask,
   letters,
@@ -462,6 +464,35 @@ describe('the surface of the mail stub', () => {
     assert.equal(one.json.subject, first.items[0].subject);
     assert.notEqual(one.json.text, undefined, 'the box answers no text for a letter it published');
     assert.equal((await mailbox(messagePath(ANY_INVOICE))).status, 404);
+  });
+
+  test('shows the same letter as a page a person opens, and refuses as a page as well', async () => {
+    const { account, rentalId } = await riding('page');
+    const finished = await finishCommand(rentalId, account);
+    const letter = await deliveredLetter(finished.json.invoice.invoice.id);
+    assert.ok(letter.text.includes(somText(finished.json.invoice.invoice.total_amount_tyiyn)));
+
+    // The list names the letter the box holds, and the page of it states what the stub stored: the
+    // recipient, the moment it was accepted at in the zone it is stored in, the key it was delivered
+    // under and the text as it is. A page is not measured here beyond that — the Go checks read the
+    // page whole, and the browser step opens it as a person does.
+    const list = await mailbox(INBOX_PATH);
+    assert.equal(list.status, 200, list.text);
+    assert.match(list.headers.get('content-type'), /^text\/html/);
+    assert.equal(list.headers.get('cache-control'), 'no-store');
+    assert.equal(list.headers.get('x-content-type-options'), 'nosniff');
+    assert.match(list.headers.get('content-security-policy'), /default-src 'none'/);
+    assert.ok(list.text.includes(`href="${inboxLetterPath(letter.id)}"`), 'the list links to no letter');
+    assert.ok(list.text.includes(letter.subject), `the list names no subject:\n${list.text}`);
+
+    // What the page does not hold is refused the way the operation is, so the box tells a reader
+    // nothing the JSON does not.
+    const absent = await mailbox(inboxLetterPath(ANY_INVOICE));
+    assert.equal(absent.status, 404);
+    assert.match(absent.headers.get('content-type'), /^text\/html/);
+    const nowhere = await mailbox('/nowhere');
+    assert.equal(nowhere.status, 404);
+    assert.match(nowhere.headers.get('content-type'), /^text\/html/);
   });
 });
 

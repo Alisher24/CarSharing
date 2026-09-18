@@ -17,6 +17,7 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
 	"github.com/Alisher24/CarSharing/backend/internal/mailstub"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/cursor"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/timestamp"
 )
 
 // The two credentials a mail stub check is served with, and the key every delivery below is sent
@@ -84,11 +85,19 @@ func (b *fakeMailBox) Accept(
 		To:          request.To,
 		Subject:     request.Subject,
 		Text:        request.Text,
-		AcceptedAt:  acceptedAt,
+		AcceptedAt:  acceptedMomentOf(len(b.letters) + 1),
 	}
 	b.stored[key.String()] = stored
 	b.letters = append(b.letters, stored)
 	return mailstub.Receipt{Message: stored, Dropped: b.dropped}, nil
+}
+
+// acceptedMomentOf is the moment the fake box accepted the letter it stores in one position. A box
+// accepts letters one after another, so each of them is a moment later than the one before: a check
+// about the order the collection publishes reads a box whose order is decided by the moment rather
+// than by the identifier alone.
+func acceptedMomentOf(position int) time.Time {
+	return acceptedAt.Add(time.Duration(position) * time.Second)
 }
 
 // storedLetterID is the identifier the fake box gives the letter it stores in one position. Every
@@ -256,7 +265,7 @@ func TestADeliveryIsAnsweredWithTheReceiptOfTheLetterItStored(t *testing.T) {
 		t.Errorf("a first delivery states Idempotency-Replayed %q", replayed)
 	}
 	receipt := deliveredReceipt(t, first)
-	if receipt.Id != storedLetterID(1) || receipt.AcceptedAt != "2026-09-15T08:32:11.123456Z" {
+	if receipt.Id != storedLetterID(1) || receipt.AcceptedAt != timestamp.Format(acceptedMomentOf(1)) {
 		t.Errorf("the receipt is %+v", receipt)
 	}
 
@@ -482,7 +491,9 @@ func TestMailReadinessFollowsTheBox(t *testing.T) {
 }
 
 // Each listener serves exactly the paths the contract marks as its own: a delivery through the inbox
-// listener and a read of the box through the internal one are unknown resources.
+// listener and a read of the box through the internal one are refused. The internal listener refuses
+// as the contract does, and the inbox listener refuses as the page surface it also serves: the path
+// belongs to no page there, and the answer a person reads is a page.
 func TestEachMailListenerServesOnlyItsOwnPaths(t *testing.T) {
 	internal := mailstubInternalRouter(t, newFakeMailBox(), newFakeActions(t), true)
 	absent := mailstubCall(t, internal, http.MethodGet, mailstubMessagesPath, "", "", nil)
@@ -493,7 +504,7 @@ func TestEachMailListenerServesOnlyItsOwnPaths(t *testing.T) {
 	inbox := mailstubInboxRouter(t, newFakeMailBox(), []byte(cursorKey))
 	absent = mailstubCall(t, inbox, http.MethodPost, mailstubDeliveryPath, deliveredLetter, deliveryToken,
 		map[string]string{deliveryKeyHeader: deliveredKey(t, invoiceID)})
-	if absent.Code != http.StatusNotFound || answeredCode(t, absent) != "RESOURCE_NOT_FOUND" {
+	if absent.Code != http.StatusNotFound || !strings.Contains(absent.Body.String(), inboxNoSuchPage) {
 		t.Fatalf("the inbox answered a delivery with %d %s", absent.Code, absent.Body.String())
 	}
 }
@@ -619,7 +630,7 @@ func twoLettersAccepted(t *testing.T, box *fakeMailBox) []mailstub.Message {
 	t.Helper()
 	internal := mailstubInternalRouter(t, box, newFakeActions(t), true)
 	accepted := make([]mailstub.Message, 0, len(inboxLetters))
-	for _, letter := range inboxLetters {
+	for position, letter := range inboxLetters {
 		body := `{"to":"rider@example.test","subject":"` + letter.subject +
 			`","text":"` + letter.text + `"}`
 		answer := mailstubCall(t, internal, http.MethodPost, mailstubDeliveryPath, body,
@@ -628,10 +639,11 @@ func twoLettersAccepted(t *testing.T, box *fakeMailBox) []mailstub.Message {
 			t.Fatalf("the letter answered %d %s", answer.Code, answer.Body.String())
 		}
 		stored := mailstub.Message{
-			ID:      deliveredReceipt(t, answer).Id,
-			To:      "rider@example.test",
-			Subject: letter.subject,
-			Text:    letter.text,
+			ID:         deliveredReceipt(t, answer).Id,
+			To:         "rider@example.test",
+			Subject:    letter.subject,
+			Text:       letter.text,
+			AcceptedAt: acceptedMomentOf(position + 1),
 		}
 		accepted = append(accepted, stored)
 	}

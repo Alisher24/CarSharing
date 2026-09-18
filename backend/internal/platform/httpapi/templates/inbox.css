@@ -1,0 +1,88 @@
+/* The one stylesheet of the inbox pages. It is looked up from the page's own listener, so the policy
+   the pages are answered with admits it and nothing else. */
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+body {
+  margin: 0;
+  padding: 2rem 1rem 3rem;
+}
+
+.inbox {
+  max-width: 52rem;
+  margin: 0 auto;
+}
+
+.inbox-header {
+  border-bottom: 1px solid currentColor;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
+}
+
+.inbox-title {
+  font-size: 1.5rem;
+  margin: 0;
+}
+
+.inbox-summary {
+  margin: 0.25rem 0 0;
+  opacity: 0.75;
+}
+
+.inbox-letters {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.inbox-letters th,
+.inbox-letters td {
+  border-bottom: 1px solid rgba(128, 128, 128, 0.4);
+  padding: 0.5rem 0.75rem 0.5rem 0;
+  text-align: left;
+  vertical-align: top;
+}
+
+.inbox-moment {
+  white-space: nowrap;
+}
+
+.inbox-empty {
+  font-weight: bold;
+  margin: 0;
+}
+
+.inbox-empty-hint {
+  margin: 0.25rem 0 0;
+  opacity: 0.75;
+}
+
+.inbox-fields dt {
+  font-weight: bold;
+  margin-top: 0.75rem;
+}
+
+.inbox-fields dd {
+  margin: 0.25rem 0 0;
+}
+
+.inbox-text {
+  border-left: 2px solid rgba(128, 128, 128, 0.4);
+  margin: 0;
+  padding-left: 0.75rem;
+  white-space: pre-wrap;
+}
+
+.inbox-next {
+  margin-top: 1.5rem;
+}
+
+.inbox-footer {
+  border-top: 1px solid currentColor;
+  display: flex;
+  gap: 1rem;
+  margin-top: 2rem;
+  padding-top: 0.75rem;
+}

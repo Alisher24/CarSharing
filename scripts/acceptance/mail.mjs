@@ -12,6 +12,10 @@ import { call } from './client.mjs';
 export const MESSAGES_PATH = '/api/v1/messages';
 export const messagePath = (id) => `${MESSAGES_PATH}/${id}`;
 
+/** The pages of the mailbox: the list a person opens, and one letter of it. */
+export const INBOX_PATH = '/';
+export const inboxLetterPath = (id) => `/messages/${id}`;
+
 /** The paths of the internal listener, reached from inside the network rather than from the host. */
 export const DELIVERY_PATH = '/internal/v1/messages';
 export const MAIL_ACTION_PATH = '/internal/v1/demo/actions';
@@ -34,7 +38,9 @@ export function deliveryKeyOf(invoiceId) {
 
 /**
  * One request to the mailbox. The box is anonymous and read-only, so nothing here carries a
- * credential: what a check sends is the method, the path and the query a person would use.
+ * credential: what a check sends is the method, the path and the query a person would use. A page of
+ * the box is read the same way, which is how a check about a page asserts about the markup it answers
+ * rather than about a second rendering of the same letter.
  */
 export async function mailbox(path, options = {}) {
   const response = await fetch(MAILBOX_ORIGIN + path, options);

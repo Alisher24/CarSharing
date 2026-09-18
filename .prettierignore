@@ -11,6 +11,11 @@ backend/db/migrations/
 # Dependency manifests owned by their package manager.
 **/package-lock.json
 
+# Go page templates: Prettier reads the markup but not the template actions in it, so a page it
+# reformatted would be one nobody can read. They are written as Prettier writes HTML instead, and Go
+# parses every one of them as the process starts.
+backend/internal/platform/httpapi/templates/
+
 # Documentation, contract sources and infrastructure reviewed as prose, not as code.
 docs/
 openapi/
