@@ -2,12 +2,14 @@ package demo_test
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/demo"
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
+	"github.com/Alisher24/CarSharing/backend/internal/simulation"
 )
 
 // declaredFleetSize is the size the demonstration promises: five vehicles of each of the five
@@ -139,6 +141,57 @@ func TestEveryDeclaredVehicleStandsInsideTheServiceZone(t *testing.T) {
 		if !inside {
 			t.Errorf("%s stands at %v, %v: outside the installed area",
 				vehicle.Model, position.Longitude, position.Latitude)
+		}
+	}
+}
+
+// A vehicle stands on its own circuit, and no two of the fleet stand together: a marker drawn over
+// another cannot be pressed, and the vehicles a rental holds never move away from where they were
+// installed. Where the fleet is placed stays derived from the routes rather than declared beside them:
+// the two lists this replaces were the same twenty-five coordinates written twice, and the promise
+// that they agreed was kept by hand.
+func TestNoTwoVehiclesStandTogether(t *testing.T) {
+	placed := map[fleet.Position][]string{}
+	for _, vehicle := range demo.Fleet() {
+		route, declared := simulation.RouteOf(vehicle.RouteID)
+		if !declared {
+			t.Errorf("%s drives %q, which this build does not declare", vehicle.Model, vehicle.RouteID)
+			continue
+		}
+		if _, metres := route.DistanceFrom(vehicle.Position); metres > 1.0 {
+			t.Errorf("%s stands %v metres from the circuit it drives", vehicle.Model, metres)
+		}
+		placed[vehicle.Position] = append(placed[vehicle.Position], vehicle.Model)
+	}
+
+	for position, models := range placed {
+		if len(models) > 1 {
+			t.Errorf("%s stand together at %v, %v",
+				strings.Join(models, ", "), position.Longitude, position.Latitude)
+		}
+	}
+}
+
+// The declared circuits and the circuits the fleet names are the same set, in both directions: a ring
+// nobody drives is geometry kept for nothing, and a vehicle naming a ring that is not there is a
+// vehicle the model cannot move.
+func TestTheDeclaredCircuitsAreTheOnesTheFleetDrives(t *testing.T) {
+	driven := map[simulation.RouteID]int{}
+	for _, vehicle := range demo.Fleet() {
+		driven[vehicle.RouteID]++
+	}
+
+	for _, route := range simulation.Routes {
+		if driven[route.ID] == 0 {
+			t.Errorf("%s is declared and no vehicle drives it", route.ID)
+		}
+	}
+	for id, count := range driven {
+		if _, declared := simulation.RouteOf(id); !declared {
+			t.Errorf("%d vehicle(s) drive %q, which this build does not declare", count, id)
+		}
+		if count > 1 {
+			t.Errorf("%d vehicles drive %q, and a circuit is declared for one vehicle each", count, id)
 		}
 	}
 }

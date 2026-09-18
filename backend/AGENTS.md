@@ -103,3 +103,24 @@ it (`npm --prefix tools/openapi run generate`), never the Go file.
 - `db/migrations/0000N_name.sql` with `embed.go`; goose applies them, one statement set per numbered
   file, and the migrator role owns the schema. The API connects as `carsharing_app`, which has no DDL —
   a migration that needs a privilege the app role lacks is a migration, not a reason to widen the role.
+
+## The modelled fleet's routes
+
+`internal/simulation/route.go` is the only place the geometry of a vehicle's journey lives. A route is
+a ring of four sides along named streets of central Bishkek, declared as the crossings it turns at.
+
+- A `crossing` carries both street names and the point, because a coordinate on an avenue is only a
+  corner if the street it names reaches that longitude. `ring` names each side from the street the two
+  crossings have in common, so a ring cannot be named after a street it never drove.
+- The crossings are taken from OpenStreetMap rather than placed by hand, so a vehicle is seen driving
+  along a road instead of across the blocks. The corpus is deliberately small: `x` and `y` are not
+  street names, and a made-up crossing shows itself as a car in a courtyard.
+- The demo fleet no longer declares where its vehicles stand. `demo.Fleet()` takes the first vertex of
+  the route as the place, so the same twenty-five coordinates are stated once.
+- `route_test.go` holds the declaration to what it claims: every ring is closed, stays inside the
+  demonstration service area (except the one scenario ring, which exists to leave it), has no side
+  shorter than `ShortestSideMetres`, is named by the streets it follows, and no two rings are the same
+  circuit.
+- The vehicle still follows an announced ring rather than searching a road graph, so one moved by
+  `set-position` drives back to its route in a straight line. That is a named limitation, not a defect
+  to fix here.

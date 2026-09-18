@@ -3,6 +3,8 @@ package simulation
 import (
 	"math"
 	"math/big"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
@@ -43,97 +45,244 @@ func travelled(window time.Duration) Path {
 	return Path(new(big.Int).Quo(covered, perMillimetre).Int64())
 }
 
-// Route is one fixed closed trajectory. It is a loop, so a vehicle that reaches its end continues
-// from the beginning in the same direction and a demonstration never runs out of road.
+// ShortestSideMetres is the shortest side a declared ring may have. A ring is followed by eye on a
+// real map, and a side shorter than a block is not a street: it is a corner cut across one, which is
+// what a ring assembled from guessed coordinates looks like.
+const ShortestSideMetres = 300.0
+
+// crossing is a place where two named streets of the centre actually meet, taken from the map rather
+// than placed by hand. A ring is a list of these, so every vertex of every ring is a corner a person
+// can stand on and every side is a street that is really there.
+//
+// Both names travel with the point because that is what makes it a corner: a coordinate on one street
+// is only a crossing if the other one reaches it, and keeping the two names together is what stops a
+// ring from being named after a street it never reached. The name that runs north is held in `north`
+// and the one that runs east in `east`, whichever way round the declaration wrote them, so the field
+// a name sits in says which way it runs.
+type crossing struct {
+	north string
+	east  string
+	at    fleet.Position
+}
+
+// axis is the direction a street runs in where the rings are drawn.
+type axis int
+
+const (
+	runsEastWest axis = iota
+	runsNorthSouth
+)
+
+// Route is one fixed closed trajectory along named streets. It is a loop, so a vehicle that reaches
+// its end continues from the beginning in the same direction and a demonstration never runs out of
+// road.
 type Route struct {
 	ID RouteID
+
+	// Streets are the streets the sides follow, in order. The name of the ring is these, so a person
+	// reading the declaration can find the ring on a map and check it by eye.
+	Streets []string
 
 	// Points are the vertices in order, longitude first. The first point is repeated at the end, so
 	// the loop is closed by the declaration rather than by a rule about the last vertex.
 	Points []fleet.Position
 }
 
+// Start is where a vehicle given this route stands: the first vertex of the ring, which is a corner of
+// two named streets rather than a coordinate kept beside the route.
+func (r Route) Start() fleet.Position {
+	return r.Points[0]
+}
+
+// Name is what the ring is, written as the streets it follows. The demonstration is checked by eye
+// against these names, so the ring carries them rather than only the code that drew it.
+func (r Route) Name() string {
+	return strings.Join(r.Streets, " — ")
+}
+
+// The streets of the centre, named once. Every crossing below is a pair of them.
+const (
+	zhibekZholu   = "улица Жибек Жолу"
+	frunze        = "улица Фрунзе"
+	moskovskaya   = "улица Московская"
+	manasa        = "проспект Манаса"
+	turusbekova   = "улица Турусбекова"
+	isanova       = "улица Исанова"
+	logvinenko    = "улица Логвиненко"
+	panfilova     = "улица Панфилова"
+	tynystanova   = "улица Тыныстанова"
+	abdrakhmanova = "улица Абдрахманова"
+	ibraimova     = "улица Ибраимова"
+	gogol         = "улица Гоголя"
+)
+
+// The corners the rings are built from: each one a crossing of two of the streets above. They are the
+// whole vocabulary of the rings, so no ring is drawn at a place that is not one of them.
+var (
+	// Along улица Жибек Жолу, which runs east across the north of the centre: one crossing per street
+	// that reaches it, west to east.
+	zhibekAtManasa        = meets(zhibekZholu, manasa, 74.56250, 42.88460)
+	zhibekAtTurusbekova   = meets(zhibekZholu, turusbekova, 74.58559, 42.88412)
+	zhibekAtIsanova       = meets(zhibekZholu, isanova, 74.59238, 42.88379)
+	zhibekAtLogvinenko    = meets(zhibekZholu, logvinenko, 74.59928, 42.88377)
+	zhibekAtPanfilova     = meets(zhibekZholu, panfilova, 74.60179, 42.88397)
+	zhibekAtTynystanova   = meets(zhibekZholu, tynystanova, 74.60993, 42.88458)
+	zhibekAtAbdrakhmanova = meets(zhibekZholu, abdrakhmanova, 74.61175, 42.88496)
+	zhibekAtIbraimova     = meets(zhibekZholu, ibraimova, 74.61661, 42.88508)
+	zhibekAtGogol         = meets(zhibekZholu, gogol, 74.61874, 42.88523)
+
+	// Along улица Фрунзе, which runs east a little south of it.
+	frunzeAtTurusbekova   = meets(frunze, turusbekova, 74.58532, 42.88186)
+	frunzeAtAbdrakhmanova = meets(frunze, abdrakhmanova, 74.61175, 42.88061)
+
+	// Along улица Московская, which runs east south of the avenue.
+	moskovskayaAtManasa        = meets(moskovskaya, manasa, 74.56250, 42.87030)
+	moskovskayaAtTurusbekova   = meets(moskovskaya, turusbekova, 74.58428, 42.87043)
+	moskovskayaAtIsanova       = meets(moskovskaya, isanova, 74.59109, 42.87009)
+	moskovskayaAtLogvinenko    = meets(moskovskaya, logvinenko, 74.59880, 42.86976)
+	moskovskayaAtPanfilova     = meets(moskovskaya, panfilova, 74.60054, 42.86968)
+	moskovskayaAtTynystanova   = meets(moskovskaya, tynystanova, 74.60880, 42.86938)
+	moskovskayaAtAbdrakhmanova = meets(moskovskaya, abdrakhmanova, 74.61134, 42.86929)
+	moskovskayaAtIbraimova     = meets(moskovskaya, ibraimova, 74.61660, 42.86905)
+	moskovskayaAtGogol         = meets(moskovskaya, gogol, 74.62065, 42.86893)
+
+	// The two far corners of the scenario ring, which are north of the northern edge of the service
+	// area at 42.90. They are stated here rather than taken from a street's crossings because the map
+	// has no corner there: the ring leaves the city's grid on purpose, and its northern side is a
+	// stretch of street between two of them rather than a crossing.
+	manasaFarNorth  = meets(manasa, zhibekZholu, 74.56250, 42.90400)
+	isanovaFarNorth = meets(isanova, zhibekZholu, 74.57200, 42.90400)
+)
+
+// whichWay is the direction each street runs in where the rings are drawn: the avenues of the centre
+// run east and west, and the streets between them run south to north. It is taken from the map rather
+// than guessed, by comparing the two ends of a long stretch of each street.
+var whichWay = map[string]axis{
+	zhibekZholu:   runsEastWest,
+	frunze:        runsEastWest,
+	moskovskaya:   runsEastWest,
+	manasa:        runsNorthSouth,
+	turusbekova:   runsNorthSouth,
+	isanova:       runsNorthSouth,
+	logvinenko:    runsNorthSouth,
+	panfilova:     runsNorthSouth,
+	tynystanova:   runsNorthSouth,
+	abdrakhmanova: runsNorthSouth,
+	ibraimova:     runsNorthSouth,
+	gogol:         runsNorthSouth,
+}
+
+// meets declares the crossing of two streets at one place. A street this build knows no direction for,
+// or two streets running the same way, is a crossing that cannot exist: two parallel streets do not
+// meet, and one that crosses itself is not a corner.
+func meets(one string, other string, longitude, latitude float64) crossing {
+	oneWay, oneKnown := whichWay[one]
+	otherWay, otherKnown := whichWay[other]
+	if !oneKnown || !otherKnown || oneWay == otherWay {
+		panic("a crossing is declared of streets that do not cross")
+	}
+
+	point := fleet.Position{Longitude: longitude, Latitude: latitude}
+	if oneWay == runsNorthSouth {
+		return crossing{north: one, east: other, at: point}
+	}
+	return crossing{north: other, east: one, at: point}
+}
+
 // Routes are every trajectory this build declares, one per demonstration vehicle. A vehicle names one
 // of them by identifier, and this is the only place the geometry of any of them lives.
+//
+// Every ring lies inside the demonstration service area but the scenario one, and every one of them is
+// four sides of the avenues the centre is laid out on, joined by two of the streets that cross them.
+// The vehicles are therefore spread over the whole centre and are seen driving along the streets the
+// city is built on, rather than around one block.
 var Routes = []Route{
-	memberRoute("electric-1", fleet.Position{Longitude: 74.5720, Latitude: 42.8590}),
-	memberRoute("electric-2", fleet.Position{Longitude: 74.5865, Latitude: 42.8742}),
-	memberRoute("electric-3", fleet.Position{Longitude: 74.5990, Latitude: 42.8663}),
-	memberRoute("electric-4", fleet.Position{Longitude: 74.6120, Latitude: 42.8815}),
-	memberRoute("electric-5", fleet.Position{Longitude: 74.6285, Latitude: 42.8574}),
-	memberRoute("gasoline-1", fleet.Position{Longitude: 74.5638, Latitude: 42.8871}),
-	memberRoute("gasoline-2", fleet.Position{Longitude: 74.5793, Latitude: 42.8486}),
-	memberRoute("gasoline-3", fleet.Position{Longitude: 74.6046, Latitude: 42.8928}),
-	memberRoute("gasoline-4", fleet.Position{Longitude: 74.6209, Latitude: 42.8701}),
-	memberRoute("gasoline-5", fleet.Position{Longitude: 74.6371, Latitude: 42.8836}),
+	ring("electric-1", zhibekAtManasa, zhibekAtGogol, moskovskayaAtGogol, moskovskayaAtManasa),
+	ring("electric-2", zhibekAtManasa, zhibekAtIbraimova, moskovskayaAtIbraimova, moskovskayaAtManasa),
+	ring("electric-3", zhibekAtManasa, zhibekAtAbdrakhmanova, moskovskayaAtAbdrakhmanova, moskovskayaAtManasa),
+	ring("electric-4", zhibekAtManasa, zhibekAtTynystanova, moskovskayaAtTynystanova, moskovskayaAtManasa),
+	ring("electric-5", zhibekAtManasa, zhibekAtPanfilova, moskovskayaAtPanfilova, moskovskayaAtManasa),
+	ring("gasoline-1", zhibekAtManasa, zhibekAtLogvinenko, moskovskayaAtLogvinenko, moskovskayaAtManasa),
+	ring("gasoline-2", zhibekAtTurusbekova, zhibekAtGogol, moskovskayaAtGogol, moskovskayaAtTurusbekova),
+	ring("gasoline-3", zhibekAtTurusbekova, zhibekAtIbraimova, moskovskayaAtIbraimova, moskovskayaAtTurusbekova),
+	ring("gasoline-4", zhibekAtManasa, zhibekAtIsanova, moskovskayaAtIsanova, moskovskayaAtManasa),
+	ring("gasoline-5", zhibekAtIsanova, zhibekAtGogol, moskovskayaAtGogol, moskovskayaAtIsanova),
 	ScenarioRoute(),
-	memberRoute("diesel-2", fleet.Position{Longitude: 74.5904, Latitude: 42.8955}),
-	memberRoute("diesel-3", fleet.Position{Longitude: 74.6158, Latitude: 42.8443}),
-	memberRoute("diesel-4", fleet.Position{Longitude: 74.6432, Latitude: 42.8759}),
-	memberRoute("diesel-5", fleet.Position{Longitude: 74.5682, Latitude: 42.8794}),
-	memberRoute("hybrid-1", fleet.Position{Longitude: 74.5837, Latitude: 42.8617}),
-	memberRoute("hybrid-2", fleet.Position{Longitude: 74.6091, Latitude: 42.8880}),
-	memberRoute("hybrid-3", fleet.Position{Longitude: 74.6246, Latitude: 42.8521}),
-	memberRoute("hybrid-4", fleet.Position{Longitude: 74.6398, Latitude: 42.8646}),
-	memberRoute("hybrid-5", fleet.Position{Longitude: 74.5599, Latitude: 42.8912}),
-	memberRoute("gas-1", fleet.Position{Longitude: 74.5751, Latitude: 42.8703}),
-	memberRoute("gas-2", fleet.Position{Longitude: 74.6014, Latitude: 42.8558}),
-	memberRoute("gas-3", fleet.Position{Longitude: 74.6177, Latitude: 42.8967}),
-	memberRoute("gas-4", fleet.Position{Longitude: 74.6320, Latitude: 42.8688}),
-	memberRoute("gas-5", fleet.Position{Longitude: 74.5926, Latitude: 42.8461}),
+	ring("diesel-2", zhibekAtTurusbekova, zhibekAtAbdrakhmanova, moskovskayaAtAbdrakhmanova, moskovskayaAtTurusbekova),
+	ring("diesel-3", frunzeAtTurusbekova, frunzeAtAbdrakhmanova, moskovskayaAtAbdrakhmanova, moskovskayaAtTurusbekova),
+	ring("diesel-4", zhibekAtIsanova, zhibekAtIbraimova, moskovskayaAtIbraimova, moskovskayaAtIsanova),
+	ring("diesel-5", zhibekAtTurusbekova, zhibekAtTynystanova, moskovskayaAtTynystanova, moskovskayaAtTurusbekova),
+	ring("hybrid-1", zhibekAtManasa, zhibekAtTurusbekova, moskovskayaAtTurusbekova, moskovskayaAtManasa),
+	ring("hybrid-2", zhibekAtLogvinenko, zhibekAtGogol, moskovskayaAtGogol, moskovskayaAtLogvinenko),
+	ring("hybrid-3", zhibekAtPanfilova, zhibekAtGogol, moskovskayaAtGogol, moskovskayaAtPanfilova),
+	ring("hybrid-4", zhibekAtTynystanova, zhibekAtGogol, moskovskayaAtGogol, moskovskayaAtTynystanova),
+	ring("hybrid-5", zhibekAtAbdrakhmanova, zhibekAtGogol, moskovskayaAtGogol, moskovskayaAtAbdrakhmanova),
+	ring("gas-1", zhibekAtLogvinenko, zhibekAtIbraimova, moskovskayaAtIbraimova, moskovskayaAtLogvinenko),
+	ring("gas-2", zhibekAtPanfilova, zhibekAtIbraimova, moskovskayaAtIbraimova, moskovskayaAtPanfilova),
+	ring("gas-3", zhibekAtTynystanova, zhibekAtIbraimova, moskovskayaAtIbraimova, moskovskayaAtTynystanova),
+	ring("gas-4", zhibekAtAbdrakhmanova, zhibekAtIbraimova, moskovskayaAtIbraimova, moskovskayaAtAbdrakhmanova),
+	ring("gas-5", zhibekAtIsanova, zhibekAtAbdrakhmanova, moskovskayaAtAbdrakhmanova, moskovskayaAtIsanova),
 }
 
 // ScenarioRouteID names the one trajectory that leaves the demonstration service area: the vehicle on
 // it drives out of the zone and back in, which is what an ending beyond the boundary is shown with.
 const ScenarioRouteID RouteID = "scenario-1"
 
-// The extent of the circuit every ordinary demonstration vehicle keeps to, east and north of the
-// place it is stood at. The whole fleet stands inside the demonstration service area, and a rectangle
-// this size from every one of those places stays inside it.
-const (
-	circuitLongitudeOffset = 0.0030
-	circuitLatitudeOffset  = 0.0028
-)
-
-// memberRoute declares the circuit of one vehicle: a closed rectangle with the place the demonstration
-// stands it at as its south-western corner. The vehicle therefore starts on its route rather than
-// beside it, which is what keeps the first movement from being a jump to the nearest point of a
-// circuit drawn around it.
-func memberRoute(id RouteID, start fleet.Position) Route {
-	return rectangle(id, start, fleet.Position{
-		Longitude: start.Longitude + circuitLongitudeOffset,
-		Latitude:  start.Latitude + circuitLatitudeOffset,
-	})
-}
-
-// scenarioNorthLatitude is the far side of the scenario circuit. It lies past the northern edge of the
-// demonstration area, so part of every lap of this route is driven outside it.
-const scenarioNorthLatitude = 42.9030
-
-// ScenarioRoute is the trajectory that crosses the boundary of the demonstration area. It starts
-// where the vehicle it belongs to stands, near the northern edge of the zone, and runs north beyond
-// it, so part of every lap is driven outside the area.
+// ScenarioRoute is the trajectory that crosses the boundary of the demonstration area. It starts at a
+// corner inside the zone and runs north beyond it, so part of every lap is driven outside the area and
+// a ride ended there is an ending beyond the service boundary.
 func ScenarioRoute() Route {
-	start := fleet.Position{Longitude: 74.5561, Latitude: 42.8628}
-	return rectangle(ScenarioRouteID, start, fleet.Position{
-		Longitude: start.Longitude + circuitLongitudeOffset,
-		Latitude:  scenarioNorthLatitude,
-	})
+	return ring(ScenarioRouteID, zhibekAtIsanova, zhibekAtManasa, manasaFarNorth, isanovaFarNorth)
 }
 
-// rectangle declares a closed circuit over two opposite corners: east along the southern side, north,
-// west along the northern side and south back to where it started.
-func rectangle(id RouteID, southWest, northEast fleet.Position) Route {
-	return Route{
-		ID: id,
-		Points: []fleet.Position{
-			southWest,
-			{Longitude: northEast.Longitude, Latitude: southWest.Latitude},
-			northEast,
-			{Longitude: southWest.Longitude, Latitude: northEast.Latitude},
-			southWest,
-		},
+// ring declares a closed circuit over the corners it passes through: side n runs from corner n-1 to
+// corner n, and the last side ends where the first began, so the ring closes by its own declaration
+// rather than by a rule about the last vertex. The first corner is where a vehicle given this route
+// stands.
+func ring(id RouteID, corners ...crossing) Route {
+	streets := make([]string, 0, len(corners))
+	points := make([]fleet.Position, 0, len(corners)+1)
+	for index, corner := range corners {
+		streets = append(streets, streetBetween(corners[(index+len(corners)-1)%len(corners)], corner))
+		points = append(points, corner.at)
 	}
+	points = append(points, points[0])
+	return Route{ID: id, Streets: streets, Points: points}
+}
+
+// streetBetween is the street two corners share, which is the street the side between them follows.
+// Two corners with nothing in common are two places on different streets, and two corners that share
+// only a street running the other way are not on one line: the side between them would cross the city
+// rather than follow it.
+//
+// Which name they have in common also says which way the side runs: two corners sharing the street
+// that runs north are on an avenue, and two sharing the one that runs east are on a street.
+func streetBetween(from, to crossing) string {
+	if from.north == to.north {
+		return from.north
+	}
+	if from.east == to.east {
+		return from.east
+	}
+	panic(notOneStreet(from, to))
+}
+
+// notOneStreet says which two corners of a ring do not meet along a street, because a declaration
+// that is wrong about its own geometry has to say where.
+func notOneStreet(from, to crossing) string {
+	return "the corners " + from.north + "×" + from.east + " and " + to.north + "×" + to.east +
+		" are not on one street, so the side between them is not a road"
+}
+
+// NamedStreets are every street this build declares a crossing on. A side of a ring is named after
+// one of these, so a name that is not here is a side nobody can look up on a map.
+func NamedStreets() []string {
+	named := []string{
+		zhibekZholu, frunze, moskovskaya, manasa, turusbekova, isanova,
+		logvinenko, panfilova, tynystanova, abdrakhmanova, ibraimova, gogol,
+	}
+	sort.Strings(named)
+	return named
 }
 
 // RouteOf answers the route a vehicle was given, and reports whether this build declares it.
@@ -201,10 +350,11 @@ func (r Route) DistanceFrom(at fleet.Position) (Path, float64) {
 // local is a position in the flat plane the distances of a route are measured in.
 type localPoint struct{ x, y float64 }
 
-// The size of a degree where the fleet stands, in the flat approximation every route distance is
-// measured in. A degree of longitude is shorter than a degree of latitude by the cosine of the
-// parallel, and every vehicle stands within a few kilometres of the same one, so the error of the
-// approximation stays far below the width of a lane.
+// kilometresPerDegreeLatitude and kilometresPerDegreeLongitude are the size of a degree where the
+// fleet stands, in the flat approximation every route distance is measured in. A degree of longitude
+// is shorter than a degree of latitude by the cosine of the parallel, and every ring stands within a
+// few kilometres of the same one, so the error of the approximation stays far below the width of a
+// lane.
 const (
 	kilometresPerDegreeLatitude  = 111.19
 	kilometresPerDegreeLongitude = kilometresPerDegreeLatitude * 0.7330

@@ -89,6 +89,11 @@ jobs:
       - name: Install dependencies
         working-directory: frontend
         run: npm ci
+      # The basemap is built during an image build, so what can be checked here is the declaration it
+      # is built from: the header reader of the archive format, and the addresses, ranges and digests
+      # the build and the interface both read.
+      - name: Check the basemap declaration
+        run: node --test "tools/basemap/*.test.mjs"
       - name: Check formatting
         run: npm run format:check
       - name: Lint stylesheets
