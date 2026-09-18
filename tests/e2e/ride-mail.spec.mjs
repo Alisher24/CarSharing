@@ -113,10 +113,16 @@ test('one ride leaves one letter in the inbox, however often the delivery is rep
 
     // The same letter is read as a page in the browser a person opens: the list the inbox address
     // answers carries it, and the page of the letter states the total the panel states — read from
-    // the page rather than from the JSON of the same letter.
+    // the page rather than from the JSON of the same letter. Every suite of this run leaves letters
+    // in the one box, so the row is found by the letter this check delivered rather than by a subject
+    // other rides share.
     await page.goto(MAILBOX_ORIGIN + INBOX_PATH);
-    await expect(page.locator('.inbox-letters')).toContainText(letter.subject);
-    await page.getByRole('link', { name: letter.subject }).click();
+    const row = page
+      .locator('.inbox-letters tr')
+      .filter({ has: page.locator(`a[href="${inboxLetterPath(letter.id)}"]`) });
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText(letter.subject);
+    await row.getByRole('link').click();
     await expect(page).toHaveURL(MAILBOX_ORIGIN + inboxLetterPath(letter.id));
     await expect(page.locator('.inbox-text')).toContainText(somText(totalOf(invoiceId)));
 
