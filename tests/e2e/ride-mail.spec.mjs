@@ -2,8 +2,9 @@
 // and no second letter however often the delivery is attempted.
 //
 // The letter is the surface no HTTP check can stand in for. An HTTP suite proves the row the mail stub
-// stored; what this checks is that a person arrives at it the way the README says to — the inbox
-// address, the letter it shows, and the amount that matches what the panel says the ride cost.
+// stored and the page the listener answers; what this checks is that a person arrives at it the way
+// the README says to — the inbox address, the letter the page lists, and the amount the page states
+// matching what the panel says the ride cost.
 //
 // The retry is armed before the ending, so the delivery that stores the letter is the one whose answer
 // is lost: the worker repeats it and the stub answers the receipt of the delivery it already holds.
@@ -13,6 +14,8 @@ import {
   armedFaults,
   armLostAnswer,
   forgetSuiteMail,
+  INBOX_PATH,
+  inboxLetterPath,
   letterTask,
   lettersAbout,
   mailbox,
@@ -20,7 +23,7 @@ import {
   storedLetter,
 } from '../../scripts/acceptance/mail.mjs';
 import { somText } from '../../scripts/acceptance/money.mjs';
-import { sql } from '../../scripts/service.mjs';
+import { MAILBOX_ORIGIN, sql } from '../../scripts/service.mjs';
 import { availableModel, book, email, endRidesOf, RECONCILIATION_PATIENCE_MS, signUp, until } from './person.mjs';
 import { restoreScenario } from './scenario.mjs';
 
@@ -104,6 +107,15 @@ test('one ride leaves one letter in the inbox, however often the delivery is rep
     );
     await expect(page.locator('.ride-progress')).toContainText(INVOICE_TOTAL);
     await expect(page.locator('.ride-progress')).toContainText(somText(totalOf(invoiceId)));
+
+    // The same letter is read as a page in the browser a person opens: the list the inbox address
+    // answers carries it, and the page of the letter states the total the panel states — read from
+    // the page rather than from the JSON of the same letter.
+    await page.goto(MAILBOX_ORIGIN + INBOX_PATH);
+    await expect(page.locator('.inbox-letters')).toContainText(letter.subject);
+    await page.getByRole('link', { name: letter.subject }).click();
+    await expect(page).toHaveURL(MAILBOX_ORIGIN + inboxLetterPath(letter.id));
+    await expect(page.locator('.inbox-text')).toContainText(somText(totalOf(invoiceId)));
   } finally {
     await context.close();
   }

@@ -120,7 +120,8 @@ func (d MailstubInternalDependencies) validate() error {
 }
 
 // NewMailstubInboxListener builds the listener of the read-only inbox: two anonymous reads of the
-// box, published on the loopback address of the container rather than through the proxy.
+// box, published on the loopback address of the container rather than through the proxy, and the
+// human pages of the same box beside them.
 func NewMailstubInboxListener(dependencies MailstubInboxDependencies) (http.Handler, error) {
 	if dependencies.Inbox == nil {
 		return nil, fmt.Errorf("%w: mail box", ErrIncompleteApplication)
@@ -135,7 +136,9 @@ func NewMailstubInboxListener(dependencies MailstubInboxDependencies) (http.Hand
 	served := mailstubInboxHandlers{inbox: dependencies.Inbox, cursors: dependencies.Cursors}
 	strict := mailstubapi.NewStrictHandlerWithOptions(served, nil, mailstubStrictErrorHandlers())
 	policy := Policy{AllowedOrigins: map[string]bool{}, Authenticate: refuseCredentials}
-	return Boundary(spec, mailstubapi.Handler(strict), policy), nil
+	operations := Boundary(spec, mailstubapi.Handler(strict), policy)
+	return inboxPagesBeside(operations, dependencies.Inbox, dependencies.Cursors,
+		newContractPrefixes(spec)), nil
 }
 
 // readinessBeside serves the container's readiness probe beside the contract. The probe is the
