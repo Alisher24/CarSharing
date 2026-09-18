@@ -6,7 +6,16 @@
 // acceptance lines is proved by the suites in scripts/acceptance.
 import { expect, test } from '@playwright/test';
 import { sql } from '../../scripts/service.mjs';
-import { availableModel, book, CABINET_ACTION, email, SIGN_IN_ACTION, register, signUp } from './person.mjs';
+import {
+  CABINET_ACTION,
+  RECONCILIATION_PATIENCE_MS,
+  SIGN_IN_ACTION,
+  availableModel,
+  email,
+  register,
+  ride,
+  signUp,
+} from './person.mjs';
 import { restoreScenario } from './scenario.mjs';
 
 /** The addresses of the cabinet, which are the outward behaviour these checks are about. */
@@ -19,18 +28,8 @@ const WITHOUT_RECONCILIATION = '/?reconcile=off';
 /** Where the private stream of the signed-in person lives, which one check breaks. */
 const PRIVATE_EVENTS = '**/api/v1/me/events';
 
-/** The controls of a ride, in the words the interface fixes for them. */
-const START_ACTION = 'Начать поездку';
-const FINISH_ACTION = 'Завершить поездку';
-
-/** What the panel says once the service confirmed that the ride is over. */
-const RIDE_FINISHED = 'Поездка завершена';
-
 /** What the header of the cabinet says when the account has ridden nothing. */
 const NO_RIDES = 'Вы ещё не совершали поездок';
-
-/** How long a check waits for a change that only the reconciliation can bring. */
-const RECONCILIATION_PATIENCE_MS = 20_000;
 
 test.beforeEach(() => {
   endPreviousRides();
@@ -157,13 +156,3 @@ test('the cabinet is read again after the private stream breaks, and survives lo
     await context.close();
   }
 });
-
-/** Books one vehicle, rides it and ends the ride, which is what leaves a history to read. */
-async function ride(page, model) {
-  await book(page, model);
-  await page.getByRole('button', { name: START_ACTION }).click();
-  await page.getByRole('button', { name: FINISH_ACTION }).first().click();
-  // The question is asked before the ending is sent, because an ending is not undone by asking again.
-  await page.locator('.reservation-panel-confirm').getByRole('button', { name: FINISH_ACTION }).click();
-  await expect(page.locator('.reservation-panel-time')).toHaveText(RIDE_FINISHED);
-}

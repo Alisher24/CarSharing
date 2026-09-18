@@ -20,6 +20,9 @@ export const PASSWORD_MAX_CODE_POINTS = 128;
 /** Which of the two fields of the credentials a reason belongs to. */
 export type CredentialField = 'email' | 'password';
 
+/** The two fields in the order the form reads them and the order they are checked in. */
+export const CREDENTIAL_FIELDS: readonly CredentialField[] = ['email', 'password'];
+
 /** One field with the reason it cannot be sent, which is the field a form puts the cursor on. */
 export type CredentialRefusal = { field: CredentialField; reason: string };
 
@@ -48,6 +51,12 @@ const EMAIL_SHAPE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 // written out rather than approximated.
 const UNICODE_WHITESPACE = /[\t-\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]/;
 
+/** The rule each field is held to, so the field order above decides the order of everything else. */
+const FIELD_RULES: Record<CredentialField, (value: string) => string | null> = {
+  email: emailRefusal,
+  password: passwordRefusal,
+};
+
 /** Why an address cannot be sent, or nothing when it is one the contract accepts. */
 export function emailRefusal(email: string): string | null {
   const canonical = email.trim();
@@ -74,11 +83,10 @@ export function passwordRefusal(password: string): string | null {
  * form can put the cursor on the first fault rather than making the person look for it.
  */
 export function firstRefusal(credentials: Credentials): CredentialRefusal | null {
-  const email = emailRefusal(credentials.email);
-  if (email !== null) return { field: 'email', reason: email };
-
-  const password = passwordRefusal(credentials.password);
-  if (password !== null) return { field: 'password', reason: password };
+  for (const field of CREDENTIAL_FIELDS) {
+    const reason = FIELD_RULES[field](credentials[field]);
+    if (reason !== null) return { field, reason };
+  }
 
   return null;
 }

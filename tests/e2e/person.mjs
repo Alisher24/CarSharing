@@ -23,13 +23,20 @@ export const CONFIRM_ACTION = 'Использовать бесплатную б�
 /** What the panel offers while a reservation is running. */
 export const CANCEL_ACTION = 'Отменить бронь';
 
+/** The controls of a ride, in the words the interface fixes for them. */
+export const START_ACTION = 'Начать поездку';
+export const FINISH_ACTION = 'Завершить поездку';
+
+/** What the panel says once the service confirmed that the ride is over. */
+export const RIDE_FINISHED = 'Поездка завершена';
+
 /** The one account control of the header, in each of the two states it has. */
 export const SIGN_IN_ACTION = 'Вход';
 export const CABINET_ACTION = 'Кабинет';
 
-/** What the two tabs of the entry window are called, and what the action of each one offers. */
-const REGISTER_TAB = 'Регистрация';
-const REGISTER_ACTION = 'Зарегистрироваться';
+/** The two tabs of the entry window, and what the action of the one that registers offers. */
+export const REGISTER_TAB = 'Регистрация';
+export const REGISTER_ACTION = 'Зарегистрироваться';
 const SIGN_IN_ACTION_TEXT = 'Войти';
 
 /** What a fresh address of one check looks like, so no check depends on another one's leavings. */
@@ -93,6 +100,19 @@ export async function book(page, model) {
 }
 
 /**
+ * Rides the booked vehicle and ends the ride, which is what leaves a history to read: a ride in the
+ * cabinet and the invoice it links to. The vehicle is booked here, so a check starts from the list.
+ */
+export async function ride(page, model) {
+  await book(page, model);
+  await page.getByRole('button', { name: START_ACTION }).click();
+  await page.getByRole('button', { name: FINISH_ACTION }).first().click();
+  // The question is asked before the ending is sent, because an ending is not undone by asking again.
+  await page.locator('.reservation-panel-confirm').getByRole('button', { name: FINISH_ACTION }).click();
+  await expect(page.locator('.reservation-panel-time')).toHaveText(RIDE_FINISHED);
+}
+
+/**
  * Registers a fresh account through the entry window the header opens, as a person would. The window
  * closes itself: the one control of the header states what a person can do next, so a session turns
  * it into the way into the cabinet.
@@ -112,7 +132,11 @@ export async function register(page, address) {
   await page.getByRole('button', { name: REGISTER_ACTION }).click();
 }
 
-/** Fills the entry window and signs an account that exists in, which is what coming back looks like. */
+/**
+ * Fills the entry window and signs an account that exists in, which is what coming back looks like.
+ * The window is already on screen — the header opens it from the map, and the cabinet opens it for
+ * somebody who is not signed in — so this fills what is there rather than opening anything.
+ */
 export async function signIn(page, address) {
   await page.locator('#account-email-field').fill(address);
   await page.locator('#account-password-field').fill(PASSWORD);

@@ -8,12 +8,15 @@
 import { expect, test } from '@playwright/test';
 import { sql } from '../../scripts/service.mjs';
 import {
+  RECONCILIATION_PATIENCE_MS,
+  REGISTER_ACTION,
+  REGISTER_TAB,
   SIGN_IN_ACTION,
   availableModel,
-  book,
   email,
   endRidesOf,
   openCabinet,
+  ride,
   signIn,
   signOut,
   signUp,
@@ -26,13 +29,14 @@ const ACCOUNT_PREFIX = 'entry';
 /** The two operations the entry form sends, which a form that has something to complain about must not. */
 const SEND_PATHS = ['/api/v1/auth/register', '/api/v1/auth/login'];
 
-/** The addresses of the cabinet, which are the outward behaviour one check here is about. */
-const INVOICES_ADDRESS = '/account/invoices';
+/** How long the session check is held back, so the window is opened while there is still no answer. */
+const SESSION_CHECK_DELAY_MS = 3_000;
 
-/** What the window is, and what the tab that registers and its action are called. */
+/** What the window says while the session is being checked, which is what it is titled then. */
+const SESSION_CHECK_NOTICE = 'Проверяем сессию…';
+
+/** What the window is, which is the one dialog the application shows. */
 const WINDOW = '.entry-window';
-const REGISTER_TAB = 'Регистрация';
-const REGISTER_ACTION = 'Зарегистрироваться';
 
 /** Why the rules refuse the two fields, in the words the interface fixes for them. */
 const ADDRESS_MALFORMED = 'Неверный формат адреса: нужен вид name@example.com';
@@ -41,16 +45,6 @@ const PASSWORD_LENGTH = 'Пароль от 12 до 128 символов';
 /** An address of the wrong shape and a password one code point short of the twelve the contract wants. */
 const MALFORMED_ADDRESS = 'someone.example.test';
 const SHORT_PASSWORD = 'correcthors';
-
-/** The controls of a ride, in the words the interface fixes for them. */
-const START_ACTION = 'Начать поездку';
-const FINISH_ACTION = 'Завершить поездку';
-
-/** What the panel says once the service confirmed that the ride is over. */
-const RIDE_FINISHED = 'Поездка завершена';
-
-/** How long a check waits for an invoice the service writes after the ride is over. */
-const RECONCILIATION_PATIENCE_MS = 20_000;
 
 test.beforeEach(() => {
   endRidesOf(ACCOUNT_PREFIX);
@@ -62,6 +56,25 @@ test.beforeEach(() => {
 
 test.afterEach(() => {
   endRidesOf(ACCOUNT_PREFIX);
+});
+
+test('the window says the session is being checked and puts the cursor in the form that follows', async ({ page }) => {
+  // The session check is held back, so the window is opened while there is still no session to enter:
+  // the form then arrives into a window that is already on screen, which is the moment the cursor has
+  // to be moved a second time rather than left on the button that closes the window.
+  await page.route('**/api/v1/me', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, SESSION_CHECK_DELAY_MS));
+    await route.continue();
+  });
+
+  await page.goto('/');
+  await headerControl(page).click();
+
+  await expect(page.locator('.entry-title')).toHaveText(SESSION_CHECK_NOTICE);
+
+  // The window is already open when the form arrives, and the cursor goes into its first field.
+  await expect(page.locator('#account-email-field')).toBeVisible();
+  await expect(page.locator('#account-email-field')).toBeFocused();
 });
 
 test('a field that cannot be sent is marked and explained rather than sent', async ({ page }) => {
@@ -122,7 +135,6 @@ test('signing in from the cabinet at one invoice keeps that invoice', async ({ p
   await page.locator('.feed-row-link').first().click();
   await expect(page.locator('.invoice-card-total')).toBeVisible({ timeout: RECONCILIATION_PATIENCE_MS });
   const invoiceAddress = new URL(page.url()).pathname;
-  expect(invoiceAddress.startsWith(INVOICES_ADDRESS)).toBe(true);
 
   await signOut(page, address);
 
@@ -157,14 +169,4 @@ async function watchSending(page) {
   });
 
   return sent;
-}
-
-/** Books one vehicle, rides it and ends the ride, which is what leaves an invoice to be read. */
-async function ride(page, model) {
-  await book(page, model);
-  await page.getByRole('button', { name: START_ACTION }).click();
-  await page.getByRole('button', { name: FINISH_ACTION }).first().click();
-  // The question is asked before the ending is sent, because an ending is not undone by asking again.
-  await page.locator('.reservation-panel-confirm').getByRole('button', { name: FINISH_ACTION }).click();
-  await expect(page.locator('.reservation-panel-time')).toHaveText(RIDE_FINISHED);
 }

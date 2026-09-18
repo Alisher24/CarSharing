@@ -1,4 +1,4 @@
-import { useEffect, useRef, type MouseEvent, type ReactNode } from 'react';
+import { Children, useEffect, useRef, type MouseEvent, type ReactNode } from 'react';
 import { CLOSE_ACTION } from './accountCopy';
 
 // One window is on screen at a time, so the heading it is labelled by is declared once.
@@ -26,20 +26,24 @@ type ModalWindowProps = {
  * at the top of the page looking for where they were.
  */
 export function ModalWindow({ open, title, onClose, children }: ModalWindowProps) {
-  const window = useRef<HTMLDialogElement>(null);
+  const dialogWindow = useRef<HTMLDialogElement>(null);
   const content = useRef<HTMLDivElement>(null);
 
+  // The content counts as arrived only when it renders something: a caller showing nothing passes
+  // `false` or nothing at all, and `Children.toArray` is what drops both.
+  const holding = open && Children.toArray(children).length > 0;
+
+  // The cursor goes to the first field of the content — when the window opens, and again when the
+  // content arrives. A window opened while the session is still being checked holds no form yet, and
+  // the browser would leave the cursor on the button that closes it.
   useEffect(() => {
-    const element = window.current;
+    const element = dialogWindow.current;
     if (element === null) return;
 
-    if (open && !element.open) {
-      element.showModal();
-      content.current?.querySelector<HTMLElement>(FIRST_FIELD)?.focus();
-    }
-
+    if (open && !element.open) element.showModal();
     if (!open && element.open) element.close();
-  }, [open]);
+    if (holding) content.current?.querySelector<HTMLElement>(FIRST_FIELD)?.focus();
+  }, [open, holding]);
 
   // The backdrop is the dialog itself: a click on it has the dialog as its target, while a click
   // inside the window has one of the parts the window is built from.
@@ -50,7 +54,7 @@ export function ModalWindow({ open, title, onClose, children }: ModalWindowProps
   return (
     <dialog
       className="entry-window"
-      ref={window}
+      ref={dialogWindow}
       aria-labelledby={WINDOW_TITLE_ID}
       onCancel={onClose}
       onClick={closesOnBackdrop}
