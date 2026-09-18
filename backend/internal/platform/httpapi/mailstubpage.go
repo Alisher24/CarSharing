@@ -60,10 +60,13 @@ const storedZone = "UTC"
 // through untouched, because a page there would answer an operation that declares JSON — including
 // its own refusals; every other path is answered as a page, including the unknown one, so that a
 // person who mistypes an address reads what happened instead of an empty screen.
+//
+// The pages are given the same handlers the operations of the inbox are served by, so the two
+// surfaces cannot come to differ about the size of a page, its order or the cursor that continues it.
 func inboxPagesBeside(
-	operations http.Handler, inbox mailstubInboxHandlers, contract contractPrefixes,
+	operations http.Handler, served mailstubInboxHandlers, contract contractPrefixes,
 ) http.Handler {
-	pages := newInboxPages(inbox)
+	pages := newInboxPages(served)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if contract.owns(r.URL.Path) {
 			operations.ServeHTTP(w, r)
@@ -99,22 +102,22 @@ func refusalAnswer(status int, message string) inboxAnswer {
 // same handlers the collection is read through, so the page size, the order and the cursor of a page
 // are the collection's rather than a second copy of them.
 type inboxPages struct {
-	inbox  mailstubInboxHandlers
+	served mailstubInboxHandlers
 	routes []inboxRoute
 }
 
-func newInboxPages(inbox mailstubInboxHandlers) *inboxPages {
-	served := &inboxPages{inbox: inbox}
-	served.routes = []inboxRoute{
-		{path: inboxPath, draw: served.letterList},
-		{path: inboxMessagePath, draw: served.oneLetter, letter: true},
+func newInboxPages(served mailstubInboxHandlers) *inboxPages {
+	pages := &inboxPages{served: served}
+	pages.routes = []inboxRoute{
+		{path: inboxPath, draw: pages.letterList},
+		{path: inboxMessagePath, draw: pages.oneLetter, letter: true},
 	}
-	for index := range served.routes {
+	for index := range pages.routes {
 		// A route whose pattern cannot be matched would answer nothing at all, so the table states
 		// where it is wrong as the process starts rather than in front of a reader.
-		inboxPatternParts(served.routes[index].path)
+		inboxPatternParts(pages.routes[index].path)
 	}
-	return served
+	return pages
 }
 
 // serve answers one request that is not the contract's. A page of this surface is drawn; everything
@@ -233,11 +236,11 @@ func (p *inboxPages) frame(
 // surfaces read one box.
 func (p *inboxPages) letterList(request pageRequest) inboxAnswer {
 	limit := mailstub.PageSize
-	after, err := p.inbox.positionOf(presentedCursor(request.query), limit)
+	after, err := p.served.positionOf(presentedCursor(request.query), limit)
 	if err != nil {
 		return refusalAnswer(http.StatusOK, inboxUnreadableCursor)
 	}
-	read, err := p.inbox.pageOf(request.ctx, after, limit)
+	read, err := p.served.pageOf(request.ctx, after, limit)
 	if err != nil {
 		slog.ErrorContext(request.ctx, "the mail box could not be read", "error", err)
 		return refusalAnswer(http.StatusServiceUnavailable, inboxUnavailable)
@@ -254,7 +257,7 @@ func (p *inboxPages) letterList(request pageRequest) inboxAnswer {
 // oneLetter reads one letter of the box exactly as the stub stored it. A letter that is not there is
 // a page that says so rather than a failure: the reader asked for a page and receives one.
 func (p *inboxPages) oneLetter(request pageRequest) inboxAnswer {
-	stored, err := p.inbox.inbox.ByID(request.ctx, request.identifier)
+	stored, err := p.served.inbox.ByID(request.ctx, request.identifier)
 	if errors.Is(err, mailstub.ErrMessageNotFound) {
 		return refusalAnswer(http.StatusNotFound, inboxNoSuchLetter)
 	}
