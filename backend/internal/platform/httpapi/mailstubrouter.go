@@ -137,8 +137,9 @@ func NewMailstubInboxListener(dependencies MailstubInboxDependencies) (http.Hand
 	strict := mailstubapi.NewStrictHandlerWithOptions(served, nil, mailstubStrictErrorHandlers())
 	policy := Policy{AllowedOrigins: map[string]bool{}, Authenticate: refuseCredentials}
 	operations := Boundary(spec, mailstubapi.Handler(strict), policy)
-	return inboxPagesBeside(operations, dependencies.Inbox, dependencies.Cursors,
-		newContractPrefixes(spec)), nil
+	// The pages read the same handlers the operations are served by, so the two surfaces cannot come
+	// to differ about the size of a page, its order or the cursor that continues it.
+	return inboxPagesBeside(operations, served, newContractPrefixes(spec)), nil
 }
 
 // readinessBeside serves the container's readiness probe beside the contract. The probe is the

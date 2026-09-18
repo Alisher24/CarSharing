@@ -474,7 +474,8 @@ describe('the surface of the mail stub', () => {
 
     // The list names the letter the box holds, and the page of it states what the stub stored: the
     // recipient, the moment it was accepted at in the zone it is stored in, the key it was delivered
-    // under and the text as it is. Every one of them is escaped, so the page a person reads is HTML.
+    // under and the text as it is. A page is not measured here beyond that — the Go checks read the
+    // page whole, and the browser step opens it as a person does.
     const list = await mailbox(INBOX_PATH);
     assert.equal(list.status, 200, list.text);
     assert.match(list.headers.get('content-type'), /^text\/html/);
@@ -483,19 +484,6 @@ describe('the surface of the mail stub', () => {
     assert.match(list.headers.get('content-security-policy'), /default-src 'none'/);
     assert.ok(list.text.includes(`href="${inboxLetterPath(letter.id)}"`), 'the list links to no letter');
     assert.ok(list.text.includes(letter.subject), `the list names no subject:\n${list.text}`);
-
-    const page = await mailbox(inboxLetterPath(letter.id));
-    assert.equal(page.status, 200, page.text);
-    for (const stated of [
-      letter.subject,
-      letter.to,
-      letter.id,
-      deliveryKeyOf(finished.json.invoice.invoice.id),
-      letter.text,
-    ]) {
-      assert.ok(page.text.includes(escapeMarkup(stated)), `the page does not state ${stated}:\n${page.text}`);
-    }
-    assert.ok(page.text.includes(`${letter.acceptedAt} UTC`), `the page states no stored moment:\n${page.text}`);
 
     // What the page does not hold is refused the way the operation is, so the box tells a reader
     // nothing the JSON does not.
@@ -616,15 +604,6 @@ function somText(tyiyn) {
   const whole = amount / TYIYN_IN_SOM;
   const minor = (amount % TYIYN_IN_SOM).toString().padStart(2, '0');
   return `${groupedDigits(whole.toString())},${minor} сома`;
-}
-
-/**
- * What one value looks like inside the markup of a page. The stub decides nothing about what a letter
- * says, so the page shows a subject or a text as the characters it is; a check that looks for the
- * stored value in the markup escapes it the way the page does.
- */
-function escapeMarkup(value) {
-  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll("'", '&#39;');
 }
 
 /** A whole number of som with its digits grouped in threes, as the letter groups them. */

@@ -34,6 +34,9 @@ const ACCOUNT_PREFIX = 'mail';
 const START_ACTION = 'Начать поездку';
 const FINISH_ACTION = 'Завершить поездку';
 
+/** What the page of the inbox states itself to be, which every page of it carries in its header. */
+const INBOX_TITLE = 'Ящик почтовой заглушки';
+
 /**
  * What the panel says once the service confirmed that the ride is over, and what it writes before the
  * total.
@@ -116,6 +119,21 @@ test('one ride leaves one letter in the inbox, however often the delivery is rep
     await page.getByRole('link', { name: letter.subject }).click();
     await expect(page).toHaveURL(MAILBOX_ORIGIN + inboxLetterPath(letter.id));
     await expect(page.locator('.inbox-text')).toContainText(somText(totalOf(invoiceId)));
+
+    // A page reaches nothing outside itself, which is what its policy states and what a person's
+    // browser really asks for: a context of its own records every request the page makes, and the
+    // page it opens is the only one.
+    const alone = await browser.newContext();
+    try {
+      const inbox = await alone.newPage();
+      const asked = [];
+      inbox.on('request', (request) => asked.push(request.url()));
+      await inbox.goto(MAILBOX_ORIGIN + inboxLetterPath(letter.id));
+      await expect(inbox.locator('.inbox-title')).toHaveText(INBOX_TITLE);
+      assert.deepEqual(asked, [MAILBOX_ORIGIN + inboxLetterPath(letter.id)]);
+    } finally {
+      await alone.close();
+    }
   } finally {
     await context.close();
   }

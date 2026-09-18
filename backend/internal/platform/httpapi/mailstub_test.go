@@ -85,18 +85,18 @@ func (b *fakeMailBox) Accept(
 		To:          request.To,
 		Subject:     request.Subject,
 		Text:        request.Text,
-		AcceptedAt:  storedMomentOf(len(b.letters) + 1),
+		AcceptedAt:  acceptedMomentOf(len(b.letters) + 1),
 	}
 	b.stored[key.String()] = stored
 	b.letters = append(b.letters, stored)
 	return mailstub.Receipt{Message: stored, Dropped: b.dropped}, nil
 }
 
-// storedMomentOf is the moment the fake box accepted the letter it stores in one position. A box
+// acceptedMomentOf is the moment the fake box accepted the letter it stores in one position. A box
 // accepts letters one after another, so each of them is a moment later than the one before: a check
 // about the order the collection publishes reads a box whose order is decided by the moment rather
 // than by the identifier alone.
-func storedMomentOf(position int) time.Time {
+func acceptedMomentOf(position int) time.Time {
 	return acceptedAt.Add(time.Duration(position) * time.Second)
 }
 
@@ -265,7 +265,7 @@ func TestADeliveryIsAnsweredWithTheReceiptOfTheLetterItStored(t *testing.T) {
 		t.Errorf("a first delivery states Idempotency-Replayed %q", replayed)
 	}
 	receipt := deliveredReceipt(t, first)
-	if receipt.Id != storedLetterID(1) || receipt.AcceptedAt != timestamp.Format(storedMomentOf(1)) {
+	if receipt.Id != storedLetterID(1) || receipt.AcceptedAt != timestamp.Format(acceptedMomentOf(1)) {
 		t.Errorf("the receipt is %+v", receipt)
 	}
 
@@ -643,7 +643,7 @@ func twoLettersAccepted(t *testing.T, box *fakeMailBox) []mailstub.Message {
 			To:         "rider@example.test",
 			Subject:    letter.subject,
 			Text:       letter.text,
-			AcceptedAt: storedMomentOf(position + 1),
+			AcceptedAt: acceptedMomentOf(position + 1),
 		}
 		accepted = append(accepted, stored)
 	}

@@ -1,17 +1,19 @@
-﻿{{define "inboxLetter"}} {{with .Data}}
-<dl class="inbox-fields">
-  <dt>{{$.Labels.Moment}}</dt>
-  <dd class="inbox-moment">{{.AcceptedAt}}</dd>
-  <dt>{{$.Labels.Recipient}}</dt>
-  <dd>{{.To}}</dd>
-  <dt>{{$.Labels.Subject}}</dt>
-  <dd>{{.Subject}}</dd>
-  <dt>{{$.Labels.Identifier}}</dt>
-  <dd>{{.ID}}</dd>
-  <dt>{{$.Labels.DeliveryKey}}</dt>
-  <dd>{{.DeliveryKey}}</dd>
-  <dt>{{$.Labels.Text}}</dt>
-  <dd><pre class="inbox-text">{{.Text}}</pre></dd>
-</dl>
-<p><a href="{{.JSONLink}}">{{$.Labels.JSON}}</a></p>
-{{end}} {{end}}
+{{define "inboxLetter"}}
+  {{with .Data}}
+    <dl class="inbox-fields">
+      <dt>{{$.Labels.Moment}}</dt>
+      <dd class="inbox-moment">{{.AcceptedAt}}</dd>
+      <dt>{{$.Labels.Recipient}}</dt>
+      <dd>{{.To}}</dd>
+      <dt>{{$.Labels.Subject}}</dt>
+      <dd>{{.Subject}}</dd>
+      <dt>{{$.Labels.Identifier}}</dt>
+      <dd>{{.ID}}</dd>
+      <dt>{{$.Labels.DeliveryKey}}</dt>
+      <dd>{{.DeliveryKey}}</dd>
+      <dt>{{$.Labels.Text}}</dt>
+      <dd><pre class="inbox-text">{{.Text}}</pre></dd>
+    </dl>
+    <p><a href="{{.JSONLink}}">{{$.Labels.JSON}}</a></p>
+  {{end}}
+{{end}}

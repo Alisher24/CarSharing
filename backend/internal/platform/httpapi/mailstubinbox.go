@@ -44,16 +44,49 @@ func (h mailstubInboxHandlers) GetMessages(
 			Body: mailstubError(ctx, mailstubapi.INVALIDCURSOR, messageInvalidCursor),
 		}, nil
 	}
-	page, err := h.inbox.ReadPage(ctx, after, limit)
+	read, err := h.pageOf(ctx, after, limit)
 	if err != nil {
 		slog.ErrorContext(ctx, "the mail box could not be read", "error", err)
 		return mailstubapi.GetMessages503JSONResponse{Body: mailstubUnavailable(ctx)}, nil
 	}
-	body, err := h.collectionBody(page, limit)
+	body, err := h.collectionBody(read)
 	if err != nil {
 		return nil, err
 	}
 	return mailstubapi.GetMessages200JSONResponse{Body: body}, nil
+}
+
+// readPage is one page of the box together with the cursor that continues it, which is what both
+// surfaces of the inbox answer with: the collection publishes the cursor as JSON, and the list of
+// letters offers it as the address of the next page. The size and the order are the ones the request
+// named, so a page read here and a page read by the collection are the same page.
+type readPage struct {
+	messages []mailstub.Message
+	next     *string
+}
+
+// pageOf reads one page of the box and issues the cursor the page after it is read with. A cursor
+// that cannot be issued is a defect of the key this installation signs with rather than a condition
+// of the request, so it is reported rather than answered with a page that cannot be continued.
+func (h mailstubInboxHandlers) pageOf(
+	ctx context.Context, after *mailstub.Position, limit int,
+) (readPage, error) {
+	page, err := h.inbox.ReadPage(ctx, after, limit)
+	if err != nil {
+		return readPage{}, err
+	}
+	read := readPage{messages: page.Messages}
+	if page.Next == nil {
+		return read, nil
+	}
+	issued, err := h.cursors.Issue(
+		cursor.Position{CreatedAt: page.Next.AcceptedAt, ID: page.Next.ID},
+		h.inboxScopeOf(limit))
+	if err != nil {
+		return readPage{}, err
+	}
+	read.next = &issued
+	return read, nil
 }
 
 // GetMessage answers one letter of the box, text included and uninterpreted: what a person reads
@@ -112,11 +145,9 @@ func (h mailstubInboxHandlers) positionOf(
 // collectionBody renders one page of the box, with the cursor that reads the page after it. A last
 // or empty page carries no cursor: there is nothing to continue from, and the contract publishes
 // that as a null cursor.
-func (h mailstubInboxHandlers) collectionBody(
-	page mailstub.Page, limit int,
-) (mailstubapi.MessageCollection, error) {
-	items := make([]mailstubapi.MessageSummary, 0, len(page.Messages))
-	for _, stored := range page.Messages {
+func (h mailstubInboxHandlers) collectionBody(read readPage) (mailstubapi.MessageCollection, error) {
+	items := make([]mailstubapi.MessageSummary, 0, len(read.messages))
+	for _, stored := range read.messages {
 		items = append(items, mailstubapi.MessageSummary{
 			Id:         stored.ID,
 			To:         openapi_types.Email(stored.To),
@@ -124,17 +155,6 @@ func (h mailstubInboxHandlers) collectionBody(
 			AcceptedAt: timestamp.Format(stored.AcceptedAt),
 		})
 	}
-	body := mailstubapi.MessageCollection{Items: items}
-	if page.Next == nil {
-		return body, nil
-	}
-	issued, err := h.cursors.Issue(cursor.Position{
-		CreatedAt: page.Next.AcceptedAt,
-		ID:        page.Next.ID,
-	}, h.inboxScopeOf(limit))
-	if err != nil {
-		return mailstubapi.MessageCollection{}, err
-	}
-	body.NextCursor = &issued
+	body := mailstubapi.MessageCollection{Items: items, NextCursor: read.next}
 	return body, nil
 }

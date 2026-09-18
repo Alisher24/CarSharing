@@ -241,7 +241,8 @@ func TestAnUnreadableCursorIsRefusedAsAPage(t *testing.T) {
 }
 
 // The list is a page of the collection: twenty letters at a time, and the link to the page after it
-// appears when there is one, carrying the cursor the collection issues. The last page states no link.
+// appears when there is one, carrying the cursor the collection issues and staying on this surface.
+// The last page states no link.
 func TestTheInboxPageContinuesThroughTheCursorsOfTheCollection(t *testing.T) {
 	box := newFakeMailBox()
 	handler := mailstubInboxRouter(t, box, []byte(cursorKey))
@@ -266,16 +267,43 @@ func TestTheInboxPageContinuesThroughTheCursorsOfTheCollection(t *testing.T) {
 	if next == "" {
 		t.Fatalf("the first page states no link to the next one")
 	}
+	// The link leads to the next page of this surface, not to the JSON of the same box: a reader who
+	// follows it reads letters and a way further on, as the check below reads them.
+	if !strings.HasPrefix(next, inboxPath+"?") {
+		t.Fatalf("the first page continues at %q", next)
+	}
 
 	second := mailstubCall(t, handler, http.MethodGet, next, "", "", nil)
 	if second.Code != http.StatusOK {
 		t.Fatalf("the second page answered %d %s", second.Code, second.Body.String())
 	}
 	if !strings.Contains(second.Body.String(), oldest.Subject) {
-		t.Errorf("the second page does not carry the oldest letter")
+		t.Errorf("the second page is not the page of this surface that carries the oldest letter")
+	}
+	if rows := strings.Count(second.Body.String(), `class="inbox-moment"`); rows != 2 {
+		t.Errorf("the second page lists %d letters", rows)
 	}
 	if nextPageLink(t, second.Body.String()) != "" {
 		t.Errorf("the last page states a link to a page that is not there")
+	}
+}
+
+// A reader who reloads a page they reached by a cursor is shown that page again rather than the first
+// one: the footer offers the address that was read, not only its path.
+func TestAReloadedPageStaysWhereTheReaderWas(t *testing.T) {
+	box := newFakeMailBox()
+	handler := mailstubInboxRouter(t, box, []byte(cursorKey))
+	lettersAccepted(t, box, mailstub.PageSize+2)
+	next := nextPageLink(t, mailstubCall(t, handler, http.MethodGet, inboxPath, "", "", nil).Body.String())
+
+	answer := mailstubCall(t, handler, http.MethodGet, next, "", "", nil)
+	if answer.Code != http.StatusOK {
+		t.Fatalf("the second page answered %d %s", answer.Code, answer.Body.String())
+	}
+	// The footer's refresh link is the first of the two the footer states, and it is the address the
+	// page was read at, cursor included.
+	if !strings.Contains(answer.Body.String(), `href="`+strings.ReplaceAll(next, "&", "&amp;")+`"`) {
+		t.Errorf("the page offers no way to read itself again:\n%s", answer.Body.String())
 	}
 }
 

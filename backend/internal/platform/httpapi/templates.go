@@ -44,6 +44,27 @@ func readInboxStylesheet() string {
 	return string(stylesheet)
 }
 
+// inboxDocument is the shape every page of the inbox is drawn in: the layout the pages share, filled
+// in with the page's own title, summary and content, and the labels and addresses both are read by.
+type inboxDocument struct {
+	Title   string
+	Summary string
+	Styles  template.CSS
+	Content template.HTML
+	Labels  pageLabels
+	JSON    string
+	Current string
+	Back    string
+	Letter  bool
+}
+
+// pageContent is what a page's own template is filled in with: what the page read, and the labels it
+// states around it.
+type pageContent struct {
+	Labels pageLabels
+	Data   any
+}
+
 // pageLabels is the vocabulary of the pages: the words the markup states, taken from the one
 // declaration of them in Go rather than spelled again in a template. A page cannot come to display a
 // label the code does not know about, and a link and the page it opens name the same thing.

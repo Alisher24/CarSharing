@@ -5,18 +5,30 @@ import "github.com/getkin/kin-openapi/openapi3"
 // The header names whose behaviour this package defines, the media types it accepts and answers with,
 // and the cache policy every response carries.
 const (
-	originHeader         = "Origin"
-	csrfTokenHeader      = "X-CSRF-Token"
-	idempotencyKeyHeader = "Idempotency-Key"
-	deliveryKeyHeader    = "Delivery-Key"
-	authorizationHeader  = "Authorization"
-	contentTypeHeader    = "Content-Type"
-	requestIDHeader      = "X-Request-ID"
-	cacheControlHeader   = "Cache-Control"
-	noStoreCacheControl  = "no-store"
-	jsonMediaType        = "application/json"
-	streamMediaType      = "text/event-stream"
+	originHeader             = "Origin"
+	csrfTokenHeader          = "X-CSRF-Token"
+	idempotencyKeyHeader     = "Idempotency-Key"
+	deliveryKeyHeader        = "Delivery-Key"
+	authorizationHeader      = "Authorization"
+	contentTypeHeader        = "Content-Type"
+	requestIDHeader          = "X-Request-ID"
+	cacheControlHeader       = "Cache-Control"
+	contentTypeOptionsHeader = "X-Content-Type-Options"
+	contentSecurityHeader    = "Content-Security-Policy"
+
+	noStoreCacheControl      = "no-store"
+	nosniffContentTypeOption = "nosniff"
+	jsonMediaType            = "application/json"
+	htmlMediaType            = "text/html; charset=utf-8"
+	streamMediaType          = "text/event-stream"
 )
+
+// contentSecurityPolicy is what the served pages are answered with: a source outside the page itself
+// is forbidden rather than merely unused, so a browser reading a page reaches nothing beyond the
+// listener it came from. It admits the page's own inline stylesheet, which is the whole of what a
+// page of this program carries.
+const contentSecurityPolicy = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; " +
+	"form-action 'none'"
 
 // The extension the contract states the implementation status of an operation in, and the one status
 // that means this build serves it.

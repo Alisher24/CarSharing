@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"html/template"
 	"log/slog"
@@ -13,35 +12,13 @@ import (
 	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/mailstub"
-	"github.com/Alisher24/CarSharing/backend/internal/platform/cursor"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/timestamp"
 )
 
-// The pages of the human inbox. A page answers the first two; a path the contract owns goes to the
-// boundary, which knows those paths and answers them as the JSON operations they are.
-const (
-	inboxPath        = "/"
-	inboxMessagePath = "/messages/{id}"
-
-	// inboxMessagesLink is the collection of the contract, which every page of this surface offers as
-	// the machine-readable view of the same box. The contract states the path once; this is the one
-	// spelling of it inside the page surface.
-	inboxMessagesLink = "/api/v1/messages"
-)
-
-// The headers every page of the inbox carries. The policy admits no source outside the page itself
-// and only its own inline stylesheet, so the browser of a demonstration reaches nothing beyond this
-// listener — a header rather than a habit of the markup.
-const (
-	htmlMediaType = "text/html; charset=utf-8"
-
-	contentTypeOptionsHeader = "X-Content-Type-Options"
-	contentSecurityHeader    = "Content-Security-Policy"
-	nosniffContentTypeOption = "nosniff"
-
-	contentSecurityPolicy = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; " +
-		"form-action 'none'"
-)
+// inboxMessagesLink is the collection of the contract, which every page of this surface offers as the
+// machine-readable view of the same box. The contract states the path once; this is the one spelling
+// of it inside the page surface.
+const inboxMessagesLink = "/api/v1/messages"
 
 // The words of the pages, stated together because they are one vocabulary: a link and the page it
 // opens name the same thing. The markup states them through pageLabels rather than spelling any of
@@ -84,9 +61,9 @@ const storedZone = "UTC"
 // its own refusals; every other path is answered as a page, including the unknown one, so that a
 // person who mistypes an address reads what happened instead of an empty screen.
 func inboxPagesBeside(
-	operations http.Handler, inbox MailInbox, cursors *cursor.Signer, contract contractPrefixes,
+	operations http.Handler, inbox mailstubInboxHandlers, contract contractPrefixes,
 ) http.Handler {
-	pages := newInboxPages(inbox, cursors)
+	pages := newInboxPages(inbox)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if contract.owns(r.URL.Path) {
 			operations.ServeHTTP(w, r)
@@ -94,26 +71,6 @@ func inboxPagesBeside(
 		}
 		pages.serve(w, r)
 	})
-}
-
-// inboxPage is one page of this surface: the pattern it answers, and what it reads to draw itself.
-// The table below is the single declaration of what the surface serves, so another page is one entry
-// beside these rather than an edit to a growing conditional.
-type inboxPage struct {
-	path string
-	draw func(pageVisit) inboxAnswer
-
-	// letter reports whether the page shows one letter rather than the list, which is what the footer
-	// of the layout offers a way back from.
-	letter bool
-}
-
-// pageVisit is one in-flight page request: the context it is read under, the query its address carried,
-// and what the pattern of its page captured from the address.
-type pageVisit struct {
-	ctx        context.Context
-	query      url.Values
-	identifier string
 }
 
 // inboxAnswer is what a page read: the template that shows it and what to fill it with, or the
@@ -134,16 +91,6 @@ type pageRefusal struct {
 	message string
 }
 
-// lettersAnswer and letterAnswer are the two pages this surface draws, named where they are returned
-// so that a page always answers with the template that belongs to it.
-func lettersAnswer(letters pageLetters) inboxAnswer {
-	return inboxAnswer{content: inboxTemplates.Lookup(inboxLettersTemplate), data: letters}
-}
-
-func letterAnswer(letter pageLetter) inboxAnswer {
-	return inboxAnswer{content: inboxTemplates.Lookup(inboxLetterTemplate), data: letter}
-}
-
 func refusalAnswer(status int, message string) inboxAnswer {
 	return inboxAnswer{refusal: &pageRefusal{status: status, message: message}}
 }
@@ -152,20 +99,20 @@ func refusalAnswer(status int, message string) inboxAnswer {
 // same handlers the collection is read through, so the page size, the order and the cursor of a page
 // are the collection's rather than a second copy of them.
 type inboxPages struct {
-	handlers mailstubInboxHandlers
-	pages    []inboxPage
+	inbox  mailstubInboxHandlers
+	routes []inboxRoute
 }
 
-func newInboxPages(inbox MailInbox, cursors *cursor.Signer) *inboxPages {
-	served := &inboxPages{handlers: mailstubInboxHandlers{inbox: inbox, cursors: cursors}}
-	served.pages = []inboxPage{
+func newInboxPages(inbox mailstubInboxHandlers) *inboxPages {
+	served := &inboxPages{inbox: inbox}
+	served.routes = []inboxRoute{
 		{path: inboxPath, draw: served.letterList},
 		{path: inboxMessagePath, draw: served.oneLetter, letter: true},
 	}
-	for index := range served.pages {
-		// A page whose pattern cannot be matched would answer nothing at all, so the table states
+	for index := range served.routes {
+		// A route whose pattern cannot be matched would answer nothing at all, so the table states
 		// where it is wrong as the process starts rather than in front of a reader.
-		inboxPatternParts(served.pages[index].path)
+		inboxPatternParts(served.routes[index].path)
 	}
 	return served
 }
@@ -175,116 +122,45 @@ func newInboxPages(inbox MailInbox, cursors *cursor.Signer) *inboxPages {
 // one.
 func (p *inboxPages) serve(w http.ResponseWriter, r *http.Request) {
 	r = withRequestIdentity(w, r)
-	page, request := p.match(r)
-	if page == nil {
-		p.drawRefusal(w, &pageRefusal{status: http.StatusNotFound, message: inboxNoSuchPage}, nil)
+	route := p.routeOf(r)
+	if route == nil {
+		p.drawRefusal(w, refusalAnswer(http.StatusNotFound, inboxNoSuchPage), nil)
 		return
 	}
-	if request.Method != http.MethodGet && request.Method != http.MethodHead {
+	page := &p.routes[route.index]
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", http.MethodGet+", "+http.MethodHead)
-		p.drawRefusal(w, &pageRefusal{status: http.StatusMethodNotAllowed, message: inboxWrongMethod}, page)
+		p.drawRefusal(w, refusalAnswer(http.StatusMethodNotAllowed, inboxWrongMethod), page)
 		return
 	}
-	p.draw(w, request, page, page.draw(pageVisitOf(request)))
+	p.draw(w, r, page, page.draw(pageRequestOf(r, route)))
 }
 
-// match resolves a request to the page that answers it: the first pattern of the table the path fits,
-// together with the request that carries what the pattern captured.
-func (p *inboxPages) match(r *http.Request) (*inboxPage, *http.Request) {
-	for index := range p.pages {
-		page := &p.pages[index]
-		captured, fits := inboxRoute(page.path, r.URL.Path)
+// routeOf matches a request path against the table of routes and answers what it captured, or nil
+// when no page of this surface serves the path.
+func (p *inboxPages) routeOf(r *http.Request) *pageRoute {
+	for index := range p.routes {
+		captured, fits := inboxRouteMatch(p.routes[index].path, r.URL.Path)
 		if !fits {
 			continue
 		}
-		return page, r.WithContext(context.WithValue(r.Context(), inboxPathValuesKey{}, captured))
+		return &pageRoute{index: index, captured: captured}
 	}
-	return nil, r
-}
-
-// inboxRoute matches one request path against one pattern of this surface and answers what the
-// pattern captured. A literal segment is compared as it is written and `{name}` captures one whole
-// segment, so the two must have as many segments as each other: `/messages/one/two` fits nothing and
-// is the unknown page it is, rather than the page of a letter named `one/two`.
-func inboxRoute(pattern, path string) (map[string]string, bool) {
-	parts, captures := inboxPatternParts(pattern)
-	segments := strings.Split(path, "/")
-	if len(segments) != len(parts) {
-		return nil, false
-	}
-	values := make(map[string]string, len(captures))
-	for index, part := range parts {
-		switch {
-		case isInboxCapture(part):
-			if segments[index] == "" {
-				return nil, false
-			}
-			values[inboxCaptureName(part)] = segments[index]
-		case segments[index] != part:
-			return nil, false
-		}
-	}
-	return values, true
-}
-
-// inboxPatternParts splits one pattern into the segments it is matched segment by segment, and names
-// the segments that capture. A pattern that is not a sequence of literals and `{name}` captures is a
-// defect of this build, so it stops the process where the table is declared.
-func inboxPatternParts(pattern string) ([]string, []string) {
-	parts := strings.Split(pattern, "/")
-	captures := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if !isInboxCapture(part) {
-			if strings.ContainsAny(part, "{}") {
-				panic("the inbox page pattern " + pattern + " is neither a literal nor a capture")
-			}
-			continue
-		}
-		name := inboxCaptureName(part)
-		if name == "" {
-			panic("the inbox page pattern " + pattern + " names no capture")
-		}
-		captures = append(captures, name)
-	}
-	return parts, captures
-}
-
-// isInboxCapture reports whether one segment of a pattern captures rather than matching a literal. A
-// segment that only opens or only closes a brace is neither, and inboxPatternParts refuses it.
-func isInboxCapture(part string) bool {
-	return strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}")
-}
-
-// inboxCaptureName is the name one capturing segment gives what it captures.
-func inboxCaptureName(part string) string {
-	return strings.TrimSuffix(strings.TrimPrefix(part, "{"), "}")
-}
-
-// inboxPathValuesKey carries what the pattern of a page captured from the request path.
-type inboxPathValuesKey struct{}
-
-// inboxIdentifierCapture is the name the one-letter pattern gives the identifier it captures.
-const inboxIdentifierCapture = "id"
-
-// pageVisitOf reads one page request: the context it is answered in, the query its address carried
-// and what its pattern captured.
-func pageVisitOf(r *http.Request) pageVisit {
-	captured, _ := r.Context().Value(inboxPathValuesKey{}).(map[string]string)
-	return pageVisit{ctx: r.Context(), query: r.URL.Query(), identifier: captured[inboxIdentifierCapture]}
+	return nil
 }
 
 // draw answers one page. The markup is rendered into a buffer before anything is written, so a
 // template that fails partway through leaves a stated refusal rather than half a page under a
 // success.
-func (p *inboxPages) draw(w http.ResponseWriter, r *http.Request, page *inboxPage, answer inboxAnswer) {
+func (p *inboxPages) draw(w http.ResponseWriter, r *http.Request, page *inboxRoute, answer inboxAnswer) {
 	if answer.refusal != nil {
-		p.drawRefusal(w, answer.refusal, page)
+		p.drawRefusal(w, answer, page)
 		return
 	}
-	document, err := p.frame(r, page.letter, answer.content, answer.data)
+	document, err := p.frame(r, page, answer.content, answer.data)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "a page of the mail box could not be drawn", "error", err)
-		p.drawRefusal(w, &pageRefusal{status: http.StatusInternalServerError, message: inboxUndrawable}, page)
+		p.drawRefusal(w, refusalAnswer(http.StatusInternalServerError, inboxUndrawable), page)
 		return
 	}
 	writeInboxPageHeaders(w)
@@ -298,16 +174,15 @@ func (p *inboxPages) draw(w http.ResponseWriter, r *http.Request, page *inboxPag
 // cursor and an unreachable box each read as what happened. A refusal is a page of the same surface,
 // framed by the layout that leads back to the list; one asked for by a page that could not be served
 // keeps that page's own way back.
-func (p *inboxPages) drawRefusal(w http.ResponseWriter, refusal *pageRefusal, page *inboxPage) {
-	document, err := p.frame(nil, page != nil && page.letter, inboxTemplates.Lookup(inboxRefusalTemplate),
-		refusal.message)
+func (p *inboxPages) drawRefusal(w http.ResponseWriter, answer inboxAnswer, page *inboxRoute) {
+	document, err := p.frame(nil, page, inboxTemplates.Lookup(inboxRefusalTemplate), answer.refusal.message)
 	writeInboxPageHeaders(w)
 	if err != nil {
 		// A page that cannot be drawn still states the status rather than answering with nothing.
-		w.WriteHeader(refusal.status)
+		w.WriteHeader(answer.refusal.status)
 		return
 	}
-	w.WriteHeader(refusal.status)
+	w.WriteHeader(answer.refusal.status)
 	_, _ = w.Write(document)
 }
 
@@ -315,7 +190,7 @@ func (p *inboxPages) drawRefusal(w http.ResponseWriter, refusal *pageRefusal, pa
 // page of this surface shares. The footer leads to the list from a letter page and reloads the page
 // from the list itself, which is the way back a reader of either is left with.
 func (p *inboxPages) frame(
-	r *http.Request, letter bool, content *template.Template, data any,
+	r *http.Request, page *inboxRoute, content *template.Template, data any,
 ) ([]byte, error) {
 	document := inboxDocument{
 		Title:   inboxTitle,
@@ -324,11 +199,17 @@ func (p *inboxPages) frame(
 		Labels:  inboxPageLabels(),
 		JSON:    inboxMessagesLink,
 		Current: inboxPath,
-		Letter:  letter,
+		Back:    inboxPath,
 	}
 	if r != nil {
-		document.JSON = inboxJSONPath(letter, pageVisitOf(r).identifier)
-		document.Current = r.URL.Path
+		request := pageRequestOf(r, nil)
+		document.JSON = inboxJSONPath(page.letter, request.identifier)
+		// The list of a page that was read with a cursor is refreshed at the page it shows rather
+		// than at the first one, so a reader who reloads continues where they were.
+		document.Current = r.URL.RequestURI()
+	}
+	if page != nil {
+		document.Letter = page.letter
 	}
 	if content != nil {
 		var body bytes.Buffer
@@ -350,57 +231,57 @@ func (p *inboxPages) frame(
 // letterList reads one page of the box: the letters it holds, and the address of the page after it
 // when there is one. The page size, the order and the cursor are the collection's, because both
 // surfaces read one box.
-func (p *inboxPages) letterList(from pageVisit) inboxAnswer {
+func (p *inboxPages) letterList(request pageRequest) inboxAnswer {
 	limit := mailstub.PageSize
-	after, err := p.handlers.positionOf(presentedCursor(from.query), limit)
+	after, err := p.inbox.positionOf(presentedCursor(request.query), limit)
 	if err != nil {
 		return refusalAnswer(http.StatusOK, inboxUnreadableCursor)
 	}
-	page, err := p.handlers.inbox.ReadPage(from.ctx, after, limit)
+	read, err := p.inbox.pageOf(request.ctx, after, limit)
 	if err != nil {
-		slog.ErrorContext(from.ctx, "the mail box could not be read", "error", err)
+		slog.ErrorContext(request.ctx, "the mail box could not be read", "error", err)
 		return refusalAnswer(http.StatusServiceUnavailable, inboxUnavailable)
 	}
-	return lettersAnswer(pageLetters{
-		Letters: newLetterRows(page.Messages),
-		Next:    p.nextPageOf(page, limit),
-	})
+	return inboxAnswer{
+		content: inboxTemplates.Lookup(inboxLettersTemplate),
+		data: pageLetters{
+			Letters: newLetterRows(read.messages),
+			Next:    nextLettersLink(read.next, limit),
+		},
+	}
 }
 
 // oneLetter reads one letter of the box exactly as the stub stored it. A letter that is not there is
 // a page that says so rather than a failure: the reader asked for a page and receives one.
-func (p *inboxPages) oneLetter(from pageVisit) inboxAnswer {
-	stored, err := p.handlers.inbox.ByID(from.ctx, from.identifier)
+func (p *inboxPages) oneLetter(request pageRequest) inboxAnswer {
+	stored, err := p.inbox.inbox.ByID(request.ctx, request.identifier)
 	if errors.Is(err, mailstub.ErrMessageNotFound) {
 		return refusalAnswer(http.StatusNotFound, inboxNoSuchLetter)
 	}
 	if err != nil {
-		slog.ErrorContext(from.ctx, "one letter could not be read", "error", err)
+		slog.ErrorContext(request.ctx, "one letter could not be read", "error", err)
 		return refusalAnswer(http.StatusServiceUnavailable, inboxUnavailable)
 	}
-	return letterAnswer(pageLetter{
-		letterRow:   newLetterRow(stored),
-		DeliveryKey: stored.DeliveryKey,
-		Text:        stored.Text,
-	})
+	return inboxAnswer{
+		content: inboxTemplates.Lookup(inboxLetterTemplate),
+		data: pageLetter{
+			letterRow:   newLetterRow(stored),
+			DeliveryKey: stored.DeliveryKey,
+			Text:        stored.Text,
+		},
+	}
 }
 
-// nextPageOf is the address of the page after the one read, or empty when the box holds no more
-// letters. The cursor is the one the collection issues for the same page under the same scope, so
-// both surfaces continue through one position.
-func (p *inboxPages) nextPageOf(page mailstub.Page, limit int) template.URL {
-	if page.Next == nil {
+// nextLettersLink is the address of the page after the one read, or empty when the box holds no more
+// letters. It is the address of the list itself read with the cursor the collection issued for the
+// same page under the same scope, so the next page is a page of this surface rather than the JSON of
+// the same box.
+func nextLettersLink(next *string, limit int) template.URL {
+	if next == nil {
 		return ""
 	}
-	issued, err := p.handlers.cursors.Issue(
-		cursor.Position{CreatedAt: page.Next.AcceptedAt, ID: page.Next.ID},
-		p.handlers.inboxScopeOf(limit))
-	if err != nil {
-		slog.Error("the cursor of the page after this one could not be issued", "error", err)
-		return ""
-	}
-	query := url.Values{cursorParameter: {issued}, limitParameter: {strconv.Itoa(limit)}}
-	return template.URL(inboxMessagesLink + "?" + query.Encode())
+	query := url.Values{cursorParameter: {*next}, limitParameter: {strconv.Itoa(limit)}}
+	return template.URL(inboxPath + "?" + query.Encode())
 }
 
 // presentedCursor reads the cursor a page request carries, which is the parameter the collection
@@ -431,26 +312,6 @@ func writeInboxPageHeaders(w http.ResponseWriter) {
 	w.Header().Set(contentSecurityHeader, contentSecurityPolicy)
 }
 
-// inboxDocument is the shape every page of the inbox is drawn in: the layout the pages share, filled
-// in with the page's own title, summary and content, and the labels both are read by.
-type inboxDocument struct {
-	Title   string
-	Summary string
-	Styles  template.CSS
-	Content template.HTML
-	Labels  pageLabels
-	JSON    string
-	Current string
-	Letter  bool
-}
-
-// pageContent is what a page's own template is filled in with: what the page read, and the labels it
-// states around it.
-type pageContent struct {
-	Labels pageLabels
-	Data   any
-}
-
 // letterRow is one letter as a page shows it, and the two addresses it is reached by: its own page,
 // and the machine-readable view of the same letter.
 type letterRow struct {
@@ -473,18 +334,18 @@ func newLetterRow(stored mailstub.Message) letterRow {
 	}
 }
 
-// inboxLetterPath is the address of one letter's page, built from the pattern that page is served at
-// rather than from a second copy of the route.
-func inboxLetterPath(identifier string) string {
-	return strings.Replace(inboxMessagePath, "{id}", url.PathEscape(identifier), 1)
-}
-
 func newLetterRows(stored []mailstub.Message) []letterRow {
 	letters := make([]letterRow, 0, len(stored))
 	for _, letter := range stored {
 		letters = append(letters, newLetterRow(letter))
 	}
 	return letters
+}
+
+// inboxLetterPath is the address of one letter's page, built from the pattern that page is served at
+// rather than from a second copy of the route.
+func inboxLetterPath(identifier string) string {
+	return strings.Replace(inboxMessagePath, "{id}", url.PathEscape(identifier), 1)
 }
 
 // storedMoment states a moment the way the box stores it, with the zone it is stored in named beside
