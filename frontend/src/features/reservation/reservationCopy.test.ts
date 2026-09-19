@@ -6,6 +6,7 @@ import {
   currentRental,
   limitAllowsBooking,
   limitText,
+  pricedRates,
   rateTextOf,
   refusalText,
   sameRates,
@@ -66,6 +67,35 @@ describe('the conditions a reservation was made under', () => {
     assert.equal(rates.paused, '3,21 сома');
     assert.equal(sameRates(rates, { driving: '12,34 сома', paused: '3,21 сома' }), true);
     assert.equal(sameRates(rates, { driving: '15,00 сома', paused: '3,21 сома' }), false);
+  });
+});
+
+describe('the rates a view may show as a price', () => {
+  test('are both of them, and none when either cannot be read', () => {
+    assert.deepEqual(pricedRates({ driving: '12,34 сома', paused: '3,21 сома' }), {
+      driving: '12,34 сома',
+      paused: '3,21 сома',
+    });
+    assert.equal(pricedRates({ driving: '12,34 сома', paused: null }), undefined);
+    assert.equal(pricedRates({ driving: null, paused: '3,21 сома' }), undefined);
+    assert.equal(pricedRates({ driving: null, paused: null }), undefined);
+  });
+
+  // A price the interface cannot read is a rate with no amount to show, and a screen that showed the
+  // unit alone would state what a minute costs while naming no price. The amount stands in for a
+  // demonstration setting a rate no published tariff can hold.
+  test('are none when the amount the service published is not a whole price', () => {
+    const rates = rateTextOf({
+      id: '01994342-6ba7-7000-8000-000300000002',
+      currency: 'KGS',
+      billing_policy: 'per_mode_started_minute_v1',
+      driving_rate_tyiyn_per_started_minute: '1234.5',
+      paused_rate_tyiyn_per_started_minute: '321',
+      version: '1',
+    });
+
+    assert.equal(rates.driving, null);
+    assert.equal(pricedRates(rates), undefined);
   });
 });
 

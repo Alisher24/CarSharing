@@ -10,6 +10,7 @@ import {
   KEEP_ACTION,
   rateTextOf,
 } from '../reservation/reservationCopy';
+import { TariffRates } from '../reservation/TariffRates';
 import {
   POWERTRAIN_LABELS,
   sourceText,
@@ -209,24 +210,5 @@ function Booking({
       <p className="vehicle-card-limit">{booking.limit}</p>
       {booking.notice !== undefined && <p className="vehicle-card-notice">{booking.notice}</p>}
     </div>
-  );
-}
-
-/**
- * The rates the service published as whole tyiyn. A value the interface cannot read as a price is
- * left out rather than repaired, because a made-up price is worse than a missing one.
- */
-function TariffRates({ rates }: { rates: RateText }) {
-  if (rates.driving === undefined || rates.paused === undefined) {
-    return <p className="vehicle-card-tariff-missing">{TARIFF_ABSENCE.none}</p>;
-  }
-
-  return (
-    <dl className="vehicle-card-tariff">
-      <dt>Движение</dt>
-      <dd>{rates.driving} за начатую минуту</dd>
-      <dt>Пауза</dt>
-      <dd>{rates.paused} за начатую минуту</dd>
-    </dl>
   );
 }

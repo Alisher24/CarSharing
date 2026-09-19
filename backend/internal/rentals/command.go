@@ -175,16 +175,6 @@ type Service struct {
 	// models is the simulated state of the fleet. A command reaches it inside its own transaction,
 	// so the model a command advances is advanced with the change it makes rather than beside it.
 	models *simulation.Store
-
-	// finishLanding is the rule an ending ride is judged by where it stands, which the process was
-	// configured with rather than reading the environment here.
-	finishLanding string
-}
-
-// Settings are what the module was told about the installation it runs in: the rule an ending ride is
-// judged by, which a deployment keeps and only a demonstration may relax.
-type Settings struct {
-	FinishLanding string
 }
 
 // NewService assembles the module over one connection pool. Every dependency is named here and
@@ -196,7 +186,6 @@ func NewService(
 	issued *invoices.Store,
 	completions *notifications.Completer,
 	models *simulation.Store,
-	settings Settings,
 ) (*Service, error) {
 	for _, required := range []struct {
 		name     string
@@ -208,21 +197,19 @@ func NewService(
 		{"invoice records", issued != nil},
 		{"completion reports", completions != nil},
 		{"simulated state", models != nil},
-		{"finish landing rule", settings.FinishLanding != ""},
 	} {
 		if !required.supplied {
 			return nil, fmt.Errorf("%w: %s", ErrIncompleteModule, required.name)
 		}
 	}
 	return &Service{
-		pool:          pool,
-		vehicles:      vehicles,
-		prices:        prices,
-		results:       idempotency.NewStore(pool),
-		invoices:      issued,
-		completions:   completions,
-		models:        models,
-		finishLanding: settings.FinishLanding,
+		pool:        pool,
+		vehicles:    vehicles,
+		prices:      prices,
+		results:     idempotency.NewStore(pool),
+		invoices:    issued,
+		completions: completions,
+		models:      models,
 	}, nil
 }
 

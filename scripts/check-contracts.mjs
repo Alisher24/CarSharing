@@ -61,8 +61,11 @@ assert.deepEqual(
 );
 runGo(['test', './...']);
 runGo(['vet', './...']);
-runNode(['--test', 'scripts/setup.test.mjs']);
+runNode(['--test', 'scripts/setup.test.mjs', 'scripts/published-port.test.mjs']);
 // npm supplies its CLI path on Windows and Unix when invoked through the documented npm script.
 assert.ok(process.env.npm_execpath, 'Run: npm --prefix tools/openapi run check');
 runNode([process.env.npm_execpath, 'run', 'build'], join(repositoryRoot, 'frontend'));
-console.log('PASS: deterministic generation, all contracts/examples, Go tests/vet, setup and frontend build.');
+console.log(
+  'PASS: deterministic generation, all contracts/examples, Go tests/vet, setup and the stack declarations, ' +
+    'frontend build.',
+);

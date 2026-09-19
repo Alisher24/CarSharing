@@ -222,7 +222,7 @@ Compose подставляет из `.env` и из окружения оболо
 | `APP_ENV` | `production` в коде, `demo` в `compose.yaml` | `compose.yaml` | профиль: только `demo` допускает seed и демонстрационные команды |
 | `HTTP_ADDR` | `:8080` | код | слушатель процесса внутри контейнера |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` | `postgres`, `5432`, `carsharing`, `carsharing_app` | `compose.yaml` | подключение к БД; роль у каждого процесса своя |
-| `ALLOWED_ORIGINS` | `http://127.0.0.1:8080,http://localhost:8080` | код | origin, с которых принимается изменяющий запрос |
+| `ALLOWED_ORIGINS` | `http://127.0.0.1:<APP_PORT>`, `http://localhost:<APP_PORT>` | `compose.yaml`, из `APP_PORT`; вне Compose — код | origin, с которых принимается изменяющий запрос |
 | `SESSION_COOKIE_SECURE` | выключено | код | `Secure` у cookie сессии; выключено только в документированном локальном HTTP-профиле |
 | `AUTH_ARGON2_MEMORY_KIB`, `_PASSES`, `_PARALLELISM` | `19456`, `2`, `1` | код | стоимость одного хеша пароля |
 | `AUTH_ARGON2_CONCURRENT` | `2` | код | сколько проверок пароля идут одновременно |
@@ -239,6 +239,12 @@ Compose подставляет из `.env` и из окружения оболо
 ```sh
 docker compose up -d
 ```
+
+Разрешённый список origin при этом меняется вместе с портом: `compose.yaml` объявляет
+`ALLOWED_ORIGINS` из того же `APP_PORT`, поэтому вход, бронь и оплата продолжают отвечать, а не
+отказывать с `403 ORIGIN_NOT_ALLOWED`. Согласованность порта в `compose.yaml`, `.env.example` и в
+коде проверяет `node --test scripts/published-port.test.mjs` — проверка падает, если один из них
+изменить без остальных.
 
 Изменение лимита частоты — той же правкой `.env`, потому что переменная объявлена в `compose.yaml`,
 и пересозданием службы:

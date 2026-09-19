@@ -72,6 +72,9 @@ test('one client books a vehicle and the other sees it taken and free again', as
     await expect(statusOf(visitor, model)).toHaveAttribute('data-status', 'available');
 
     await openVehicle(person, model);
+    // The card prices the vehicle through the same rates the panel shows, so what a person agrees to
+    // is what the service published and one rental is not priced two ways on one screen.
+    await expect(person.locator('.vehicle-card .tariff-rates')).toContainText('сома');
     await person.getByRole('button', { name: BOOK_ACTION }).click();
     // The conditions are read before anything is sent, and the panel appears only after the server
     // answered: what a person sees is the reservation the service holds.
@@ -93,8 +96,8 @@ test('one client books a vehicle and the other sees it taken and free again', as
     );
 
     // The rates the panel shows are the ones the reservation stores, and they are on the panel that
-    // stays above the map.
-    await expect(person.locator('.reservation-panel-rates')).toContainText('сома');
+    // stays above the map. The card shows its own rates while it is open, so the panel is named.
+    await expect(person.locator('.reservation-panel .tariff-rates')).toContainText('сома');
 
     await person.getByRole('button', { name: CANCEL_ACTION }).click();
     await person.getByRole('button', { name: CANCEL_ACTION }).last().click();

@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, writeFile, unlink, rm } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { promisify } from 'node:util';
 import {
   setup,
   CAPABILITY_SECRETS,
@@ -22,6 +24,13 @@ const EXISTING_ENVIRONMENT = 'APP_PORT=8181\n';
 const TEMPLATE_ENVIRONMENT = 'APP_PORT=8080\n';
 const MISSING_SECRET_PATTERN = /missing secret files/;
 
+// The gate setup installs, which is a setting of the working copy rather than of an installation.
+const HOOKS_DIRECTORY = '.githooks';
+const PRE_COMMIT_HOOK = 'pre-commit';
+const NOT_A_WORKING_COPY_PATTERN = /not a git repository/;
+
+const runGit = promisify(execFile);
+
 function newSecretValue() {
   return randomBytes(SECRET_BYTES).toString('hex') + '\n';
 }
@@ -34,11 +43,26 @@ function readGeneratedSecrets(root, names) {
   return Promise.all(names.map((name) => readFile(secretPath(root, name), 'utf8')));
 }
 
-/** Creates a scratch installation so a test never reaches the repository's own secrets. */
-async function createInstallation() {
+/** A directory holding what a working copy holds: the environment template and the tracked gate. */
+async function createCopy() {
   const root = await mkdtemp(join(tmpdir(), 'carsharing-setup-'));
   await writeFile(join(root, '.env.example'), TEMPLATE_ENVIRONMENT);
+  await mkdir(join(root, HOOKS_DIRECTORY));
+  await writeFile(join(root, HOOKS_DIRECTORY, PRE_COMMIT_HOOK), '#!/bin/sh\nset -eu\n');
   return root;
+}
+
+/** Creates a scratch installation, which is a working copy, so a test never reaches the repository's. */
+async function createInstallation() {
+  const root = await createCopy();
+  await runGit('git', ['init', '--quiet', root]);
+  return root;
+}
+
+/** The value Git holds for one setting of a working copy. */
+async function gitSetting(root, key) {
+  const { stdout } = await runGit('git', ['-C', root, 'config', '--local', '--get', key]);
+  return stdout.trim();
 }
 
 async function writeSecrets(root, values) {
@@ -46,6 +70,32 @@ async function writeSecrets(root, values) {
     await writeFile(secretPath(root, name), value);
   }
 }
+
+test('setup installs the gate the working copy commits through', async () => {
+  const root = await createInstallation();
+  try {
+    await setup(root);
+    assert.equal(await gitSetting(root, 'core.hooksPath'), HOOKS_DIRECTORY);
+
+    // A second run leaves the setting where it is: it names the tracked directory rather than
+    // accumulating a value per run.
+    await setup(root);
+    assert.equal(await gitSetting(root, 'core.hooksPath'), HOOKS_DIRECTORY);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('setup refuses a directory that is not a working copy, before it writes anything', async () => {
+  const root = await createCopy();
+  try {
+    await assert.rejects(setup(root), NOT_A_WORKING_COPY_PATTERN);
+    await assert.rejects(readFile(join(root, ENVIRONMENT_FILE), 'utf8'));
+    await assert.rejects(readFile(secretPath(root, 'db_admin_password'), 'utf8'));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test('setup migrates a complete legacy installation and refuses a partial migration', async () => {
   const root = await createInstallation();

@@ -91,7 +91,7 @@ func (s *Service) finishPrepared(
 	if err != nil {
 		return nil, err
 	}
-	return finishLandingRefusal(vehicle, target.ZoneID, moment, s.finishLanding), nil
+	return finishLandingRefusal(vehicle, target.ZoneID, moment), nil
 }
 
 // storedEnding answers a ride that has already ended with what the ending transaction stored: the

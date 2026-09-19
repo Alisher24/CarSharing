@@ -82,8 +82,7 @@ func assemble(cfg config.Config, pool *pgxpool.Pool, hub *events.Hub) (assembled
 	models := simulation.NewStore(pool)
 	issued := invoices.NewStore(pool)
 	reservations, err := rentals.NewService(pool, vehicles, prices, issued,
-		notifications.NewCompleter(pool), models,
-		rentals.Settings{FinishLanding: cfg.FinishLanding})
+		notifications.NewCompleter(pool), models)
 	if err != nil {
 		return assembled{}, err
 	}

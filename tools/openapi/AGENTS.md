@@ -36,9 +36,9 @@ what makes the check below possible.
 
 `scripts/check-contracts.mjs` digests every file of the five committed generated directories, regenerates
 them all, and compares — a difference means the committed projection is stale. It then runs Go tests and
-vet, the setup tests and the frontend build. It stops there: regenerating leaves the new files on disk
-for review and commit rather than reverting them, so a failure that says "stale" is an instruction to
-look at the diff.
+vet, the setup and published-port tests and the frontend build. It stops there: regenerating leaves the
+new files on disk for review and commit rather than reverting them, so a failure that says "stale" is an
+instruction to look at the diff.
 
 ## Pins
 

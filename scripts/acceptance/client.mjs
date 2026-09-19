@@ -19,9 +19,6 @@ export const CURRENT_USER_PATH = '/api/v1/me';
 
 const SESSION_COOKIE_PREFIX = `${SESSION_COOKIE_NAME}=`;
 
-/** The scope the registration budget is counted under, which the harness has to restore. */
-const REGISTRATION_SCOPE = 'registration_address';
-
 /** The code the service answers with when it could not decide an attempt at all. */
 const SERVICE_UNAVAILABLE_CODE = 'SERVICE_UNAVAILABLE';
 
@@ -212,18 +209,8 @@ export async function callUntilRefused(action, { allowedAttempts, expectedStatus
 
 /**
  * Clears every rate-limit counter, which is the harness standing in for the passage of time: in
- * production a window ends on its own, and here a suite ends it between checks. A check that needs an
- * address to be known again passes it, and the budget is then spent at the age a window that has just
- * ended has: the next attempt against it starts a fresh window and is the first of that budget.
- *
- * A counter cannot hold zero attempts — an attempt is the whole of what it holds — so a budget cannot
- * be handed back as an empty row. Handing it back as an old window is what the passage of time does.
+ * production a window ends on its own, and here a suite ends it between checks.
  */
-export function resetRateLimits(observedAddress) {
+export function resetRateLimits() {
   sql('DELETE FROM rate_limit_counters');
-  if (observedAddress === undefined) return;
-  sql(
-    `INSERT INTO rate_limit_counters (scope, subject, window_started_at, attempts)
-     VALUES ('${REGISTRATION_SCOPE}', '${observedAddress}', now() - interval '2 hours', 1)`,
-  );
 }

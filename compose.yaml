@@ -71,6 +71,10 @@ services:
       RATE_LIMIT_SIGNIN_EMAIL_WINDOW: ${RATE_LIMIT_SIGNIN_EMAIL_WINDOW:-}
       RATE_LIMIT_SIGNIN_ADDRESS_WINDOW: ${RATE_LIMIT_SIGNIN_ADDRESS_WINDOW:-}
       RATE_LIMIT_REGISTRATION_ADDRESS_WINDOW: ${RATE_LIMIT_REGISTRATION_ADDRESS_WINDOW:-}
+      # The origins a mutating request may come from, counted from the port the frontend is published
+      # on: a browser sends the port it reached the application on, so a list naming another one
+      # refuses the application itself. That port is stated once, in the frontend's mapping below.
+      ALLOWED_ORIGINS: http://127.0.0.1:${APP_PORT:-8080},http://localhost:${APP_PORT:-8080}
     secrets: [db_app_password, cursor_hmac_key, simulator_token, demo_control_token]
     depends_on:
       migrate: { condition: service_completed_successfully }

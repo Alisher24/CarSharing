@@ -208,9 +208,9 @@ Before proposing a change:
 - JavaScript, TypeScript, CSS, JSON: from the repository root, `npm run format:check` and, from
   `frontend/`, `npm run typecheck && npm run lint:css`. Run `npm run format` at the root to fix
   what the check reports.
-- The pre-commit hook formats staged files with the same Prettier configuration, so hand-written
-  code arrives already aligned; a repository-wide `npm run format` is available when a change
-  reorders many files at once.
+- The pre-commit hook that `node scripts/setup.mjs` installs formats staged files with the same
+  Prettier configuration, so hand-written code arrives already aligned; a repository-wide
+  `npm run format` is available when a change reorders many files at once.
 - Prettier and Stylelint decide formatting, and their configuration is the single source of truth
   for it: never hand-format what the tools format, and never disable a rule to land a change.
   Write the code the rule wants.
