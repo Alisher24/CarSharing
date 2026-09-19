@@ -41,9 +41,7 @@ const MUTATIONS = [
 before(waitForReady);
 
 // Every suite shares one address, so each test starts with the rate limits untouched by the last.
-// The hook is given the running context as its first argument, so the helper is called from a
-// function of its own: passing it directly would hand the context to it as the address to restore.
-beforeEach(() => resetRateLimits());
+beforeEach(resetRateLimits);
 
 /** A refused registration must leave the address free, so the refusal created no account. */
 async function checkNoSideEffect(email) {

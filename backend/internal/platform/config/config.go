@@ -20,12 +20,18 @@ const (
 	DemoEnvironment       = "demo"
 )
 
-// The setting that names the listener, the address it defaults to, and the reader a process uses
-// when it needs only this setting — the container's own health check, which cannot load the rest of
-// the configuration because it is given no database secret.
+// The setting that names the listener, the port it defaults to, and the reader a process uses when it
+// needs only this setting — the container's own health check, which cannot load the rest of the
+// configuration because it is given no database secret.
 const (
 	HTTPAddrVariable = "HTTP_ADDR"
-	DefaultHTTPAddr  = ":8080"
+
+	// DefaultHTTPPort is the port the listener defaults to, and the one the documented local profile
+	// publishes: a browser reaches the application on the port it published, so the origins below are
+	// counted from here rather than restated.
+	DefaultHTTPPort = "8080"
+
+	DefaultHTTPAddr = ":" + DefaultHTTPPort
 )
 
 // HTTPAddrFromEnvironment reports the listener the API was started with, applying the default when
@@ -101,8 +107,10 @@ const minPasswordLengthMessage = "database password must contain at least " +
 	"32 characters; run setup"
 
 // defaultAllowedOrigins is the documented local profile: the application served over plain HTTP on
-// the loopback address under either spelling a browser may use.
-const defaultAllowedOrigins = "http://127.0.0.1:8080,http://localhost:8080"
+// the loopback address under either spelling a browser may use, on the port the listener defaults to.
+// The port is counted from the constant rather than written out, because a browser judges the service
+// by the port it reached it on and a second literal is how the two come to disagree.
+const defaultAllowedOrigins = "http://127.0.0.1:" + DefaultHTTPPort + ",http://localhost:" + DefaultHTTPPort
 
 // Starting rate limits. Each is overridable, because the values that suit a local demonstration
 // are not the values that suit a deployment.
@@ -167,11 +175,6 @@ type Config struct {
 	// internal surface refuses to start rather than publishing a route without its credential.
 	SimulatorToken   string
 	DemoControlToken string
-
-	// FinishLanding is the rule an ending ride is judged by. A deployment keeps the rule the product
-	// states; only the demonstration profile may relax it, and the command that installs a
-	// demonstration is what does so.
-	FinishLanding string
 }
 
 func Load() (Config, error) {
@@ -214,10 +217,6 @@ func Load() (Config, error) {
 	}
 	cfg.AllowedOrigins = splitOrigins(envOrDefault("ALLOWED_ORIGINS", defaultAllowedOrigins))
 	cfg.SessionCookieSecure = os.Getenv("SESSION_COOKIE_SECURE") == "true"
-	cfg.FinishLanding, err = loadFinishLanding(cfg.Environment)
-	if err != nil {
-		return cfg, err
-	}
 	cfg.Argon2, err = loadArgon2()
 	if err != nil {
 		return cfg, err

@@ -49,9 +49,7 @@ const REGISTRATION_RETRY_AFTER_LIMIT_SECONDS = 3_600;
 const LOWERED_REGISTRATION_LIMIT = 2;
 
 before(waitForReady);
-// The hook is given the running context as its first argument, so the helper is called from a
-// function of its own: passing it directly would hand the context to it as the address to restore.
-beforeEach(() => resetRateLimits());
+beforeEach(resetRateLimits);
 
 /**
  * The address the service sees the acceptance suites arrive from. Every browser of one machine reaches
@@ -62,12 +60,21 @@ beforeEach(() => resetRateLimits());
  */
 const OBSERVED_CLIENT_ADDRESS = '172.18.0.1';
 
-/** Writes a counter straight to its threshold, so a test does not have to make a hundred requests. */
-function fillCounter(scope, subject, attempts) {
+/**
+ * Writes a counter as the window it describes stands after spending the stated attempts, so a check
+ * does not have to make a hundred requests. The row states the attempts the window had decided before
+ * the claim that last answered it, which is one less than the attempts spent: the claim that opens a
+ * window creates the row and records none of them.
+ *
+ * A fill of a subject the service is not counting against refuses nothing, which is what makes a check
+ * that fills a counter prove its subject as well as its limit.
+ */
+function fillCounter(scope, subject, spentAttempts) {
+  const recordedAttempts = spentAttempts - 1;
   sql(
     `INSERT INTO ${RATE_LIMIT_COUNTER_TABLE} (scope, subject, window_started_at, attempts)
-     VALUES ('${scope}', '${subject}', now(), ${attempts})
-     ON CONFLICT (scope, subject) DO UPDATE SET window_started_at = now(), attempts = ${attempts}`,
+     VALUES ('${scope}', '${subject}', now(), ${recordedAttempts})
+     ON CONFLICT (scope, subject) DO UPDATE SET window_started_at = now(), attempts = ${recordedAttempts}`,
   );
 }
 
@@ -148,15 +155,19 @@ describe('each of the four limits refuses on its own', () => {
   });
 
   test('the registration limit refuses further registrations from one address', async () => {
-    // The counter is written at one attempt short of the limit, so the registration below is the one
-    // that reaches it: a fill of a subject the service is not counting against would leave it free to
-    // accept the registration, which is what makes this check prove the subject as well as the limit.
+    // The counter is written one attempt short of the limit, so the registration below is the last the
+    // budget grants and the one after it is refused. A fill of a subject the service is not counting
+    // against would leave it free to accept both, which is what makes this check prove the subject as
+    // well as the limit.
     resetRateLimits();
     fillCounter(
       RATE_LIMIT_SCOPE.registrationAddress,
       OBSERVED_CLIENT_ADDRESS,
       configuredLimits.registrationAddress - 1,
     );
+
+    const accepted = await call(REGISTRATION_PATH, registrationRequest(newEmail('at-limit')));
+    assert.equal(accepted.status, 201, `the registration the limit names was refused: ${accepted.text}`);
 
     const refused = await call(REGISTRATION_PATH, registrationRequest(newEmail('over-limit')));
     assertRateLimited(refused, refused.text);
@@ -272,13 +283,14 @@ describe('the limits are configuration the running service reads', () => {
           `${LOWERED_REGISTRATION_LIMIT}
 `,
       );
-      // What is asserted is the boundary the setting moves: the service accepted fewer registrations
-      // than the documented default allows, which is only true if it read the limit from its
-      // environment.
-      assert.ok(
-        accepted < configuredLimits.registrationAddress,
-        `the service accepted ${accepted} registrations with the limit set to ${LOWERED_REGISTRATION_LIMIT}, ` +
-          `which is the documented default of ${configuredLimits.registrationAddress}`,
+      // What is asserted is the boundary the setting moves: the service accepts exactly the
+      // registrations the limit it read names and refuses the one after them, so a service that read
+      // the documented default — or that granted one attempt fewer than the limit — answers another
+      // number.
+      assert.equal(
+        accepted,
+        LOWERED_REGISTRATION_LIMIT,
+        `the service accepted ${accepted} registrations with the limit set to ${LOWERED_REGISTRATION_LIMIT}`,
       );
     } finally {
       compose('up', '--detach', '--force-recreate', '--no-deps', 'api');

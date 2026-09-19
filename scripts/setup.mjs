@@ -1,7 +1,9 @@
+import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile, access, chmod } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { promisify } from 'node:util';
 
 // The passwords that predate every capability credential: an installation migrating from them holds
 // exactly these two alongside LEGACY_SECRET.
@@ -54,6 +56,14 @@ const ENVIRONMENT_FILE_MODE = 0o600;
 const MISSING_SECRETS_ERROR =
   'Existing setup is missing secret files. ' + 'Restore them from your local backup; passwords were not regenerated.';
 const INVALID_SECRET_ERROR = 'A secret file is invalid; existing values were not overwritten.';
+
+// The gate this working copy commits through. Git runs the hooks of the directory `core.hooksPath`
+// names and looks in the untracked `.git/hooks` when none is named, so a fresh clone that does not name
+// this one commits unformatted and unscanned.
+const HOOKS_DIRECTORY = '.githooks';
+const PRE_COMMIT_HOOK = 'pre-commit';
+
+const runGit = promisify(execFile);
 
 function secretPath(secretsDirectory, name) {
   return resolve(secretsDirectory, name);
@@ -160,8 +170,42 @@ async function createEnvironmentFile(root) {
   await writeFile(environmentPath, template, { flag: 'wx', mode: ENVIRONMENT_FILE_MODE });
 }
 
+/** Runs Git in a working copy, raising what Git said when it refuses rather than a node error. */
+async function runGitIn(root, args) {
+  try {
+    await runGit('git', ['-C', root, ...args]);
+  } catch (error) {
+    throw new Error((error.stderr || error.message).trim());
+  }
+}
+
+/**
+ * Installs the pre-commit gate of the working copy this setup prepares: Git runs the hooks of the
+ * directory `core.hooksPath` names, and its own default is the untracked `.git/hooks`, so a clone that
+ * names none commits unformatted and unscanned. The setting belongs to the copy rather than to the
+ * repository, which is why the clone cannot carry it.
+ *
+ * The copy is named as one Git may read for this invocation. Setup is pointed at a copy the person
+ * owns, and a container that runs under another user id than the files it mounts — which the wrapper
+ * scripts do wherever the mount reports an owner the host user id does not match — is refused as
+ * dubiously owned, which would leave the gate uninstalled exactly where this command promised it.
+ */
+async function installPreCommitGate(root) {
+  if (!(await exists(resolve(root, HOOKS_DIRECTORY, PRE_COMMIT_HOOK)))) {
+    throw new Error(`${HOOKS_DIRECTORY}/${PRE_COMMIT_HOOK} is missing, so there is no gate to install`);
+  }
+  const readableCopy = ['-c', `safe.directory=${root}`];
+  // The copy is asked for its top before the setting is written, so a directory that is no working copy
+  // is answered as that rather than as a setting Git would not write.
+  await runGitIn(root, [...readableCopy, 'rev-parse', '--show-toplevel']);
+  await runGitIn(root, [...readableCopy, 'config', '--local', 'core.hooksPath', HOOKS_DIRECTORY]);
+}
+
 export async function setup(root) {
   const secretsDirectory = resolve(root, SECRETS_DIRECTORY);
+  // The gate is installed before anything is written, so a working copy this command cannot prepare is
+  // named before it holds half a setup.
+  await installPreCommitGate(root);
   // A half-migrated installation must fail before this run writes anything of its own.
   if (await exists(resolve(root, ENVIRONMENT_FILE))) {
     await requireExistingSecrets(secretsDirectory, await requiredSecretNames(secretsDirectory));
@@ -174,7 +218,10 @@ export async function setup(root) {
 
 async function main() {
   await setup(resolve(dirname(fileURLToPath(import.meta.url)), '..'));
-  console.log('Local configuration is ready. Existing secrets were preserved.', 'Run: docker compose up --build -d');
+  console.log(
+    'Local configuration is ready and the pre-commit gate is installed.',
+    'Existing secrets were preserved. Run: docker compose up --build -d',
+  );
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

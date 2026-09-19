@@ -143,8 +143,11 @@ export function limitAllowsBooking(snapshot: CurrentSnapshot | undefined): boole
   return snapshot?.daily_limit.available === true;
 }
 
-/** The rates of one reservation, as the snapshot it was made under states them. */
+/** The rates of one rental, as the snapshot it was made under states them. */
 export type RateText = { driving: string | null; paused: string | null };
+
+/** The rates of one rental as prices, which is what a view may show. */
+export type PricedRates = { driving: string; paused: string };
 
 /** What a rate is charged for, which is what makes two rates of the same rental comparable. */
 export const RATE_UNIT = 'за начатую минуту';
@@ -158,6 +161,17 @@ export function rateTextOf(snapshot: TariffSnapshot): RateText {
     driving: somText(snapshot.driving_rate_tyiyn_per_started_minute) ?? null,
     paused: somText(snapshot.paused_rate_tyiyn_per_started_minute) ?? null,
   };
+}
+
+/**
+ * The rates of one rental as prices, or undefined when either of them could not be read as one. A rate
+ * is held out rather than repaired, and one unreadable rate is enough: a rental that states one price
+ * alone cannot say what it costs, and a made-up price is worse than a missing one.
+ */
+export function pricedRates(rates: RateText): PricedRates | undefined {
+  if (rates.driving === null || rates.paused === null) return undefined;
+
+  return { driving: rates.driving, paused: rates.paused };
 }
 
 /** Whether two published rates say the same thing, which is what "the tariff changed" is decided by. */

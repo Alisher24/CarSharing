@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
-	"github.com/Alisher24/CarSharing/backend/internal/platform/config"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 )
 
@@ -20,16 +19,9 @@ func finishRefusal(target Rental) *Refusal {
 
 // finishLandingRefusal reports why a ride may not be ended where its vehicle stands, or nil when it
 // may. The position is the one the vehicle last confirmed rather than anything a client sent, so a
-// finish is judged by the same coordinates the catalog publishes.
-func finishLandingRefusal(
-	vehicle fleet.Vehicle, zoneID string, moment time.Time, landing string,
-) *Refusal {
-	if landing == config.TestRideLifecycleFinishLanding {
-		// The rule the profile relaxed is where the ride stands, not whether its position can be
-		// trusted at all: a ride whose vehicle is not reporting is still one no finish can be judged
-		// by, and a check that relaxed both would prove nothing about either.
-		return positionRefusal(vehicle, moment)
-	}
+// finish is judged by the same coordinates the catalog publishes, and the area the ride was made in is
+// the whole of where it may end.
+func finishLandingRefusal(vehicle fleet.Vehicle, zoneID string, moment time.Time) *Refusal {
 	if refusal := positionRefusal(vehicle, moment); refusal != nil {
 		return refusal
 	}

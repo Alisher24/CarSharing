@@ -54,9 +54,7 @@ const REQUEST_BURST_SIZE = recordedConcurrentHashes * REQUEST_BURST_MULTIPLIER;
 after(settleAfterBurst);
 
 before(waitForReady);
-// The hook is given the running context as its first argument, so the helper is called from a
-// function of its own: passing it directly would hand the context to it as the address to restore.
-beforeEach(() => resetRateLimits());
+beforeEach(resetRateLimits);
 
 function assertRecordedParameters(storedHash) {
   const match = storedHash.match(ARGON2ID_PHC_PATTERN);

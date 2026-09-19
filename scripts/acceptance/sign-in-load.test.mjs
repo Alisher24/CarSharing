@@ -157,22 +157,18 @@ describe('a burst of simultaneous sign-ins does not release more password checks
     assertRefusalsAreDocumented(answers, measured);
     assert.equal(counted.answered, BURST_SIZE, `a burst attempt had no answer: ${measured}`);
     assert.equal(counted.accepted, 0, `a wrong password was accepted: ${measured}`);
-    // The one attempt before the burst spent one of the budget, so the whole of the work the burst
-    // may release is what is left of it — however many requests arrive together. This is the
-    // assertion the suite exists for: before the claim was one statement, every one of the forty
-    // attempts was told the budget had room and forty passwords were verified.
-    assert.ok(
-      counted.claimed <= pairLimit - 1,
+    // The one attempt before the burst spent one of the budget, so exactly what is left of it may
+    // reach a password — however many requests arrive together. This is the assertion the suite exists
+    // for: before the claim was one statement, every one of the forty attempts was told the budget had
+    // room and forty passwords were verified.
+    assert.equal(
+      counted.claimed,
+      pairLimit - 1,
       `the burst claimed ${counted.claimed} attempts against a budget of ${pairLimit}: ${measured}`,
     );
-    // The counter is the record of those claims, so the whole of what this suite asserts is that it
-    // stops at the budget: before the claim was one statement every attempt incremented it, and the
-    // counter is what says how many attempts were told the budget had room.
-    //
-    // It is a bound rather than an equality because an attempt whose hasher had no free slot is
-    // answered 503 after its claim, and the answer alone cannot say whether that happened before or
-    // after the claim. The two counters that can be reconciled exactly are the address's and the
-    // email's: an attempt refused by the pair never reaches either.
+    // The pair's counter is the same claim recorded in the database: it states the attempts its window
+    // had decided, so it stops at the budget — a refused attempt leaves it where the budget is rather
+    // than raising it past.
     assert.ok(pairCounter <= pairLimit, `the pair counter passed the budget: ${measured}`);
     // A session belongs to a sign-in that proved a password, and no attempt of this burst did, so the
     // table is exactly as long as it was before the burst.
@@ -181,16 +177,17 @@ describe('a burst of simultaneous sign-ins does not release more password checks
       sessionsBefore,
       `the burst added ${sessionsAfter - sessionsBefore} sessions: ${measured}`,
     );
-    // The two counters a refused attempt never reaches are the other half of the same statement: an
-    // attempt the pair refused spent neither the email's budget nor the address's.
+    // An attempt the pair refused never reached the email's budget or the address's, so each of those
+    // counters stands exactly where the attempts that got through left it — the other half of what the
+    // pair's own counter states.
     assert.equal(
       emailCounter,
-      counted.claimed + 1,
+      counted.claimed,
       `the attempts that reached a password were not counted against the email: ${measured}`,
     );
     assert.equal(
       addressCounter,
-      counted.claimed + 1,
+      counted.claimed,
       `the attempts that reached a password were not counted against the address: ${measured}`,
     );
     assert.ok(

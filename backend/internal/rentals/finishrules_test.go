@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
-	"github.com/Alisher24/CarSharing/backend/internal/platform/config"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 )
 
@@ -33,8 +32,7 @@ func TestAFinishIsAllowedWhereTheAreaOfTheRideCoversTheVehicle(t *testing.T) {
 	} {
 		t.Run(placed.name, func(t *testing.T) {
 			refusal := finishLandingRefusal(
-				vehicleConfirmedAt(placed.covered, freshAt), theZoneTheRideWasMadeIn, freshAt,
-				config.EnforcedFinishLanding)
+				vehicleConfirmedAt(placed.covered, freshAt), theZoneTheRideWasMadeIn, freshAt)
 			if placed.refused {
 				if refusal == nil {
 					t.Fatal("a finish outside the area of the ride was allowed")
@@ -78,7 +76,7 @@ func TestAFinishIsAllowedOnlyOnAPositionThatCanBeTrusted(t *testing.T) {
 	} {
 		t.Run(reading.name, func(t *testing.T) {
 			refusal := finishLandingRefusal(
-				reading.vehicle, theZoneTheRideWasMadeIn, freshAt, config.EnforcedFinishLanding)
+				reading.vehicle, theZoneTheRideWasMadeIn, freshAt)
 			if !reading.refused {
 				if refusal != nil {
 					t.Fatalf("a usable position was refused with %q", refusal.Kind)
@@ -92,25 +90,6 @@ func TestAFinishIsAllowedOnlyOnAPositionThatCanBeTrusted(t *testing.T) {
 				t.Fatalf("the finish was refused with %q, want %q", refusal.Kind, TelemetryStale)
 			}
 		})
-	}
-}
-
-// The profile that allows a ride to be ended wherever it stands relaxes where the ride is and not
-// whether its position can be read at all: a check that relaxed both would prove nothing about either,
-// and a stale reading would let a finish be decided by a position nobody confirmed.
-func TestTheRelaxedLandingStillRequiresAPositionThatCanBeTrusted(t *testing.T) {
-	refusal := finishLandingRefusal(
-		vehicleConfirmedAt("", freshAt.Add(-fleet.MaxTelemetryAge-time.Microsecond)),
-		theZoneTheRideWasMadeIn, freshAt, config.TestRideLifecycleFinishLanding)
-	if refusal == nil || refusal.Kind != TelemetryStale {
-		t.Fatalf("a stale position was answered with %v under the relaxed rule", refusal)
-	}
-
-	away := finishLandingRefusal(
-		vehicleConfirmedAt(theZoneBesideIt, freshAt), theZoneTheRideWasMadeIn, freshAt,
-		config.TestRideLifecycleFinishLanding)
-	if away != nil {
-		t.Fatalf("a ride away from its area was refused with %q under the relaxed rule", away.Kind)
 	}
 }
 

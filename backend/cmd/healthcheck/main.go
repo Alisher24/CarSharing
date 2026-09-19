@@ -20,8 +20,9 @@ const (
 	// container that published another one still reaches it here.
 	readyHost = "127.0.0.1"
 
-	// readyPort is the port the probe looks on when HTTP_ADDR names no port at all.
-	readyPort = "8080"
+	// readyPort is the port the probe looks on when HTTP_ADDR names no port at all: the port the
+	// listener defaults to, so a deployment that moves the default moves the probe with it.
+	readyPort = config.DefaultHTTPPort
 
 	probeTimeout = 3 * time.Second
 )

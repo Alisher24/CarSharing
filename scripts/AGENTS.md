@@ -8,9 +8,12 @@ the root `AGENTS.md`.
 ## Commands
 
 - `node scripts/setup.mjs` (or `scripts/setup.ps1` / `scripts/setup.sh`, which run it in the pinned
-  Node image so no host Node is needed) — create `.env` and `.secrets/`.
+  Node image so no host Node is needed) — create `.env` and `.secrets/`, and install the pre-commit
+  gate of the working copy.
 - `node scripts/smoke.mjs [origin]` — check the assembled stack after `docker compose up --build -d`.
 - `node --test scripts/setup.test.mjs`
+- `node --test scripts/published-port.test.mjs` — the port the stack publishes, against the origins
+  counted from it and the listener's own default.
 - `node --test --test-concurrency=1 "scripts/acceptance/*.test.mjs"` — the HTTP acceptance suites.
 - `node scripts/generate-contracts.mjs` / `node scripts/check-contracts.mjs` — the entry points behind
   `npm --prefix tools/openapi run generate|check`.
@@ -29,13 +32,16 @@ one of these values in a suite is the defect.
 a service with another limit and proves the running service reads its configuration rather than a
 constant.
 
-## Setup owns the secrets
+## Setup owns the secrets and the gate
 
 `setup.mjs` creates `.env` from the template and one random credential per capability. `CAPABILITY_SECRETS`
 is the single list: adding a capability means adding its secret name there, and both the file creation
 and the validation that a legacy installation is not silently repaired follow from it. Values are never
-printed or logged; a second run keeps what exists. `setup.test.mjs` is the only test that runs without
-the stack, and it is chained into `check-contracts.mjs`.
+printed or logged; a second run keeps what exists. It also installs the gate of the working copy it is
+given — `core.hooksPath` pointing at `.githooks` — because that setting belongs to the copy rather than
+to the repository, and a clone that does not name it commits unformatted. A directory Git will not read
+is refused before anything is written, so the copy is never left half set up. `setup.test.mjs` is the
+only test that runs without the stack, and it is chained into `check-contracts.mjs`.
 
 ## The gates
 
@@ -46,8 +52,9 @@ the stack, and it is chained into `check-contracts.mjs`.
   protects nothing already in the index — then runs Gitleaks. `install-gitleaks.sh` fetches the pinned
   version into `.tools/` and verifies its checksum per platform.
 - `check-contracts.mjs` regenerates, diffs the digests of every committed generated directory, and then
-  chains Go tests and vet, the setup tests and the frontend build. It requires the root `npm ci`,
-  because it invokes npm through `npm_execpath`; run it as `npm --prefix tools/openapi run check`.
+  chains Go tests and vet, the setup and published-port tests and the frontend build. It requires the
+  root `npm ci`, because it invokes npm through `npm_execpath`; run it as
+  `npm --prefix tools/openapi run check`.
 
 ## The acceptance suites
 
