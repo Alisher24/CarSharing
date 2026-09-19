@@ -4,6 +4,8 @@ import type { Tariff, Vehicle, Zone } from './generated/types.gen';
 export type {
   EnergySource,
   ExactInteger,
+  Geometry,
+  Position,
   PowertrainType,
   SourceKind,
   Tariff,

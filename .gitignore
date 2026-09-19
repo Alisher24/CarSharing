@@ -40,6 +40,10 @@ logs/
 *.log
 *.pid
 
+# The map's basemap: built during an image build from the declaration in the frontend, and far too
+# large to carry in history. The archive alone is tens of megabytes.
+frontend/public/basemap/
+
 # Go, frontend dependencies, generated builds and test output.
 bin/
 dist/

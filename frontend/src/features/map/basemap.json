@@ -1,0 +1,32 @@
+{
+  "prefix": "/basemap",
+  "archivePath": "bishkek.pmtiles",
+  "spriteSuffixes": [".json", ".png", "@2x.json", "@2x.png"],
+  "fontsPath": "fonts/{fontstack}/{range}.pbf",
+  "spritePath": "sprites/light{suffix}",
+  "lang": "ru",
+  "flavor": "light",
+  "caption": "Карта Бишкека · OpenStreetMap · Protomaps",
+  "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> · <a href=\"https://protomaps.com\">Protomaps</a>",
+  "fonts": [
+    {
+      "stack": "Noto Sans Regular",
+      "ranges": ["0-255", "1024-1279"]
+    },
+    {
+      "stack": "Noto Sans Medium",
+      "ranges": ["0-255", "1024-1279"]
+    },
+    {
+      "stack": "Noto Sans Italic",
+      "ranges": ["0-255", "1024-1279"]
+    }
+  ],
+  "sourceVersion": "4.15.2",
+  "archive": "https://build.protomaps.com/20260918.pmtiles",
+  "bbox": [74.55, 42.84, 74.65, 42.9],
+  "maxzoom": 15,
+  "toolVersion": "v1.31.2",
+  "glyphs": "https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf",
+  "sprite": "https://protomaps.github.io/basemaps-assets/sprites/v4/light"
+}

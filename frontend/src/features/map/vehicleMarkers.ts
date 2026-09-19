@@ -1,59 +1,67 @@
-import { CircleMarker, LayerGroup, type CircleMarkerOptions } from 'leaflet';
+import { Marker, type Map as MapLibreMap } from 'maplibre-gl';
 import type { Vehicle } from '../../shared/api/catalog';
 import { POWERTRAIN_LABELS, statusText } from '../fleet/fleetCopy';
-import { toLatLng } from './coordinates';
-import {
-  MARKER_FILL_OPACITY,
-  MARKER_OUTLINE_WEIGHT,
-  MARKER_RADIUS,
-  SELECTED_MARKER_OUTLINE_WEIGHT,
-  SELECTED_MARKER_RADIUS,
-  selectedOutlineColour,
-  statusColour,
-} from './markerStyle';
+import { statusColourProperty } from './markerStyle';
 
 /** What the marker layer is showing right now, so a redraw changes only what differs. */
 export type MarkerSelection = { vehicles: readonly Vehicle[]; selectedId: string | undefined };
 
+/** One vehicle on the map, with the element a person clicks and a check finds. */
+export type VehicleMarker = { marker: Marker; element: HTMLElement };
+
 /**
- * syncVehicleMarkers redraws the markers from one filtered result, which is the same result the
- * list is built from. A vehicle that leaves that result leaves the map with it.
+ * syncVehicleMarkers draws one marker per vehicle of the current result, which is the same result the
+ * list is built from: a vehicle that leaves that result leaves the map with it.
+ *
+ * The markers are elements rather than a circle layer of the map's own drawing. A circle layer is
+ * painted by the map into its own canvas, which nothing can click, read or check; an element is
+ * something a person clicks and a check finds, and twenty-five of them cost nothing worth measuring.
  */
 export function syncVehicleMarkers(
-  layer: LayerGroup,
+  map: MapLibreMap,
+  shown: Map<string, VehicleMarker>,
   selection: MarkerSelection,
   onSelect: (vehicleId: string) => void,
 ): void {
-  layer.clearLayers();
+  const wanted = new Set(selection.vehicles.map((vehicle) => vehicle.id));
+  for (const [id, held] of shown) {
+    if (!wanted.has(id)) {
+      held.marker.remove();
+      shown.delete(id);
+    }
+  }
+
   for (const vehicle of selection.vehicles) {
-    layer.addLayer(vehicleMarker(vehicle, vehicle.id === selection.selectedId, onSelect));
+    const held = shown.get(vehicle.id) ?? heldFor(vehicle, shown, onSelect);
+    held.marker.setLngLat(vehicle.position.coordinates).addTo(map);
+    held.element.dataset.selected = String(vehicle.id === selection.selectedId);
+    held.element.style.background = `var(${statusColourProperty(vehicle.status)})`;
+    held.element.title = markerLabel(vehicle);
+    held.element.setAttribute('aria-label', held.element.title);
   }
 }
 
-function vehicleMarker(vehicle: Vehicle, selected: boolean, onSelect: (vehicleId: string) => void): CircleMarker {
-  const marker = new CircleMarker(toLatLng(vehicle.position.coordinates), markerStyle(vehicle, selected));
-  marker.bindTooltip(`${vehicle.model} · ${POWERTRAIN_LABELS[vehicle.powertrain_type]} · ${statusText(vehicle)}`);
-  marker.on('click', () => onSelect(vehicle.id));
-  return marker;
+/**
+ * The marker kept for one vehicle. A marker is made once and moved afterwards: the model publishes a
+ * new position for every vehicle every few seconds, and a map that discarded and rebuilt twenty-five
+ * elements that often would lose whatever the browser holds for them, a click in progress among it.
+ */
+function heldFor(
+  vehicle: Vehicle,
+  shown: Map<string, VehicleMarker>,
+  onSelect: (vehicleId: string) => void,
+): VehicleMarker {
+  const element = document.createElement('button');
+  element.type = 'button';
+  element.className = 'map-vehicle-marker';
+  element.addEventListener('click', () => onSelect(vehicle.id));
+
+  const held = { marker: new Marker({ element, anchor: 'center' }), element };
+  shown.set(vehicle.id, held);
+  return held;
 }
 
-/** The vehicle a person has selected is drawn larger and outlined in ink, so it stands out. */
-function markerStyle(vehicle: Vehicle, selected: boolean): CircleMarkerOptions {
-  const colour = statusColour(vehicle.status);
-  if (!selected) {
-    return {
-      radius: MARKER_RADIUS,
-      color: colour,
-      weight: MARKER_OUTLINE_WEIGHT,
-      fillColor: colour,
-      fillOpacity: MARKER_FILL_OPACITY,
-    };
-  }
-  return {
-    radius: SELECTED_MARKER_RADIUS,
-    color: selectedOutlineColour(),
-    weight: SELECTED_MARKER_OUTLINE_WEIGHT,
-    fillColor: colour,
-    fillOpacity: MARKER_FILL_OPACITY,
-  };
+/** What a person reads about one vehicle without opening it, which its state is part of. */
+function markerLabel(vehicle: Vehicle): string {
+  return `${vehicle.model} · ${POWERTRAIN_LABELS[vehicle.powertrain_type]} · ${statusText(vehicle)}`;
 }

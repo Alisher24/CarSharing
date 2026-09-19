@@ -34,7 +34,7 @@ A feature directory holds four kinds of file, and the split is the convention:
 - hooks — `use*.ts` — which own effects, state and the streams;
 - components — `*.tsx` — which receive what they show as props and compute nothing that outlives them.
 
-Exactly one kind of file is unit-tested: 26 `*.test.ts` files, no `*.test.tsx`, and neither jsdom nor
+Exactly one kind of file is unit-tested: the `*.test.ts` files, no `*.test.tsx`, and neither jsdom nor
 a testing library is installed. Components and hooks are covered by the browser suite in `tests/e2e/`,
 so a decision worth a test belongs in a pure module. A test opens with `node:test`'s `describe`/`test`
 and `node:assert/strict`, and takes time as an argument (`countdownAt(held, new Date(...))`) rather than
@@ -93,13 +93,47 @@ choice is made; replacing it with the client is a regression, not a simplificati
 ## Styles
 
 The stylesheets are global: `main.tsx` imports `src/app/styles.css` (the shell and the `:root` tokens),
-`src/app/fleet.css` (the map screen), `src/app/cabinet.css` (the cabinet) and `src/app/account.css`
-(the entry window and the form inside it), and no component carries a stylesheet of its own — the only
-other CSS import in `src` is Leaflet's, inside `FleetMap.tsx`. Class names are kebab-case and
-hyphen-chained, and state is an attribute selector rather than a modifier class:
-`.fleet-row-status[data-status='available']`, `.filter-chip[aria-pressed='true']`.
+`src/app/fleet.css` (the map screen, vehicle markers included), `src/app/cabinet.css` (the cabinet) and
+`src/app/account.css` (the entry window and the form inside it), and no component carries a stylesheet
+of its own — the only other CSS import in `src` is MapLibre's, inside `FleetMap.tsx`. Class names are
+kebab-case and hyphen-chained, and state is an attribute selector rather than a modifier class:
+`.fleet-row-status[data-status='available']`, `.filter-chip[aria-pressed='true']`,
+`.map-vehicle-marker[data-selected='true']`.
 
 Stylelint (`stylelint-config-standard` plus the repository's rules) requires one declaration per
 single-line block, so a rule block is never a one-liner, a blank line before each multi-line rule and
 at-rule, `@media (width <= 850px)` rather than `max-width`, and a quoted `url()`. Prettier owns the
 alignment; do not hand-format what it would rewrite.
+
+## The map
+
+`src/features/map/` is the basemap and everything drawn on it. `basemap.json` is the one declaration
+of what lies underneath: the pinned Protomaps build, the bbox, the depth, the serving prefix, the font
+stacks and ranges, the sprite files and the attribution. The image stages read it to cut the archive
+and fetch the glyphs, `basemap.ts` reads it to build every address the map asks for, and
+`basemap.test.ts` holds the two together — a second copy of any of those addresses is the defect.
+
+- `basemap.ts` builds the style (`layers("protomaps", namedFlavor(...), { lang: "ru" })`) and every
+  address the map asks for, below the declared prefix, as a whole address of the installation that
+  serves it: the library refuses a path for glyphs and a sprite, and the archive is read through a
+  scheme that needs one too. It imports no browser API — the origin is an argument — so it is
+  unit-tested by `node:test`.
+- `basemapProtocol.ts` puts `pmtiles://` in MapLibre's global protocol table once, from `main.tsx`,
+  wrapping the reader so a failed request for the archive reaches whoever is listening. It must be
+  installed before the first map exists, and a second registration would replace the first.
+- `basemapWorker.ts` tells MapLibre where its own worker is, and imports it as a module the bundler
+  emits. Copying the worker file instead is the defect that costs the most and says the least: it
+  cannot import the chunk it shares with the library, it fails to start, no tile ever reaches the
+  protocol, and the map stays an empty pane with no error anywhere.
+- `FleetMap.tsx` creates the map, waits for the style's own `load` event before it says
+  `data-basemap="ready"`, draws the zones and the markers, and says `data-basemap="unavailable"` with a
+  line under the map when the archive could not be read.
+- `vehicleMarkers.ts` keeps one DOM element per vehicle and moves it, rather than rebuilding it on
+  every tick: the basemap is painted into the map's own canvas, so a marker has to be an element to be
+  clicked and to be found by a check.
+- `zoneLayer.ts` and `geometryBounds.ts` put the published boundaries into one GeoJSON source and
+  measure the box they span.
+
+The zone and the streets are painted into that canvas, which has no DOM. That is why the browser suite
+counts markers, legend items and the attribution rather than asserting the geometry, and why the
+geometry is left to a human eye in the demonstration.

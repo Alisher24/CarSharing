@@ -40,30 +40,19 @@ type member struct {
 	charge map[fleet.SourceKind]int
 }
 
-// placement is where one member of a group stands and which circuit it drives. The route passes
-// through the place the vehicle stands, which is what keeps its first movement from being a jump to
-// the nearest point of a circuit drawn beside it.
-type placement struct {
-	route simulation.RouteID
-	at    fleet.Position
-}
-
-// group is the five demonstration vehicles of one powertrain, where each of them stands and what
-// each of them holds.
+// group is the five demonstration vehicles of one powertrain, which circuit each of them drives and
+// what each of them holds.
 type group struct {
 	powertrain  fleet.PowertrainType
 	modelPrefix string
 	capacities  map[fleet.SourceKind]fleet.Amount
 
-	// placements and members are read by the same index: the vehicle placed at placements[n] is the
-	// one members[n] declares, and a group that gained a member names where it stands and which route
-	// it drives in the same declaration rather than in a list kept beside it.
-	placements [membersPerPowertrain]placement
-	members    [membersPerPowertrain]member
+	// routes and members are read by the same index: the vehicle on routes[n] is the one members[n]
+	// declares, and a group that gained a member names which circuit it drives in the same declaration
+	// rather than in a list kept beside it.
+	routes  [membersPerPowertrain]simulation.RouteID
+	members [membersPerPowertrain]member
 }
-
-// at is where the member this group places at an index stands.
-func (g group) at(positionInGroup int) fleet.Position { return g.placements[positionInGroup].at }
 
 // groups is the whole demonstration fleet. Every group carries the reserves the rules turn on: one
 // vehicle at or just below the start threshold, and, where the powertrain has more than one
@@ -73,12 +62,12 @@ var groups = []group{
 		powertrain:  fleet.PowertrainElectric,
 		modelPrefix: "Демо Электро",
 		capacities:  map[fleet.SourceKind]fleet.Amount{fleet.SourceBattery: 60_000 * wattHour},
-		placements: [membersPerPowertrain]placement{
-			{route: "electric-1", at: fleet.Position{Longitude: 74.5720, Latitude: 42.8590}},
-			{route: "electric-2", at: fleet.Position{Longitude: 74.5865, Latitude: 42.8742}},
-			{route: "electric-3", at: fleet.Position{Longitude: 74.5990, Latitude: 42.8663}},
-			{route: "electric-4", at: fleet.Position{Longitude: 74.6120, Latitude: 42.8815}},
-			{route: "electric-5", at: fleet.Position{Longitude: 74.6285, Latitude: 42.8574}},
+		routes: [membersPerPowertrain]simulation.RouteID{
+			"electric-1",
+			"electric-2",
+			"electric-3",
+			"electric-4",
+			"electric-5",
 		},
 		members: [membersPerPowertrain]member{
 			{charge: map[fleet.SourceKind]int{fleet.SourceBattery: 8200}},
@@ -94,12 +83,12 @@ var groups = []group{
 		powertrain:  fleet.PowertrainGasoline,
 		modelPrefix: "Демо Бензин",
 		capacities:  map[fleet.SourceKind]fleet.Amount{fleet.SourceGasoline: 50 * litre},
-		placements: [membersPerPowertrain]placement{
-			{route: "gasoline-1", at: fleet.Position{Longitude: 74.5638, Latitude: 42.8871}},
-			{route: "gasoline-2", at: fleet.Position{Longitude: 74.5793, Latitude: 42.8486}},
-			{route: "gasoline-3", at: fleet.Position{Longitude: 74.6046, Latitude: 42.8928}},
-			{route: "gasoline-4", at: fleet.Position{Longitude: 74.6209, Latitude: 42.8701}},
-			{route: "gasoline-5", at: fleet.Position{Longitude: 74.6371, Latitude: 42.8836}},
+		routes: [membersPerPowertrain]simulation.RouteID{
+			"gasoline-1",
+			"gasoline-2",
+			"gasoline-3",
+			"gasoline-4",
+			"gasoline-5",
 		},
 		members: [membersPerPowertrain]member{
 			{charge: map[fleet.SourceKind]int{fleet.SourceGasoline: 9100}},
@@ -113,14 +102,14 @@ var groups = []group{
 		powertrain:  fleet.PowertrainDiesel,
 		modelPrefix: "Демо Дизель",
 		capacities:  map[fleet.SourceKind]fleet.Amount{fleet.SourceDiesel: 55 * litre},
-		placements: [membersPerPowertrain]placement{
+		routes: [membersPerPowertrain]simulation.RouteID{
 			// The one vehicle whose circuit leaves the demonstration area, so that an ending beyond
 			// the boundary can be shown on it.
-			{route: simulation.ScenarioRouteID, at: fleet.Position{Longitude: 74.5561, Latitude: 42.8628}},
-			{route: "diesel-2", at: fleet.Position{Longitude: 74.5904, Latitude: 42.8955}},
-			{route: "diesel-3", at: fleet.Position{Longitude: 74.6158, Latitude: 42.8443}},
-			{route: "diesel-4", at: fleet.Position{Longitude: 74.6432, Latitude: 42.8759}},
-			{route: "diesel-5", at: fleet.Position{Longitude: 74.5682, Latitude: 42.8794}},
+			simulation.ScenarioRouteID,
+			"diesel-2",
+			"diesel-3",
+			"diesel-4",
+			"diesel-5",
 		},
 		members: [membersPerPowertrain]member{
 			{charge: map[fleet.SourceKind]int{fleet.SourceDiesel: 8800}},
@@ -137,12 +126,12 @@ var groups = []group{
 			fleet.SourceBattery:  12_000 * wattHour,
 			fleet.SourceGasoline: 45 * litre,
 		},
-		placements: [membersPerPowertrain]placement{
-			{route: "hybrid-1", at: fleet.Position{Longitude: 74.5837, Latitude: 42.8617}},
-			{route: "hybrid-2", at: fleet.Position{Longitude: 74.6091, Latitude: 42.8880}},
-			{route: "hybrid-3", at: fleet.Position{Longitude: 74.6246, Latitude: 42.8521}},
-			{route: "hybrid-4", at: fleet.Position{Longitude: 74.6398, Latitude: 42.8646}},
-			{route: "hybrid-5", at: fleet.Position{Longitude: 74.5599, Latitude: 42.8912}},
+		routes: [membersPerPowertrain]simulation.RouteID{
+			"hybrid-1",
+			"hybrid-2",
+			"hybrid-3",
+			"hybrid-4",
+			"hybrid-5",
 		},
 		members: [membersPerPowertrain]member{
 			// An empty battery beside a sufficient tank: the tank alone makes the vehicle fit.
@@ -167,12 +156,12 @@ var groups = []group{
 			fleet.SourceGasoline: 50 * litre,
 			fleet.SourceLPG:      60 * litre,
 		},
-		placements: [membersPerPowertrain]placement{
-			{route: "gas-1", at: fleet.Position{Longitude: 74.5751, Latitude: 42.8703}},
-			{route: "gas-2", at: fleet.Position{Longitude: 74.6014, Latitude: 42.8558}},
-			{route: "gas-3", at: fleet.Position{Longitude: 74.6177, Latitude: 42.8967}},
-			{route: "gas-4", at: fleet.Position{Longitude: 74.6320, Latitude: 42.8688}},
-			{route: "gas-5", at: fleet.Position{Longitude: 74.5926, Latitude: 42.8461}},
+		routes: [membersPerPowertrain]simulation.RouteID{
+			"gas-1",
+			"gas-2",
+			"gas-3",
+			"gas-4",
+			"gas-5",
 		},
 		members: [membersPerPowertrain]member{
 			{charge: map[fleet.SourceKind]int{fleet.SourceGasoline: 7200, fleet.SourceLPG: 6400}},
@@ -238,22 +227,22 @@ func (v Vehicle) fitToStart() bool {
 // Fleet resolves the whole declared fleet, in the order the demonstration numbers it.
 func Fleet() []Vehicle {
 	vehicles := make([]Vehicle, 0, len(groups)*membersPerPowertrain)
-	for _, current := range groups {
+	for groupIndex, current := range groups {
 		for positionInGroup, declared := range current.members {
-			vehicles = append(vehicles, current.vehicle(declared, positionInGroup, len(vehicles)+1))
+			vehicles = append(vehicles, current.vehicle(declared, groupIndex, positionInGroup, len(vehicles)+1))
 		}
 	}
 	return vehicles
 }
 
-func (g group) vehicle(declared member, positionInGroup, number int) Vehicle {
-	placed := g.placements[positionInGroup]
+func (g group) vehicle(declared member, groupIndex, positionInGroup, number int) Vehicle {
+	route := g.route(positionInGroup)
 	vehicle := Vehicle{
 		ID:             resourceID(vehicleFamily, number),
 		Model:          fmt.Sprintf("%s %d", g.modelPrefix, positionInGroup+1),
 		PowertrainType: g.powertrain,
-		Position:       placed.at,
-		RouteID:        placed.route,
+		Position:       spotAlong(route, groupIndex, positionInGroup),
+		RouteID:        route.ID,
 		Connected:      !declared.unlinked,
 		Reporting:      !declared.unlinked && !declared.silent,
 		Sources:        g.sources(declared),
@@ -264,6 +253,30 @@ func (g group) vehicle(declared member, positionInGroup, number int) Vehicle {
 		vehicle.PreparedRentalID = resourceID(rentalFamily, number)
 	}
 	return vehicle
+}
+
+// spotAlong is where one member stands: its own step around its own circuit, moved on by the place its
+// group has in the declaration. A step is how far into the group the member is, and the group's place
+// is added because the circuits are nested rather than disjoint — they share the corner the innermost
+// of them begins at, so five vehicles each starting at the beginning of their own ring would still
+// stand on one point, and a reserved or paused vehicle never leaves the place it was installed at: the
+// markers would be drawn over each other and a person could not press the ones underneath.
+func spotAlong(route simulation.Route, groupIndex, positionInGroup int) fleet.Position {
+	steps := groupIndex + positionInGroup
+	spots := len(groups) * membersPerPowertrain
+	lap := route.Length()
+	return route.PositionAt(simulation.Path(int64(lap) * int64(steps) / int64(spots)))
+}
+
+// route is the circuit the member this group places at an index drives. A group naming a circuit this
+// build does not declare is a defect of the declaration rather than a condition to carry on from, and
+// finding it here is what keeps it from reaching a client as a vehicle standing nowhere.
+func (g group) route(positionInGroup int) simulation.Route {
+	route, declared := simulation.RouteOf(g.routes[positionInGroup])
+	if !declared {
+		panic(fmt.Sprintf("%s drives the undeclared circuit %q", g.modelPrefix, g.routes[positionInGroup]))
+	}
+	return route
 }
 
 // sources resolves the member's reserves against its powertrain's capacities, in the order the

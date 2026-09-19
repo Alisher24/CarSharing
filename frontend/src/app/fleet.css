@@ -248,8 +248,8 @@
   border-radius: var(--radius-lg);
 }
 
-/* The canvas fills the pane rather than sizing itself, so Leaflet is never asked to lay out a
-   viewport that has not been given its height yet. */
+/* The canvas fills the pane rather than sizing itself, so the map is never asked to lay out a viewport
+   that has not been given its height yet. */
 .map-canvas {
   position: absolute;
   inset: 0;
@@ -338,20 +338,44 @@
   border-top: 2px dashed var(--color-accent);
 }
 
-.map-street-name {
-  font-size: var(--font-size-micro);
-  color: var(--color-ink-faint);
-  background: none;
-  border: 0;
-  box-shadow: none;
+/* One vehicle on the map: a dot a person clicks, painted in the colour of its public state. It is an
+   element rather than a layer of the map's own drawing, so a click and a check both reach it. The map
+   library positions it, so nothing here touches its transform or its place. */
+.map-vehicle-marker {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  cursor: pointer;
+  border: 2px solid var(--color-surface-raised);
+  border-radius: 50%;
+  box-shadow: 0 1px 4px #213b2759;
 }
 
-.map-landmark-name {
-  font-size: var(--font-size-micro);
-  color: var(--color-ink-muted);
+.map-vehicle-marker:hover {
+  box-shadow: 0 0 0 3px var(--color-surface-highlight);
+}
+
+.map-vehicle-marker[data-selected='true'] {
+  width: 20px;
+  height: 20px;
+  border: 3px solid var(--color-ink);
+}
+
+/* The map has one thing that can be missing while the rest of the screen works, and this is where it
+   says so rather than leaving an empty pane unexplained. */
+.map-basemap-notice {
+  position: absolute;
+  top: var(--space-md);
+  left: var(--space-md);
+  z-index: var(--layer-over-map);
+  max-width: 60%;
+  padding: 8px 12px;
+  margin: 0;
+  font-size: var(--font-size-detail);
+  color: var(--color-danger);
   background: var(--color-surface-veil);
-  border: 0;
-  box-shadow: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
 }
 
 .fleet-list {
