@@ -1,7 +1,7 @@
 // What the fleet suites read the demonstration through: the public paths, the SQL the database
 // answers a geometry question with, and the compose commands that install and restore the scenario.
 import { spawn } from 'node:child_process';
-import { composeWith, repositoryRoot, sql } from '../service.mjs';
+import { composeWith, POSTGRES_DATABASE, POSTGRES_ROLE, POSTGRES_SERVICE, repositoryRoot, sql } from '../service.mjs';
 
 export const VEHICLES_PATH = '/api/v1/vehicles';
 export const ZONES_PATH = '/api/v1/zones';
@@ -96,12 +96,12 @@ export function holdTransaction(statements, heldSeconds) {
       'compose',
       'exec',
       '-T',
-      'postgres',
+      POSTGRES_SERVICE,
       'psql',
       '-U',
-      'carsharing_migrator',
+      POSTGRES_ROLE,
       '-d',
-      'carsharing',
+      POSTGRES_DATABASE,
       '-v',
       'ON_ERROR_STOP=1',
       '-c',

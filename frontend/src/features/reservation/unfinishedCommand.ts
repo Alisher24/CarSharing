@@ -32,7 +32,7 @@ export type UnfinishedCommand = {
 };
 
 /** How long a stored command may still be repeated. Past it the state is read instead. */
-export const REPEAT_WINDOW_MILLISECONDS = 24 * 60 * 60 * 1_000;
+export const REPEAT_WINDOW_MILLISECONDS = 86_400 * 1_000;
 
 /** Where the record is kept: the storage of one tab, cleared when that tab is closed. */
 const STORAGE_KEY = 'carsharing.unfinished-command';

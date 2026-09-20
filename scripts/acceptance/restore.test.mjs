@@ -10,19 +10,16 @@ import { mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
-import { repositoryRoot } from '../service.mjs';
+import { POSTGRES_DATABASE, POSTGRES_ROLE, POSTGRES_SERVICE, repositoryRoot } from '../service.mjs';
 import { call, sql, waitForReady } from './client.mjs';
 import { deliveryKeyOf } from './mail.mjs';
 import { newAccount, newCommandKey, reserve, restoreScenario } from './reservations.mjs';
 
 const ACCOUNT_PREFIX = 'restore';
 
-/** The database the stack runs on, and the migrator role that owns it. */
-const SOURCE_DATABASE = 'carsharing';
-const MIGRATOR_ROLE = 'carsharing_migrator';
-
 /** The database the dump is restored into. It exists only for the length of this check. */
 const RESTORED_DATABASE = 'carsharing_restore_check';
+const MAINTENANCE_DATABASE = 'postgres';
 
 /** How long one dump or one restoration may take. */
 const DUMP_TIMEOUT_MS = 180_000;
@@ -44,7 +41,7 @@ after(() => {
 describe('the database can be dumped and restored', () => {
   test('a completed ride, its invoice and its letter read back the same in a restored database', async () => {
     const { email, rentalId, invoiceId } = await finishedRideAccount();
-    const source = readFacts(SOURCE_DATABASE, email, rentalId, invoiceId);
+    const source = readFacts(POSTGRES_DATABASE, email, rentalId, invoiceId);
     assert.ok(source.rentalId, 'the prepared ride was not written');
 
     const dump = join(workspace, 'artificial.dump');
@@ -93,7 +90,7 @@ describe('the database can be dumped and restored', () => {
     );
     assert.equal(
       rowCount(RESTORED_DATABASE, `SELECT count(*) FROM invoice_payments`),
-      rowCount(SOURCE_DATABASE, `SELECT count(*) FROM invoice_payments`),
+      rowCount(POSTGRES_DATABASE, `SELECT count(*) FROM invoice_payments`),
     );
   });
 });
@@ -129,10 +126,10 @@ function readFacts(database, email, rentalId, invoiceId) {
         'compose',
         'exec',
         '-T',
-        'postgres',
+        POSTGRES_SERVICE,
         'psql',
         '-U',
-        MIGRATOR_ROLE,
+        POSTGRES_ROLE,
         '-d',
         database,
         '-At',
@@ -163,12 +160,12 @@ function dumpDatabase(path) {
       'compose',
       'exec',
       '-T',
-      'postgres',
+      POSTGRES_SERVICE,
       'pg_dump',
       '-U',
-      MIGRATOR_ROLE,
+      POSTGRES_ROLE,
       '-d',
-      SOURCE_DATABASE,
+      POSTGRES_DATABASE,
       '--format=custom',
       '--file=/tmp/artificial.dump',
     ],
@@ -179,7 +176,7 @@ function dumpDatabase(path) {
 
 /** Copies one file out of the database container, so the dump is what a backup step would keep. */
 function copyOutOfContainer(inside, outside) {
-  const container = execFileSync('docker', ['compose', 'ps', '-q', 'postgres'], {
+  const container = execFileSync('docker', ['compose', 'ps', '-q', POSTGRES_SERVICE], {
     cwd: repositoryRoot,
     encoding: 'utf8',
   }).trim();
@@ -198,12 +195,12 @@ function createRestoredDatabase() {
       'compose',
       'exec',
       '-T',
-      'postgres',
+      POSTGRES_SERVICE,
       'psql',
       '-U',
-      MIGRATOR_ROLE,
+      POSTGRES_ROLE,
       '-d',
-      'postgres',
+      MAINTENANCE_DATABASE,
       '-At',
       '-v',
       'ON_ERROR_STOP=1',
@@ -221,12 +218,12 @@ function dropRestoredDatabase() {
       'compose',
       'exec',
       '-T',
-      'postgres',
+      POSTGRES_SERVICE,
       'psql',
       '-U',
-      MIGRATOR_ROLE,
+      POSTGRES_ROLE,
       '-d',
-      'postgres',
+      MAINTENANCE_DATABASE,
       '-At',
       '-v',
       'ON_ERROR_STOP=1',
@@ -239,7 +236,7 @@ function dropRestoredDatabase() {
 
 /** Restores one dump into the restored database. */
 function restoreDatabase(path) {
-  const container = execFileSync('docker', ['compose', 'ps', '-q', 'postgres'], {
+  const container = execFileSync('docker', ['compose', 'ps', '-q', POSTGRES_SERVICE], {
     cwd: repositoryRoot,
     encoding: 'utf8',
   }).trim();
@@ -254,10 +251,10 @@ function restoreDatabase(path) {
       'compose',
       'exec',
       '-T',
-      'postgres',
+      POSTGRES_SERVICE,
       'pg_restore',
       '-U',
-      MIGRATOR_ROLE,
+      POSTGRES_ROLE,
       '-d',
       RESTORED_DATABASE,
       '--no-owner',
@@ -272,7 +269,7 @@ function rowCount(database, query) {
   return Number(
     execFileSync(
       'docker',
-      ['compose', 'exec', '-T', 'postgres', 'psql', '-U', MIGRATOR_ROLE, '-d', database, '-At', '-c', query],
+      ['compose', 'exec', '-T', POSTGRES_SERVICE, 'psql', '-U', POSTGRES_ROLE, '-d', database, '-At', '-c', query],
       { cwd: repositoryRoot, encoding: 'utf8', timeout: DUMP_TIMEOUT_MS },
     ).trim(),
   );

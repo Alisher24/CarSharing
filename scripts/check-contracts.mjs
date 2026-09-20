@@ -61,7 +61,15 @@ assert.deepEqual(
 );
 runGo(['test', './...']);
 runGo(['vet', './...']);
-runNode(['--test', 'scripts/setup.test.mjs', 'scripts/published-port.test.mjs']);
+runNode([
+  '--test',
+  'scripts/setup.test.mjs',
+  'scripts/published-port.test.mjs',
+  'scripts/idempotency-retention.test.mjs',
+  'scripts/rate-limit-settings.test.mjs',
+  'scripts/shutdown-grace-period.test.mjs',
+  'scripts/stream-proxy-bounds.test.mjs',
+]);
 // npm supplies its CLI path on Windows and Unix when invoked through the documented npm script.
 assert.ok(process.env.npm_execpath, 'Run: npm --prefix tools/openapi run check');
 runNode([process.env.npm_execpath, 'run', 'build'], join(repositoryRoot, 'frontend'));

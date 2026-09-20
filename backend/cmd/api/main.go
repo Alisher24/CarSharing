@@ -22,6 +22,7 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/platform/cursor"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/httpapi"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/lifecycle"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/periodic"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/sessions"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals"
@@ -33,9 +34,6 @@ import (
 )
 
 const (
-	// shutdownTimeout is how long in-flight requests are given to finish after a signal.
-	shutdownTimeout = 10 * time.Second
-
 	// readHeaderTimeout bounds how long a client may take to send the request headers, which is what
 	// keeps a connection that never finishes a request from holding a slot.
 	readHeaderTimeout = 5 * time.Second
@@ -124,7 +122,7 @@ func assemble(cfg config.Config, pool *pgxpool.Pool, hub *events.Hub) (assembled
 			Simulator:   cfg.SimulatorToken,
 			DemoControl: cfg.DemoControlToken,
 		},
-		Demonstrating: cfg.Environment == config.DemoEnvironment,
+		Demonstrating: cfg.Environment.Name == config.DemoEnvironment,
 	})
 	if err != nil {
 		return assembled{}, err
@@ -166,7 +164,7 @@ func startBackgroundWork(
 	ctx context.Context, cfg config.Config, hub *events.Hub, confirmations *demo.Confirmations,
 ) {
 	go hub.Run(ctx)
-	if cfg.Environment != config.DemoEnvironment {
+	if cfg.Environment.Name != config.DemoEnvironment {
 		return
 	}
 	go periodic.Run(ctx, "demonstration telemetry", demo.ConfirmationInterval, confirmations.Confirm)
@@ -196,7 +194,7 @@ func run() error {
 	defer stop()
 
 	startup, cancel := context.WithTimeout(ctx, database.DatabaseStartupTimeout)
-	pool, err := database.Open(startup, cfg)
+	pool, err := database.Open(startup, cfg.Database)
 	cancel()
 	if err != nil {
 		return err
@@ -224,7 +222,7 @@ func serve(ctx context.Context, server *http.Server) error {
 			return fmt.Errorf("HTTP server failed: %w", err)
 		}
 	case <-ctx.Done():
-		shutdown, done := context.WithTimeout(context.Background(), shutdownTimeout)
+		shutdown, done := context.WithTimeout(context.Background(), lifecycle.ShutdownTimeout)
 		defer done()
 		if err := server.Shutdown(shutdown); err != nil {
 			_ = server.Close()

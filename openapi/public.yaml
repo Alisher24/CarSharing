@@ -1884,6 +1884,7 @@ paths:
       summary: reserve
       x-implementation-status: implemented
       x-body-limit: 65536
+      x-idempotency-retention-seconds: 86400
       description: >-
         Reserve one vehicle for 15 free minutes, measured between the stored reserved moment and the stored
         deadline. Server chooses immutable tariff conditions and the moment; reject all client-supplied time,
@@ -1898,8 +1899,9 @@ paths:
         with a different fingerprint: 409 IDEMPOTENCY_CONFLICT. Concurrent request: 409
         IDEMPOTENCY_IN_PROGRESS and Retry-After 1, which is not the moment the daily limit returns. Replay
         returns original status/body, server_time and body request_id with Idempotency-Replayed true and a
-        new X-Request-ID for this attempt. Retain successes and checked domain failures for at least 24
-        hours; exclude auth, validation, in-flight and technical rollbacks. Cleanup cannot remove
+        new X-Request-ID for this attempt. Retain successes and checked domain failures for at least the
+        x-idempotency-retention-seconds declared by this operation; exclude auth, validation, in-flight and
+        technical rollbacks. Cleanup cannot remove
         invoice/payment uniqueness. Request body is required.
       parameters:
         - name: X-Request-ID
@@ -2239,6 +2241,7 @@ paths:
       summary: cancel Rental
       x-implementation-status: implemented
       x-body-limit: 65536
+      x-idempotency-retention-seconds: 86400
       description: >-
         Give a reservation back before its deadline, free of charge and with no billable interval and no
         invoice. The owner comes from the session: an unknown identifier and another account's identifier are
@@ -2252,8 +2255,9 @@ paths:
         with a different fingerprint: 409 IDEMPOTENCY_CONFLICT. Concurrent request: 409
         IDEMPOTENCY_IN_PROGRESS and Retry-After 1, which is not the moment the daily limit returns. Replay
         returns original status/body, server_time and body request_id with Idempotency-Replayed true and a
-        new X-Request-ID for this attempt. Retain successes and checked domain failures for at least 24
-        hours; exclude auth, validation, in-flight and technical rollbacks. Cleanup cannot remove
+        new X-Request-ID for this attempt. Retain successes and checked domain failures for at least the
+        x-idempotency-retention-seconds declared by this operation; exclude auth, validation, in-flight and
+        technical rollbacks. Cleanup cannot remove
         invoice/payment uniqueness. No request body is permitted, including an empty JSON object.
       parameters:
         - name: X-Request-ID
@@ -2570,6 +2574,7 @@ paths:
       summary: start Rental
       x-implementation-status: implemented
       x-body-limit: 65536
+      x-idempotency-retention-seconds: 86400
       description: >-
         Reconcile with server time before transition; persist expiry or depletion even if the command
         conflicts. On 409 reread the authoritative current snapshot. Idempotency scope is the current user;
@@ -2577,8 +2582,9 @@ paths:
         IDEMPOTENCY_KEY_REQUIRED; invalid UUID v4: 400 IDEMPOTENCY_KEY_INVALID. Same key with a different
         fingerprint: 409 IDEMPOTENCY_CONFLICT. Concurrent request: 409 IDEMPOTENCY_IN_PROGRESS and Retry-After
         1. Replay returns original status/body, server_time and body request_id with Idempotency-Replayed true
-        and a new X-Request-ID for this attempt. Retain successes and checked domain failures for at least 24
-        hours; exclude auth, validation, in-flight and technical rollbacks. Cleanup cannot remove
+        and a new X-Request-ID for this attempt. Retain successes and checked domain failures for at least the
+        x-idempotency-retention-seconds declared by this operation; exclude auth, validation, in-flight and
+        technical rollbacks. Cleanup cannot remove
         invoice/payment uniqueness. No request body is permitted, including an empty JSON object.
       parameters:
         - name: X-Request-ID
@@ -2913,6 +2919,7 @@ paths:
       summary: pause Rental
       x-implementation-status: implemented
       x-body-limit: 65536
+      x-idempotency-retention-seconds: 86400
       description: >-
         Reconcile with server time before transition; persist expiry or depletion even if the command
         conflicts. On 409 reread the authoritative current snapshot. Idempotency scope is the current user;
@@ -2920,8 +2927,9 @@ paths:
         IDEMPOTENCY_KEY_REQUIRED; invalid UUID v4: 400 IDEMPOTENCY_KEY_INVALID. Same key with a different
         fingerprint: 409 IDEMPOTENCY_CONFLICT. Concurrent request: 409 IDEMPOTENCY_IN_PROGRESS and Retry-After
         1. Replay returns original status/body, server_time and body request_id with Idempotency-Replayed true
-        and a new X-Request-ID for this attempt. Retain successes and checked domain failures for at least 24
-        hours; exclude auth, validation, in-flight and technical rollbacks. Cleanup cannot remove
+        and a new X-Request-ID for this attempt. Retain successes and checked domain failures for at least the
+        x-idempotency-retention-seconds declared by this operation; exclude auth, validation, in-flight and
+        technical rollbacks. Cleanup cannot remove
         invoice/payment uniqueness. No request body is permitted, including an empty JSON object.
       parameters:
         - name: X-Request-ID
@@ -3238,6 +3246,7 @@ paths:
       summary: resume Rental
       x-implementation-status: implemented
       x-body-limit: 65536
+      x-idempotency-retention-seconds: 86400
       description: >-
         Reconcile with server time before transition; persist expiry or depletion even if the command
         conflicts. On 409 reread the authoritative current snapshot. Idempotency scope is the current user;
@@ -3245,8 +3254,9 @@ paths:
         IDEMPOTENCY_KEY_REQUIRED; invalid UUID v4: 400 IDEMPOTENCY_KEY_INVALID. Same key with a different
         fingerprint: 409 IDEMPOTENCY_CONFLICT. Concurrent request: 409 IDEMPOTENCY_IN_PROGRESS and Retry-After
         1. Replay returns original status/body, server_time and body request_id with Idempotency-Replayed true
-        and a new X-Request-ID for this attempt. Retain successes and checked domain failures for at least 24
-        hours; exclude auth, validation, in-flight and technical rollbacks. Cleanup cannot remove
+        and a new X-Request-ID for this attempt. Retain successes and checked domain failures for at least the
+        x-idempotency-retention-seconds declared by this operation; exclude auth, validation, in-flight and
+        technical rollbacks. Cleanup cannot remove
         invoice/payment uniqueness. No request body is permitted, including an empty JSON object.
       parameters:
         - name: X-Request-ID
@@ -3563,6 +3573,7 @@ paths:
       summary: finish Rental
       x-implementation-status: implemented
       x-body-limit: 65536
+      x-idempotency-retention-seconds: 86400
       description: >-
         Use confirmed server telemetry, never a client finish coordinate. Reconcile first: energy depletion
         returns 200 with actual completion and invoice. A new key for a completed ride returns the existing
@@ -3571,8 +3582,9 @@ paths:
         400 IDEMPOTENCY_KEY_INVALID. Same key with a different fingerprint: 409 IDEMPOTENCY_CONFLICT.
         Concurrent request: 409 IDEMPOTENCY_IN_PROGRESS and Retry-After 1. Replay returns original
         status/body, server_time and body request_id with Idempotency-Replayed true and a new X-Request-ID for
-        this attempt. Retain successes and checked domain failures for at least 24 hours; exclude auth,
-        validation, in-flight and technical rollbacks. Cleanup cannot remove invoice/payment uniqueness. No
+        this attempt. Retain successes and checked domain failures for at least the
+        x-idempotency-retention-seconds declared by this operation; exclude auth, validation, in-flight and
+        technical rollbacks. Cleanup cannot remove invoice/payment uniqueness. No
         request body is permitted, including an empty JSON object.
       parameters:
         - name: X-Request-ID
@@ -3918,6 +3930,7 @@ paths:
       summary: pay Invoice
       x-implementation-status: implemented
       x-body-limit: 65536
+      x-idempotency-retention-seconds: 86400
       description: >-
         An accepted demo decline is HTTP 200 PayResult with failed payment. A new key for an already paid
         invoice returns the existing view without another charge. Idempotency scope is the current user;
@@ -3925,8 +3938,9 @@ paths:
         IDEMPOTENCY_KEY_REQUIRED; invalid UUID v4: 400 IDEMPOTENCY_KEY_INVALID. Same key with a different
         fingerprint: 409 IDEMPOTENCY_CONFLICT. Concurrent request: 409 IDEMPOTENCY_IN_PROGRESS and Retry-After
         1. Replay returns original status/body, server_time and body request_id with Idempotency-Replayed true
-        and a new X-Request-ID for this attempt. Retain successes and checked domain failures for at least 24
-        hours; exclude auth, validation, in-flight and technical rollbacks. Cleanup cannot remove
+        and a new X-Request-ID for this attempt. Retain successes and checked domain failures for at least the
+        x-idempotency-retention-seconds declared by this operation; exclude auth, validation, in-flight and
+        technical rollbacks. Cleanup cannot remove
         invoice/payment uniqueness. No request body is permitted, including an empty JSON object.
       parameters:
         - name: X-Request-ID

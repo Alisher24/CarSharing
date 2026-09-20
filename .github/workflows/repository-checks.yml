@@ -151,6 +151,11 @@ jobs:
     name: Compose integration
     runs-on: ubuntu-24.04
     timeout-minutes: 35
+    env:
+      RATE_LIMIT_SIGNIN_EMAIL_ADDRESS_ATTEMPTS: "10"
+      RATE_LIMIT_SIGNIN_EMAIL_ATTEMPTS: "30"
+      RATE_LIMIT_SIGNIN_ADDRESS_ATTEMPTS: "100"
+      RATE_LIMIT_REGISTRATION_ADDRESS_ATTEMPTS: "10"
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

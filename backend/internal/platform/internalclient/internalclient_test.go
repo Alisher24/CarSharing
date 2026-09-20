@@ -148,7 +148,7 @@ func TestAnAnswerIsReadWithinItsBound(t *testing.T) {
 	}
 }
 
-// A client that was given no address, no credential or no bound on an answer is refused where it is
+// A client that was given no address, no credential or no bound on a call is refused where it is
 // assembled rather than at its first call.
 func TestAnIncompleteClientIsRefused(t *testing.T) {
 	for _, refused := range []struct {
@@ -157,9 +157,28 @@ func TestAnIncompleteClientIsRefused(t *testing.T) {
 		token  string
 		limits Settings
 	}{
-		{name: "no address", token: testToken, limits: Settings{MaxAnswerBytes: 1 << 16}},
-		{name: "no credential", url: "http://127.0.0.1:1", limits: Settings{MaxAnswerBytes: 1 << 16}},
-		{name: "no bound on the answer", url: "http://127.0.0.1:1", token: testToken},
+		{name: "no address", token: testToken, limits: Settings{Timeout: time.Second, MaxAnswerBytes: 1 << 16}},
+		{
+			name:   "no credential",
+			url:    "http://127.0.0.1:1",
+			limits: Settings{Timeout: time.Second, MaxAnswerBytes: 1 << 16},
+		},
+		{
+			name:  "no timeout",
+			url:   "http://127.0.0.1:1",
+			token: testToken,
+			limits: Settings{
+				MaxAnswerBytes: 1 << 16,
+			},
+		},
+		{
+			name:  "no bound on the answer",
+			url:   "http://127.0.0.1:1",
+			token: testToken,
+			limits: Settings{
+				Timeout: time.Second,
+			},
+		},
 	} {
 		t.Run(refused.name, func(t *testing.T) {
 			if _, err := New(refused.url, refused.token, refused.limits); err == nil {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
-import { POSTGRES_DATABASE, SERVICE_ORIGIN, composeWith, sql } from './service.mjs';
+import { POSTGRES_DATABASE, POSTGRES_SERVICE, SERVICE_ORIGIN, composeWith, sql } from './service.mjs';
 
 const LOCAL_ORIGIN_PATTERN = /^http:\/\/(127\.0\.0\.1|localhost):\d+$/;
 const ORIGIN_ARGUMENT_INDEX = 2;
@@ -10,7 +10,6 @@ const READINESS_RETRY_DELAY_MS = 1_000;
 const READINESS_REQUEST_TIMEOUT_MS = 3_000;
 const OUTAGE_REQUEST_TIMEOUT_MS = 5_000;
 
-const POSTGRES_SERVICE = 'postgres';
 const MIGRATION_SERVICE = 'migrate';
 const MIGRATION_UP_ARGUMENT = 'up';
 const SEED_SERVICE = 'seed';

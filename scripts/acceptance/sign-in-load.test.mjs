@@ -15,10 +15,12 @@ import {
   waitForReady,
   settleAfterBurst,
 } from './client.mjs';
+import { rateLimitsFromEnvironment } from './rate-limit-settings.mjs';
 
 /** The limits the running service reads, taken from its own configuration rather than restated. */
-const pairLimit = Number(process.env.RATE_LIMIT_SIGNIN_EMAIL_ADDRESS_ATTEMPTS ?? 10);
-const addressLimit = Number(process.env.RATE_LIMIT_SIGNIN_ADDRESS_ATTEMPTS ?? 100);
+const configuredLimits = rateLimitsFromEnvironment(process.env);
+const pairLimit = configuredLimits.signInEmailAndAddress;
+const addressLimit = configuredLimits.signInAddress;
 
 /**
  * How many attempts one burst sends. It is several times the pair budget, so a service that decided

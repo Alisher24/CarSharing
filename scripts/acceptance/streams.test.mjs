@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
 import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
+import { POSTGRES_SERVICE } from '../service.mjs';
 import { call, compose, serviceOrigin, sql, waitForReady } from './client.mjs';
 import { changeOf, closeStream, frameText, waitForEnd, waitForFrame, watchEventStream } from './events.mjs';
 import { newAccount, newCommandKey, reserve, restoreScenario } from './reservations.mjs';
@@ -179,7 +180,7 @@ describe('what closes a private stream', () => {
     const stream = await watchEventStream(PRIVATE_EVENTS_PATH, { cookie: account.cookie });
     await waitForFrame(stream, (frame) => frame.event === READY_EVENT);
 
-    compose('stop', 'postgres');
+    compose('stop', POSTGRES_SERVICE);
     const stoppedAt = performance.now();
     try {
       await waitForEnd(stream, OUTAGE_PATIENCE_MS);
@@ -189,7 +190,7 @@ describe('what closes a private stream', () => {
       );
       assert.equal(stream.ended, true, 'the private stream stayed open while the database was gone');
     } finally {
-      compose('start', 'postgres');
+      compose('start', POSTGRES_SERVICE);
       await waitForReady();
     }
   });
