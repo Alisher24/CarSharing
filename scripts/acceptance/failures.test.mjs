@@ -7,6 +7,7 @@
 // run beside another suite: the acceptance suites run one at a time for exactly this reason.
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
+import { POSTGRES_SERVICE } from '../service.mjs';
 import { call, compose, sql, waitForReady } from './client.mjs';
 import { invoiceOf, invoicesOf, ridesOf } from './history.mjs';
 import { PAYMENT_ATTEMPT, awaitingAttempt, pay } from './payments.mjs';
@@ -23,7 +24,7 @@ import {
 const ACCOUNT_PREFIX = 'failures';
 
 /** The services an operator restarts, each on its own. */
-const SERVICES = ['postgres', 'api', 'worker', 'mailstub', 'frontend'];
+const SERVICES = [POSTGRES_SERVICE, 'api', 'worker', 'mailstub', 'frontend'];
 
 const STATUS_OK = 200;
 const STATUS_CONFLICT = 409;
@@ -90,7 +91,7 @@ describe('a service restarted on its own leaves what the database holds', () => 
 describe('the database taken away and given back', () => {
   test('answers a documented 503 while it is gone and serves again without a restart', async () => {
     const { holder } = await prepared();
-    compose('stop', 'postgres');
+    compose('stop', POSTGRES_SERVICE);
     try {
       const refused = await call('/api/v1/me/current', { cookie: holder.cookie });
       assert.equal(
@@ -103,7 +104,7 @@ describe('the database taken away and given back', () => {
       assert.deepEqual(Object.keys(refused.json).sort(), ['code', 'message', 'request_id']);
       assert.ok(!/postgres|password|dsn|host=/i.test(refused.text), `the refusal leaked a detail: ${refused.text}`);
     } finally {
-      compose('start', 'postgres');
+      compose('start', POSTGRES_SERVICE);
     }
     await waitForReady();
 

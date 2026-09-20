@@ -60,9 +60,9 @@ services:
       # The demonstration telemetry source stands in for vehicles that exist only here, so it runs
       # under this profile and nowhere else.
       APP_ENV: demo
-      # Left empty so the service applies its own documented defaults. Setting one in the
-      # environment is how an operator changes a limit, and how the acceptance suite proves the
-      # running service reads the configuration rather than a constant.
+      # The local environment and CI export the same values to the service and its acceptance
+      # process. Changing one here is how a suite proves the running service reads configuration
+      # rather than a compiled constant.
       RATE_LIMIT_SIGNIN_EMAIL_ADDRESS_ATTEMPTS: ${RATE_LIMIT_SIGNIN_EMAIL_ADDRESS_ATTEMPTS:-}
       RATE_LIMIT_SIGNIN_EMAIL_ATTEMPTS: ${RATE_LIMIT_SIGNIN_EMAIL_ATTEMPTS:-}
       RATE_LIMIT_SIGNIN_ADDRESS_ATTEMPTS: ${RATE_LIMIT_SIGNIN_ADDRESS_ATTEMPTS:-}

@@ -25,7 +25,7 @@ func TestSecretFileAndPortValidation(t *testing.T) {
 	t.Setenv("DB_PASSWORD_FILE", path)
 	t.Setenv("DB_PORT", "5432")
 	c, err := Load()
-	if err != nil || c.DBPassword != secret {
+	if err != nil || c.Database.Password != secret {
 		t.Fatal("secret file was not loaded")
 	}
 	for _, port := range []string{"0", "65536", "invalid"} {
@@ -38,6 +38,46 @@ func TestSecretFileAndPortValidation(t *testing.T) {
 	t.Setenv("DB_PASSWORD_FILE", "")
 	if _, err := Load(); err == nil {
 		t.Fatal("accepted missing secret file")
+	}
+}
+
+func TestSessionCookieSecureUsesBooleanSyntax(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "password")
+	if err := os.WriteFile(path, []byte(strings.Repeat("x", 48)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(DatabasePasswordFileVariable, path)
+
+	for _, example := range []struct {
+		value string
+		want  bool
+	}{
+		{value: "true", want: true},
+		{value: "TRUE", want: true},
+		{value: "1", want: true},
+		{value: "false", want: false},
+		{value: "0", want: false},
+	} {
+		t.Run(example.value, func(t *testing.T) {
+			t.Setenv(SessionCookieSecureVariable, example.value)
+			configuration, err := Load()
+			if err != nil {
+				t.Fatalf("the boolean was refused: %v", err)
+			}
+			if configuration.SessionCookieSecure != example.want {
+				t.Errorf("%s was read as %t", example.value, configuration.SessionCookieSecure)
+			}
+		})
+	}
+
+	for _, invalid := range []string{"yes", "on"} {
+		t.Run(invalid, func(t *testing.T) {
+			t.Setenv(SessionCookieSecureVariable, invalid)
+			_, err := Load()
+			if err == nil || !strings.Contains(err.Error(), SessionCookieSecureVariable) {
+				t.Fatalf("invalid value was not refused by name: %v", err)
+			}
+		})
 	}
 }
 

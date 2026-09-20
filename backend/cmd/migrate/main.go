@@ -48,7 +48,7 @@ func run() error {
 		return err
 	}
 
-	poolConfig, err := database.PoolConfig(cfg)
+	poolConfig, err := database.PoolConfig(cfg.Database)
 	if err != nil {
 		return errPoolConfig
 	}

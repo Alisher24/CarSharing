@@ -3,7 +3,7 @@
 // which is also how a caller inside the deployment would reach them. The frontend container is the
 // one this stack already runs, so its curl is the client and nothing extra is started.
 import { execFileSync } from 'node:child_process';
-import { repositoryRoot } from '../service.mjs';
+import { repositoryRoot, SERVICE_ORIGIN } from '../service.mjs';
 
 const CLIENT_SERVICE = 'frontend';
 const CLIENT_TIMEOUT_MS = 60_000;
@@ -19,7 +19,7 @@ export const MAILSTUB_URL = 'http://mailstub:8080';
  * the check follows the contract, and reaching the API without the proxy does not make a mutation
  * any less of one.
  */
-export const ALLOWED_ORIGIN = 'http://127.0.0.1:8080';
+export const ALLOWED_ORIGIN = SERVICE_ORIGIN;
 
 /**
  * One request to a listener no port publishes, with everything a refusal or an acceptance is read

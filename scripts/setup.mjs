@@ -7,12 +7,12 @@ import { promisify } from 'node:util';
 
 // The passwords that predate every capability credential: an installation migrating from them holds
 // exactly these two alongside LEGACY_SECRET.
-const LEGACY_DATABASE_SECRETS = ['db_admin_password', 'db_app_password'];
+export const LEGACY_DATABASE_SECRETS = ['db_admin_password', 'db_app_password'];
 
 // One password per database role: the migrator, the application and the mail stub, which each connect
 // as a role of their own. A role added later brings a password an installation predating it cannot
 // hold, so that password is created where it is absent rather than demanded of it.
-const DATABASE_SECRETS = [...LEGACY_DATABASE_SECRETS, 'mailstub_app_password'];
+export const DATABASE_SECRETS = [...LEGACY_DATABASE_SECRETS, 'mailstub_app_password'];
 
 // One credential per capability, so that revoking or rotating one does not affect the others.
 export const CAPABILITY_SECRETS = [

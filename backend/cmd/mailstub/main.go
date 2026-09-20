@@ -23,13 +23,11 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/platform/cursor"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/httpapi"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/lifecycle"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const (
-	// shutdownTimeout is how long in-flight requests are given to finish after a signal.
-	shutdownTimeout = 10 * time.Second
-
 	// readHeaderTimeout bounds how long a client may take to send the request headers, which is what
 	// keeps a connection that never finishes a request from holding a slot.
 	readHeaderTimeout = 5 * time.Second
@@ -64,9 +62,7 @@ type assembled struct {
 // assemble builds everything this process serves over the one pool it was given: the internal
 // listener with the delivery operation, the demonstration control and the readiness probe of its own
 // schema, and the read-only inbox with the cursors of its own key.
-func assemble(
-	cfg config.Config, server config.MailstubServer, pool *pgxpool.Pool,
-) (assembled, error) {
+func assemble(server config.MailstubServer, pool *pgxpool.Pool) (assembled, error) {
 	acceptor, err := mailstub.NewAcceptor(pool)
 	if err != nil {
 		return assembled{}, err
@@ -87,7 +83,7 @@ func assemble(
 			Delivery: server.DeliveryToken,
 			Demo:     server.DemoToken,
 		},
-		Demonstrating: cfg.Environment == config.DemoEnvironment,
+		Demonstrating: server.Environment.Name == config.DemoEnvironment,
 	})
 	if err != nil {
 		return assembled{}, err
@@ -120,10 +116,6 @@ func newServer(addr string, handler http.Handler) *http.Server {
 }
 
 func run() error {
-	cfg, err := config.Load()
-	if err != nil {
-		return err
-	}
 	settings, err := config.MailstubServerFromEnvironment()
 	if err != nil {
 		return err
@@ -133,14 +125,14 @@ func run() error {
 	defer stop()
 
 	startup, cancel := context.WithTimeout(ctx, database.DatabaseStartupTimeout)
-	pool, err := database.Open(startup, cfg)
+	pool, err := database.Open(startup, settings.Database)
 	cancel()
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
 
-	serving, err := assemble(cfg, settings, pool)
+	serving, err := assemble(settings, pool)
 	if err != nil {
 		return err
 	}
@@ -191,7 +183,7 @@ func listen(ctx context.Context, server *http.Server) error {
 // whose deadline is exceeded is closed rather than waited for: the process is stopping either way,
 // and a request that stalls past the budget is one nobody is waiting for.
 func shutdownBoth(serving assembled) {
-	shutdown, done := context.WithTimeout(context.Background(), shutdownTimeout)
+	shutdown, done := context.WithTimeout(context.Background(), lifecycle.ShutdownTimeout)
 	defer done()
 	for _, server := range []*http.Server{serving.internal, serving.inbox} {
 		if err := server.Shutdown(shutdown); err != nil {

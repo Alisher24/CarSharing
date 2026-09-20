@@ -15,7 +15,7 @@ import (
 // client may repeat a command it first sent a day ago and short enough that the table does not grow
 // with the history of a running demonstration. Cleanup may remove a row only after this period: the
 // uniqueness of an invoice or a payment is owned by those records, never by this one.
-const Retention = 24 * time.Hour
+const Retention = 86_400 * time.Second
 
 // ClaimWait bounds how long an attempt waits for the attempt that already holds the same key. A
 // command is a short transaction, so a wait this long means the other attempt is stuck rather than

@@ -9,17 +9,15 @@ import { promisify } from 'node:util';
 import {
   setup,
   CAPABILITY_SECRETS,
+  DATABASE_SECRETS,
   ENVIRONMENT_FILE,
+  LEGACY_DATABASE_SECRETS,
   LEGACY_SECRET,
   SECRETS_DIRECTORY,
   SECRET_BYTES,
   SECRET_VALUE_PATTERN,
 } from './setup.mjs';
 
-const DATABASE_SECRET_NAMES = ['db_admin_password', 'db_app_password', 'mailstub_app_password'];
-
-// The two database passwords a legacy installation holds, which predate the mail stub's role.
-const LEGACY_DATABASE_SECRET_NAMES = ['db_admin_password', 'db_app_password'];
 const EXISTING_ENVIRONMENT = 'APP_PORT=8181\n';
 const TEMPLATE_ENVIRONMENT = 'APP_PORT=8080\n';
 const MISSING_SECRET_PATTERN = /missing secret files/;
@@ -120,8 +118,8 @@ test('setup migrates a complete legacy installation and refuses a partial migrat
 
     // The password of a role that did not exist when the installation was set up is created rather
     // than demanded: a legacy installation has no backup holding it.
-    const databaseValues = await readGeneratedSecrets(root, DATABASE_SECRET_NAMES);
-    assert.equal(new Set(databaseValues).size, DATABASE_SECRET_NAMES.length);
+    const databaseValues = await readGeneratedSecrets(root, DATABASE_SECRETS);
+    assert.equal(new Set(databaseValues).size, DATABASE_SECRETS.length);
     for (const value of databaseValues) assert.match(value, SECRET_VALUE_PATTERN);
 
     await unlink(secretPath(root, 'simulator_token'));
@@ -141,7 +139,7 @@ test('setup refuses a legacy installation that lost one of its own passwords', a
       db_app_password: newSecretValue(),
       [LEGACY_SECRET]: newSecretValue(),
     });
-    for (const name of LEGACY_DATABASE_SECRET_NAMES) {
+    for (const name of LEGACY_DATABASE_SECRETS) {
       assert.match(await readFile(secretPath(root, name), 'utf8'), SECRET_VALUE_PATTERN);
     }
 
@@ -183,8 +181,8 @@ test('setup creates independent capability credentials and preserves all of them
     await setup(root);
     const firstValues = await readGeneratedSecrets(root, CAPABILITY_SECRETS);
     assert.equal(new Set(firstValues).size, CAPABILITY_SECRETS.length);
-    const firstPasswords = await readGeneratedSecrets(root, DATABASE_SECRET_NAMES);
-    assert.equal(new Set(firstPasswords).size, DATABASE_SECRET_NAMES.length);
+    const firstPasswords = await readGeneratedSecrets(root, DATABASE_SECRETS);
+    assert.equal(new Set(firstPasswords).size, DATABASE_SECRETS.length);
 
     await setup(root);
     const repeatedValues = await readGeneratedSecrets(root, CAPABILITY_SECRETS);
@@ -193,7 +191,7 @@ test('setup creates independent capability credentials and preserves all of them
       firstValues.every((value, index) => value === repeatedValues[index]),
       'credentials changed',
     );
-    const repeatedPasswords = await readGeneratedSecrets(root, DATABASE_SECRET_NAMES);
+    const repeatedPasswords = await readGeneratedSecrets(root, DATABASE_SECRETS);
     assert.ok(
       firstPasswords.every((value, index) => value === repeatedPasswords[index]),
       'passwords changed',

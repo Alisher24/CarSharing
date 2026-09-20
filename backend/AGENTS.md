@@ -57,8 +57,10 @@ Every `main` sets up JSON logging, calls `run() error` and exits 1 on the error;
 construction when something is missing — `router_dependencies_test.go` removes each dependency in turn
 to prove it. A new feature is wired in `assemble` and nowhere else.
 
-`internal/platform/config` is the one place the environment is read: a `Config` struct and a single
-`Load`. The rate limits show the expected shape for a new setting — `rateLimitSetting` pairs the
+`internal/platform/config` is the one place the environment is read. There is one loader per process
+shape, and all six live in that package: `Load`, `MailstubServerFromEnvironment`, `SimulatorClient`,
+`DemoControlClient`, `MailstubClient` and `MailstubDemoClient`. The rate limits show the expected
+shape for a new setting — `rateLimitSetting` pairs the
 identifier with the environment name it is read from, its default, and where the value lands in
 `ratelimit.Limits` — so a limit cannot be added with its configuration read nowhere. Secrets are read
 from files named by `*_FILE` variables, never from the environment itself.

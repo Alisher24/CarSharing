@@ -37,22 +37,22 @@ const (
 	sslModeDisableDSN = "sslmode=disable"
 )
 
-func PoolConfig(cfg config.Config) (*pgxpool.Config, error) {
+func PoolConfig(database config.Database) (*pgxpool.Config, error) {
 	poolConfig, err := pgxpool.ParseConfig(sslModeDisableDSN)
 	if err != nil {
 		return nil, err
 	}
-	poolConfig.ConnConfig.Host, poolConfig.ConnConfig.Port = cfg.DBHost, cfg.DBPort
-	poolConfig.ConnConfig.Database, poolConfig.ConnConfig.User = cfg.DBName, cfg.DBUser
-	poolConfig.ConnConfig.Password = cfg.DBPassword
+	poolConfig.ConnConfig.Host, poolConfig.ConnConfig.Port = database.Host, database.Port
+	poolConfig.ConnConfig.Database, poolConfig.ConnConfig.User = database.Name, database.User
+	poolConfig.ConnConfig.Password = database.Password
 	poolConfig.ConnConfig.ConnectTimeout = connectTimeout
 	poolConfig.ConnConfig.RuntimeParams["timezone"] = "UTC"
 	poolConfig.MaxConns = maxPoolConnections
 	return poolConfig, nil
 }
 
-func Open(ctx context.Context, cfg config.Config) (*pgxpool.Pool, error) {
-	poolConfig, err := PoolConfig(cfg)
+func Open(ctx context.Context, database config.Database) (*pgxpool.Pool, error) {
+	poolConfig, err := PoolConfig(database)
 	if err != nil {
 		return nil, err
 	}

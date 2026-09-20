@@ -18,17 +18,13 @@ import {
   sql,
   waitForReady,
 } from './client.mjs';
+import { rateLimitsFromEnvironment } from './rate-limit-settings.mjs';
 
 /**
  * The limits the running service reads, taken from the service's own configuration rather than
  * restated here, so a changed setting changes what these tests demand.
  */
-const configuredLimits = {
-  signInEmailAndAddress: Number(process.env.RATE_LIMIT_SIGNIN_EMAIL_ADDRESS_ATTEMPTS ?? 10),
-  signInEmail: Number(process.env.RATE_LIMIT_SIGNIN_EMAIL_ATTEMPTS ?? 30),
-  signInAddress: Number(process.env.RATE_LIMIT_SIGNIN_ADDRESS_ATTEMPTS ?? 100),
-  registrationAddress: Number(process.env.RATE_LIMIT_REGISTRATION_ADDRESS_ATTEMPTS ?? 10),
-};
+const configuredLimits = rateLimitsFromEnvironment(process.env);
 
 const RATE_LIMIT_SCOPE = {
   signInEmail: 'sign_in_email',
@@ -50,15 +46,6 @@ const LOWERED_REGISTRATION_LIMIT = 2;
 
 before(waitForReady);
 beforeEach(resetRateLimits);
-
-/**
- * The address the service sees the acceptance suites arrive from. Every browser of one machine reaches
- * the published port through the same Docker gateway, and nginx forwards the address that accepted the
- * connection rather than one a client claims, so this stack has exactly one such address. A check that
- * has to write a counter by hand names it here, and the check writes it in a way that proves it right: a
- * fill of a subject the service is not counting against refuses nothing.
- */
-const OBSERVED_CLIENT_ADDRESS = '172.18.0.1';
 
 /**
  * Writes a counter as the window it describes stands after spending the stated attempts, so a check
@@ -155,16 +142,20 @@ describe('each of the four limits refuses on its own', () => {
   });
 
   test('the registration limit refuses further registrations from one address', async () => {
+    // Let the running service state which address it sees instead of assuming a Docker subnet. The
+    // project name and the networks already present on a host may assign any private gateway.
+    resetRateLimits();
+    const probe = await call(REGISTRATION_PATH, registrationRequest(newEmail('registration-address')));
+    assert.equal(probe.status, 201, `the address probe was refused: ${probe.text}`);
+    const address = observedSubject(RATE_LIMIT_SCOPE.registrationAddress);
+    assertAddressRecorded(RATE_LIMIT_SCOPE.registrationAddress, address);
+
     // The counter is written one attempt short of the limit, so the registration below is the last the
     // budget grants and the one after it is refused. A fill of a subject the service is not counting
     // against would leave it free to accept both, which is what makes this check prove the subject as
     // well as the limit.
     resetRateLimits();
-    fillCounter(
-      RATE_LIMIT_SCOPE.registrationAddress,
-      OBSERVED_CLIENT_ADDRESS,
-      configuredLimits.registrationAddress - 1,
-    );
+    fillCounter(RATE_LIMIT_SCOPE.registrationAddress, address, configuredLimits.registrationAddress - 1);
 
     const accepted = await call(REGISTRATION_PATH, registrationRequest(newEmail('at-limit')));
     assert.equal(accepted.status, 201, `the registration the limit names was refused: ${accepted.text}`);

@@ -37,13 +37,16 @@ func MailstubInboxAddrFromEnvironment() string {
 	return DefaultMailstubInboxAddr
 }
 
-// MailstubServer is what the mail stub process is told: the two listeners it serves, the credentials
-// of its two capabilities, and the key its inbox cursors are signed under.
+// MailstubServer is everything the mail stub process is told: its database, environment, two
+// listeners, two capability credentials and the key its inbox cursors are signed under.
 //
 // It is a shape of its own rather than a subset of the API's configuration, because the process owns
 // capabilities the API does not have and serves a listener the API does not publish: a loader that
 // handed it the API's shape would name settings it never reads.
 type MailstubServer struct {
+	Database    Database
+	Environment Environment
+
 	// InternalAddr is the listener the contract's internal operations are served on. It is the
 	// generic HTTP_ADDR, which is also the setting the container's readiness probe reads, so the
 	// probe follows the listener rather than a copy of its port.
@@ -66,11 +69,16 @@ type MailstubServer struct {
 // MailstubServerFromEnvironment reads what the mail stub process is configured with. A capability
 // without its secret stops the process and names the setting it is missing.
 func MailstubServerFromEnvironment() (MailstubServer, error) {
+	database, err := loadDatabase()
+	if err != nil {
+		return MailstubServer{}, err
+	}
 	server := MailstubServer{
 		InternalAddr: HTTPAddrFromEnvironment(),
 		InboxAddr:    MailstubInboxAddrFromEnvironment(),
+		Database:     database,
+		Environment:  loadEnvironment(),
 	}
-	var err error
 	if server.DeliveryToken, err = requiredSecret(MailstubDeliveryTokenFileVariable); err != nil {
 		return MailstubServer{}, err
 	}

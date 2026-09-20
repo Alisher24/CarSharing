@@ -30,8 +30,8 @@ export const MAILBOX_ORIGIN = process.env.ACCEPTANCE_MAILBOX ?? 'http://127.0.0.
 export const SESSION_COOKIE_NAME = 'carsharing_session';
 
 /** The database the stack runs on, reached through the migrator role that owns its schema. */
-const POSTGRES_SERVICE = 'postgres';
-const POSTGRES_ROLE = 'carsharing_migrator';
+export const POSTGRES_SERVICE = 'postgres';
+export const POSTGRES_ROLE = 'carsharing_migrator';
 export const POSTGRES_DATABASE = 'carsharing';
 
 const COMPOSE_TIMEOUT_MS = 180_000;

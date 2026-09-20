@@ -61,13 +61,14 @@ describe('the tables nothing else removes from are swept', () => {
     const expired = `expired-${Date.now()}`;
 
     // The row is written the way the store writes it: the hash of the token, the payload, and an
-    // expiry. The expired one names a token nobody holds, which is what a session left behind by a
-    // browser that never came back looks like.
+    // expiry. It starts live so the assertion that it landed cannot race the sweep, then is moved
+    // into the past to become what a browser that never came back leaves behind.
     sql(
       `INSERT INTO ${SESSION_TABLE} (token, data, expiry)
-       VALUES ('${expired}', '{}'::bytea, now() - interval '1 minute')`,
+       VALUES ('${expired}', '{}'::bytea, now() + interval '1 hour')`,
     );
-    assert.equal(sessionExists(expired), true, 'the expired session was not written');
+    assert.equal(sessionExists(expired), true, 'the session was not written');
+    sql(`UPDATE ${SESSION_TABLE} SET expiry = now() - interval '1 minute' WHERE token = '${expired}'`);
 
     await untilSwept(() => sessionExists(expired) === false, 'the expired session was swept');
     assert.equal(sessionExists(live), true, 'the sweep removed a live session');

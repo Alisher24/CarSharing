@@ -45,7 +45,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	if cfg.Environment != config.DemoEnvironment {
+	if cfg.Environment.Name != config.DemoEnvironment {
 		return errDemoEnvironmentRequired
 	}
 	if cfg.DemoUserPassword == "" {
@@ -56,7 +56,7 @@ func run() error {
 	defer cancel()
 
 	startup, cancelStartup := context.WithTimeout(ctx, database.DatabaseStartupTimeout)
-	pool, err := database.Open(startup, cfg)
+	pool, err := database.Open(startup, cfg.Database)
 	cancelStartup()
 	if err != nil {
 		return err

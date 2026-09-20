@@ -44,7 +44,7 @@ func run() error {
 	defer stop()
 
 	startup, cancel := context.WithTimeout(ctx, database.DatabaseStartupTimeout)
-	pool, err := database.Open(startup, cfg)
+	pool, err := database.Open(startup, cfg.Database)
 	cancel()
 	if err != nil {
 		return err

@@ -13,13 +13,6 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/platform/ratelimit"
 )
 
-// The profile a process is started as. Only the demo profile seeds data a deployment must not
-// carry, so the command that writes it refuses every other value.
-const (
-	ProductionEnvironment = "production"
-	DemoEnvironment       = "demo"
-)
-
 // The setting that names the listener, the port it defaults to, and the reader a process uses when it
 // needs only this setting — the container's own health check, which cannot load the rest of the
 // configuration because it is given no database secret.
@@ -65,24 +58,6 @@ const (
 	DemoControlTokenFileVariable = "DEMO_CONTROL_TOKEN_FILE"
 )
 
-// InternalAPIURLVariable names the address the processes that call the internal API reach it on. One
-// setting serves the simulator and the demonstration control, because the two only ever mean the same
-// API: a second name for it would be a second thing to keep in step.
-const InternalAPIURLVariable = "INTERNAL_API_URL"
-
-// defaultInternalAPIURL is the documented local profile: the API on the loopback address of the
-// machine the process runs on. A deployment names the API it calls.
-const defaultInternalAPIURL = "http://127.0.0.1:8080"
-
-// internalAPIURLFromEnvironment reports the API the internal clients call, applying the default when
-// the setting is absent.
-func internalAPIURLFromEnvironment() string {
-	if value := os.Getenv(InternalAPIURLVariable); value != "" {
-		return value
-	}
-	return defaultInternalAPIURL
-}
-
 // CursorSigningKey reads the key signed cursors are issued under. A file that cannot be read stops
 // the process; a process that was given no file receives nil and no key, which is how a process that
 // issues no cursor says so.
@@ -105,6 +80,9 @@ const minPasswordLength = 32
 // that the person reading the failure knows what setup would have produced.
 const minPasswordLengthMessage = "database password must contain at least " +
 	"32 characters; run setup"
+
+// SessionCookieSecureVariable names the switch that adds Secure to the session cookie.
+const SessionCookieSecureVariable = "SESSION_COOKIE_SECURE"
 
 // defaultAllowedOrigins is the documented local profile: the application served over plain HTTP on
 // the loopback address under either spelling a browser may use, on the port the listener defaults to.
@@ -132,19 +110,21 @@ const (
 	defaultArgon2Concurrent  = 2
 )
 
-// Config is everything a process is told about the installation it runs in.
-type Config struct {
-	HTTPAddr   string
-	DBHost     string
-	DBPort     uint16
-	DBName     string
-	DBUser     string
-	DBPassword string
+// Database is the address and credential a process uses to reach PostgreSQL.
+type Database struct {
+	Host     string
+	Port     uint16
+	Name     string
+	User     string
+	Password string
+}
 
-	// Environment is what the process was started as: the demo profile adds data a deployment
-	// must not seed, so the commands that change stored data read it from here rather than from
-	// the environment directly.
-	Environment string
+// Config is everything an application process is told about the installation it runs in.
+type Config struct {
+	HTTPAddr string
+	Database Database
+
+	Environment Environment
 
 	// AllowedOrigins are the browser origins a mutation may come from.
 	AllowedOrigins []string
@@ -180,25 +160,12 @@ type Config struct {
 func Load() (Config, error) {
 	var cfg Config
 	cfg.HTTPAddr = HTTPAddrFromEnvironment()
-	cfg.DBHost = envOrDefault("DB_HOST", "postgres")
-	cfg.DBName = envOrDefault("DB_NAME", "carsharing")
-	cfg.DBUser = envOrDefault("DB_USER", "carsharing_app")
-	cfg.Environment = envOrDefault("APP_ENV", ProductionEnvironment)
-	port, err := strconv.ParseUint(envOrDefault("DB_PORT", "5432"), 10, 16)
-	if err != nil || port == 0 {
-		return cfg, errors.New("DB_PORT must be between 1 and 65535")
-	}
-	cfg.DBPort = uint16(port)
-	if os.Getenv(DatabasePasswordFileVariable) == "" {
-		return cfg, errors.New(DatabasePasswordFileVariable + " is required")
-	}
-	cfg.DBPassword, err = secretFromFile(DatabasePasswordFileVariable)
+	var err error
+	cfg.Database, err = loadDatabase()
 	if err != nil {
 		return cfg, err
 	}
-	if len(cfg.DBPassword) < minPasswordLength {
-		return cfg, errors.New(minPasswordLengthMessage)
-	}
+	cfg.Environment = loadEnvironment()
 	cfg.DemoUserPassword, err = secretFromFile(DemoUserPasswordFileVariable)
 	if err != nil {
 		return cfg, err
@@ -216,7 +183,10 @@ func Load() (Config, error) {
 		return cfg, err
 	}
 	cfg.AllowedOrigins = splitOrigins(envOrDefault("ALLOWED_ORIGINS", defaultAllowedOrigins))
-	cfg.SessionCookieSecure = os.Getenv("SESSION_COOKIE_SECURE") == "true"
+	cfg.SessionCookieSecure, err = loadSessionCookieSecure()
+	if err != nil {
+		return cfg, err
+	}
 	cfg.Argon2, err = loadArgon2()
 	if err != nil {
 		return cfg, err
@@ -226,6 +196,42 @@ func Load() (Config, error) {
 		return cfg, err
 	}
 	return cfg, nil
+}
+
+func loadDatabase() (Database, error) {
+	database := Database{
+		Host: envOrDefault("DB_HOST", "postgres"),
+		Name: envOrDefault("DB_NAME", "carsharing"),
+		User: envOrDefault("DB_USER", "carsharing_app"),
+	}
+	port, err := strconv.ParseUint(envOrDefault("DB_PORT", "5432"), 10, 16)
+	if err != nil || port == 0 {
+		return Database{}, errors.New("DB_PORT must be between 1 and 65535")
+	}
+	database.Port = uint16(port)
+	if os.Getenv(DatabasePasswordFileVariable) == "" {
+		return Database{}, errors.New(DatabasePasswordFileVariable + " is required")
+	}
+	database.Password, err = secretFromFile(DatabasePasswordFileVariable)
+	if err != nil {
+		return Database{}, err
+	}
+	if len(database.Password) < minPasswordLength {
+		return Database{}, errors.New(minPasswordLengthMessage)
+	}
+	return database, nil
+}
+
+func loadSessionCookieSecure() (bool, error) {
+	raw := os.Getenv(SessionCookieSecureVariable)
+	if raw == "" {
+		return false, nil
+	}
+	secure, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, errors.New(SessionCookieSecureVariable + " must be a boolean")
+	}
+	return secure, nil
 }
 
 // rateLimitSetting names one counted limit: the settings it is read from, the values it starts at,

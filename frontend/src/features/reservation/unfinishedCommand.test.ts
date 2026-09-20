@@ -26,7 +26,6 @@ function memoryStorage(initial?: string): CommandStorage & { held: string | null
 }
 
 const sentAt = Date.parse('2026-09-13T07:15:30.000Z');
-
 function command(overrides: Partial<UnfinishedCommand> = {}): UnfinishedCommand {
   return {
     owner: 'owner-1',

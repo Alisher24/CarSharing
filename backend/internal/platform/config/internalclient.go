@@ -2,6 +2,15 @@ package config
 
 import "os"
 
+// InternalAPIURLVariable names the address the processes that call the internal API reach it on. One
+// setting serves the simulator and the demonstration control, because the two only ever mean the same
+// API: a second name for it would be a second thing to keep in step.
+const InternalAPIURLVariable = "INTERNAL_API_URL"
+
+// defaultInternalAPIURL is the documented local profile: the API on the loopback address of the
+// machine the process runs on. A deployment names the API it calls.
+const defaultInternalAPIURL = "http://127.0.0.1:8080"
+
 // InternalClient is what a process that only calls the internal API is told: the address it reaches
 // the API on and the token its capability is called with.
 //

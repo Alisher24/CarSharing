@@ -57,6 +57,8 @@ tests enforce them:
   to the ones its responses declare.
 - `x-body-limit` — the byte cap of a request body. The proxy restates 65536 as its own
   `client_max_body_size`, because nginx cannot import this file; keep the two in step.
+- `x-idempotency-retention-seconds` — how long an idempotent result remains repeatable. The repository
+  check keeps every operation, the service retention and the browser repeat window equal.
 - `x-event-schemas` — the events a stream carries; `x-listener` — which listener of the mail stub a path
   belongs to.
 - `x-coordinate-order` (a GeoJSON position is longitude then latitude) and `x-mode-order` (invoice lines

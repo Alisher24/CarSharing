@@ -14,7 +14,12 @@ the root `AGENTS.md`.
 - `node --test scripts/setup.test.mjs`
 - `node --test scripts/published-port.test.mjs` — the port the stack publishes, against the origins
   counted from it and the listener's own default.
-- `node --test --test-concurrency=1 "scripts/acceptance/*.test.mjs"` — the HTTP acceptance suites.
+- `node --test scripts/idempotency-retention.test.mjs scripts/rate-limit-settings.test.mjs` — the
+  idempotency window and rate limits shared by the contract, processes and acceptance checks.
+- `node --test scripts/shutdown-grace-period.test.mjs scripts/stream-proxy-bounds.test.mjs` — the
+  independent timing bounds shared by processes and stack configuration.
+- `node --env-file=.env --test --test-concurrency=1 "scripts/acceptance/*.test.mjs"` — the HTTP
+  acceptance suites with the same public settings Compose receives.
 - `node scripts/generate-contracts.mjs` / `node scripts/check-contracts.mjs` — the entry points behind
   `npm --prefix tools/openapi run generate|check`.
 
@@ -22,11 +27,11 @@ the root `AGENTS.md`.
 
 The smoke check, the HTTP suites and the browser suites under `tests/e2e` reach the same Compose
 project, so its coordinates are stated once here and nowhere else: `SERVICE_ORIGIN` (from
-`ACCEPTANCE_BASE`, defaulting to `http://127.0.0.1:8080`), `POSTGRES_DATABASE`, `SESSION_COOKIE_NAME`,
-and the `compose`, `composeWith` and `sql` helpers. `sql` runs `psql` inside the container as
-`carsharing_migrator` with `ON_ERROR_STOP=1`, so a failing query stops the caller instead of returning
-partial output. A changed port, database name or cookie name is one edit in this file; a second copy of
-one of these values in a suite is the defect.
+`ACCEPTANCE_BASE`, defaulting to `http://127.0.0.1:8080`), `POSTGRES_SERVICE`, `POSTGRES_ROLE`,
+`POSTGRES_DATABASE`, `SESSION_COOKIE_NAME`, and the `compose`, `composeWith` and `sql` helpers. `sql`
+runs `psql` inside the container as the exported role with `ON_ERROR_STOP=1`, so a failing query stops
+the caller instead of returning partial output. A changed port, database name or cookie name is one
+edit in this file; a second copy of one of these values in a suite is the defect.
 
 `composeWith` exists to pass environment into the Compose substitution, which is how a suite recreates
 a service with another limit and proves the running service reads its configuration rather than a
@@ -34,14 +39,14 @@ constant.
 
 ## Setup owns the secrets and the gate
 
-`setup.mjs` creates `.env` from the template and one random credential per capability. `CAPABILITY_SECRETS`
-is the single list: adding a capability means adding its secret name there, and both the file creation
-and the validation that a legacy installation is not silently repaired follow from it. Values are never
+`setup.mjs` creates `.env` from the template and one random credential per capability.
+`DATABASE_SECRETS`, `LEGACY_DATABASE_SECRETS` and `CAPABILITY_SECRETS` are the exported lists their
+tests consume: adding a role or capability changes the generated and migrated sets together. Values are never
 printed or logged; a second run keeps what exists. It also installs the gate of the working copy it is
 given — `core.hooksPath` pointing at `.githooks` — because that setting belongs to the copy rather than
 to the repository, and a clone that does not name it commits unformatted. A directory Git will not read
-is refused before anything is written, so the copy is never left half set up. `setup.test.mjs` is the
-only test that runs without the stack, and it is chained into `check-contracts.mjs`.
+is refused before anything is written, so the copy is never left half set up. Source-reading and setup
+tests run without the stack, and all of them are chained into `check-contracts.mjs`.
 
 ## The gates
 
@@ -52,7 +57,7 @@ only test that runs without the stack, and it is chained into `check-contracts.m
   protects nothing already in the index — then runs Gitleaks. `install-gitleaks.sh` fetches the pinned
   version into `.tools/` and verifies its checksum per platform.
 - `check-contracts.mjs` regenerates, diffs the digests of every committed generated directory, and then
-  chains Go tests and vet, the setup and published-port tests and the frontend build. It requires the
+  chains Go tests and vet, the setup, stack-invariant tests and the frontend build. It requires the
   root `npm ci`, because it invokes npm through `npm_execpath`; run it as
   `npm --prefix tools/openapi run check`.
 

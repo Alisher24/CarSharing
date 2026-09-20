@@ -37,8 +37,8 @@ type Client struct {
 	maxAnswerBytes int64
 }
 
-// New assembles a client over one address and one credential. Both are required and a bound on the
-// answer is required with them: a caller that was given no address would call nothing, and a caller
+// New assembles a client over one address and one credential. Both are required, as are the time and
+// answer-size bounds of a call: a caller that was given no address would call nothing, and a caller
 // without a token would be refused on every call.
 func New(baseURL, token string, settings Settings) (*Client, error) {
 	if baseURL == "" {
@@ -46,6 +46,9 @@ func New(baseURL, token string, settings Settings) (*Client, error) {
 	}
 	if token == "" {
 		return nil, errors.New("the internal client must be given the token its capability is called with")
+	}
+	if settings.Timeout <= 0 {
+		return nil, errors.New("the internal client must be told how long a call may take")
 	}
 	if settings.MaxAnswerBytes <= 0 {
 		return nil, errors.New("the internal client must be told how much of an answer it reads")
