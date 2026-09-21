@@ -65,57 +65,141 @@ type assembled struct {
 	confirmations *demo.Confirmations
 }
 
+type apiModules struct {
+	users               *auth.UserStore
+	authentication      *auth.Service
+	vehicles            *fleet.Store
+	prices              *tariffs.Store
+	models              *simulation.Store
+	issued              *invoices.Store
+	rentalRecords       *rentals.Store
+	reservations        *rentals.Service
+	notificationRecords *notifications.Store
+	notificationReads   *notifications.Service
+	cursors             *cursor.Signer
+}
+
 // assemble builds everything this process serves: the readiness probe, the session store, the account
 // rules, the rental module with the model of the fleet, and both the public and the internal surface,
 // all over the one pool so that a request can commit a user and its session together.
 func assemble(cfg config.Config, pool *pgxpool.Pool, hub *events.Hub) (assembled, error) {
-	users := auth.NewUserStore(pool)
-	hasher := auth.NewPasswordHasher(cfg.Argon2)
-	service, err := auth.NewService(users, hasher)
+	modules, err := newAPIModules(cfg, pool)
 	if err != nil {
 		return assembled{}, err
+	}
+	public, err := publicHandler(cfg, pool, hub, modules)
+	if err != nil {
+		return assembled{}, err
+	}
+	internal, err := internalHandler(cfg, modules.reservations)
+	if err != nil {
+		return assembled{}, err
+	}
+	confirmations, err := demo.NewConfirmations(pool, modules.vehicles, modules.models)
+	if err != nil {
+		return assembled{}, err
+	}
+	return assembled{
+		handler:       httpapi.NewSurfaceRouter(public, internal),
+		confirmations: confirmations,
+	}, nil
+}
+
+func newAPIModules(cfg config.Config, pool *pgxpool.Pool) (apiModules, error) {
+	users := auth.NewUserStore(pool)
+	hasher := auth.NewPasswordHasher(cfg.Argon2)
+	authentication, err := auth.NewService(users, hasher)
+	if err != nil {
+		return apiModules{}, err
 	}
 	vehicles := fleet.NewStore(pool)
 	prices := tariffs.NewStore(pool)
 	models := simulation.NewStore(pool)
 	issued := invoices.NewStore(pool)
-	reservations, err := rentals.NewService(pool, vehicles, prices, issued,
-		notifications.NewCompleter(pool), models)
+	rentalRecords := rentals.NewStore(pool)
+	notificationStore := notifications.NewStore(pool)
+	reservations, err := newRentalService(pool, vehicles, prices, issued, notificationStore, models)
 	if err != nil {
-		return assembled{}, err
+		return apiModules{}, err
 	}
-	notifications, err := notifications.NewService(pool)
+	notificationService, err := notifications.NewService(pool)
 	if err != nil {
-		return assembled{}, err
+		return apiModules{}, err
 	}
 	cursors, err := cursor.NewSigner(cfg.CursorSigningKey)
 	if err != nil {
-		return assembled{}, err
+		return apiModules{}, err
 	}
+	return apiModules{
+		users:               users,
+		authentication:      authentication,
+		vehicles:            vehicles,
+		prices:              prices,
+		models:              models,
+		issued:              issued,
+		rentalRecords:       rentalRecords,
+		reservations:        reservations,
+		notificationRecords: notificationStore,
+		notificationReads:   notificationService,
+		cursors:             cursors,
+	}, nil
+}
 
-	public, err := httpapi.NewHandler(httpapi.Dependencies{
-		Probe:          httpapi.DatabaseProbe(pool),
+func newRentalService(
+	pool *pgxpool.Pool,
+	vehicles *fleet.Store,
+	prices *tariffs.Store,
+	issued *invoices.Store,
+	notificationStore *notifications.Store,
+	models *simulation.Store,
+) (*rentals.Service, error) {
+	return rentals.NewService(
+		pool,
+		vehicles,
+		prices,
+		issued,
+		rentals.WarningOperations{
+			Create: notificationStore.CreateReservationWarning,
+			End:    notificationStore.EndReservationWarning,
+		},
+		completionRecorder(notifications.NewCompleter(pool)),
+		models,
+	)
+}
+
+func publicHandler(
+	cfg config.Config,
+	pool *pgxpool.Pool,
+	hub *events.Hub,
+	modules apiModules,
+) (http.Handler, error) {
+	return httpapi.NewHandler(httpapi.Dependencies{
+		Probe:          httpapi.DatabaseProbe(pool, readinessMetadata(modules.rentalRecords)),
 		AllowedOrigins: cfg.AllowedOrigins,
 		Pool:           pool,
 		Sessions:       sessions.NewManager(pool, cfg.SessionCookieSecure),
-		Auth:           service,
-		Users:          users,
+		Auth:           modules.authentication,
+		Users:          modules.users,
 		Throttle:       auth.NewThrottle(pool, cfg.RateLimits),
 		Events:         hub,
-		Reservations:   reservations,
-		Notifications:  notificationOperations{reservations: reservations, reads: notifications},
-		Invoices:       issued,
-		Cursors:        cursors,
+		Reservations:   modules.reservations,
+		Notifications: notificationOperations{
+			reservations: modules.reservations,
+			collection:   modules.notificationRecords,
+			reads:        modules.notificationReads,
+		},
+		Invoices: modules.issued,
+		Cursors:  modules.cursors,
 		Catalog: httpapi.Catalog{
-			Vehicles: vehicles,
+			Vehicles: modules.vehicles,
 			Zones:    zones.NewStore(pool),
-			Tariffs:  prices,
+			Tariffs:  modules.prices,
 		},
 	})
-	if err != nil {
-		return assembled{}, err
-	}
-	internal, err := httpapi.NewInternalHandler(httpapi.InternalDependencies{
+}
+
+func internalHandler(cfg config.Config, reservations *rentals.Service) (http.Handler, error) {
+	return httpapi.NewInternalHandler(httpapi.InternalDependencies{
 		Simulation: reservations,
 		Demo:       reservations,
 		Tokens: httpapi.InternalTokens{
@@ -124,12 +208,23 @@ func assemble(cfg config.Config, pool *pgxpool.Pool, hub *events.Hub) (assembled
 		},
 		Demonstrating: cfg.Environment.Name == config.DemoEnvironment,
 	})
-	if err != nil {
-		return assembled{}, err
+}
+
+func readinessMetadata(store *rentals.Store) httpapi.ReadReadyMetadata {
+	return func(ctx context.Context) (httpapi.ReadyMetadata, error) {
+		return readReadyMetadata(ctx, store)
 	}
-	return assembled{
-		handler:       httpapi.NewSurfaceRouter(public, internal),
-		confirmations: demo.NewConfirmations(pool, models),
+}
+
+func readReadyMetadata(ctx context.Context, store *rentals.Store) (httpapi.ReadyMetadata, error) {
+	metadata, err := store.Metadata(ctx)
+	if err != nil {
+		return httpapi.ReadyMetadata{}, err
+	}
+	return httpapi.ReadyMetadata{
+		City:     metadata.City,
+		Currency: metadata.Currency,
+		Timezone: metadata.Timezone,
 	}, nil
 }
 
@@ -140,19 +235,68 @@ func assemble(cfg config.Config, pool *pgxpool.Pool, hub *events.Hub) (assembled
 // about the other's records.
 type notificationOperations struct {
 	reservations *rentals.Service
+	collection   *notifications.Store
 	reads        *notifications.Service
 }
 
 func (o notificationOperations) Collection(
 	ctx context.Context, caller uuid.UUID, after *notifications.Position, limit int,
-) (rentals.NotificationPage, error) {
-	return o.reservations.Collection(ctx, caller, after, limit)
+) (notifications.Collection, error) {
+	var collection notifications.Collection
+	read := func(txCtx context.Context, moment time.Time) error {
+		return o.readCollection(txCtx, caller, after, limit, moment, &collection)
+	}
+	err := o.reservations.WithNotificationRead(ctx, caller, read)
+	return collection, err
+}
+
+func (o notificationOperations) readCollection(
+	ctx context.Context,
+	caller uuid.UUID,
+	after *notifications.Position,
+	limit int,
+	moment time.Time,
+	collection *notifications.Collection,
+) error {
+	page, err := o.collection.ReadPage(ctx, caller, after, limit)
+	if err != nil {
+		return err
+	}
+	*collection = notifications.Collection{
+		Notifications: page.Notifications,
+		Next:          page.Next,
+		Moment:        moment,
+	}
+	return nil
 }
 
 func (o notificationOperations) MarkRead(
 	ctx context.Context, owner uuid.UUID, id string,
 ) (notifications.Result, error) {
 	return o.reads.MarkRead(ctx, owner, id)
+}
+
+type completionOperations struct {
+	completer *notifications.Completer
+}
+
+func completionRecorder(completer *notifications.Completer) rentals.RecordCompletion {
+	return completionOperations{completer: completer}.record
+}
+
+func (o completionOperations) record(
+	ctx context.Context,
+	owner uuid.UUID,
+	rentalID string,
+	report rentals.CompletionReport,
+	at time.Time,
+) error {
+	return o.completer.Record(ctx, owner, rentalID, notifications.Completion{
+		InvoiceID: report.InvoiceID,
+		Reason:    report.Reason,
+		EndedAt:   report.EndedAt,
+		Exhausted: report.Exhausted,
+	}, at)
 }
 
 // startBackgroundWork starts the recurring work this process owns. Listening for published signals

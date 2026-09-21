@@ -1,7 +1,8 @@
 // Command worker runs the background work of the backend: the delivery of the tasks the outbox
 // holds, the release of reservations whose deadline has passed, and the retention of the records
-// that outlive the work they describe. It is a separate process from the API so that either one can be restarted without
-// stopping the other, and both use the same modules rather than a second copy of the rules.
+// that outlive the work they describe. It is a separate process from the API so that either one can
+// be restarted without stopping the other, and both use the same modules rather than a second copy
+// of the rules.
 package main
 
 import (
@@ -13,9 +14,11 @@ import (
 
 	"github.com/Alisher24/CarSharing/backend/internal/auth"
 	"github.com/Alisher24/CarSharing/backend/internal/events"
+	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
 	"github.com/Alisher24/CarSharing/backend/internal/invoices"
 	"github.com/Alisher24/CarSharing/backend/internal/mailstub"
+	"github.com/Alisher24/CarSharing/backend/internal/notifications"
 	"github.com/Alisher24/CarSharing/backend/internal/outbox"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/config"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
@@ -77,8 +80,24 @@ func work(ctx context.Context, pool *pgxpool.Pool, letters config.InternalClient
 		return err
 	}
 	go delivery.Run(ctx)
-	go periodic.Run(ctx, "reservation deadlines", rentals.DeadlineSweepInterval,
-		rentals.NewDeadlines(pool).Due)
+	notificationStore := notifications.NewStore(pool)
+	deadlines, err := rentals.NewDeadlines(
+		pool,
+		fleet.NewStore(pool),
+		rentals.WarningOperations{
+			Create: notificationStore.CreateReservationWarning,
+			End:    notificationStore.EndReservationWarning,
+		},
+	)
+	if err != nil {
+		return err
+	}
+	go periodic.Run(
+		ctx,
+		"reservation deadlines",
+		rentals.DeadlineSweepInterval,
+		deadlines.Due,
+	)
 	go periodic.Run(ctx, "signal retention", events.RetentionInterval, events.NewReaper(pool).Delete)
 	go periodic.Run(ctx, "command result retention", idempotency.RetentionInterval,
 		idempotency.NewReaper(pool).Delete)

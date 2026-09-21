@@ -12,10 +12,14 @@ import (
 	"os"
 	"time"
 
+	"github.com/Alisher24/CarSharing/backend/internal/auth"
 	"github.com/Alisher24/CarSharing/backend/internal/demo"
+	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/config"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
+	"github.com/Alisher24/CarSharing/backend/internal/rentals"
 	"github.com/Alisher24/CarSharing/backend/internal/simulation"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // restoreTimeout bounds the whole command, so a restoration waiting on a lock another transaction
@@ -53,7 +57,20 @@ func run() error {
 	}
 	defer pool.Close()
 
-	if err = demo.Restore(ctx, pool, simulation.NewStore(pool)); err != nil {
+	return restore(ctx, pool)
+}
+
+func restore(ctx context.Context, pool *pgxpool.Pool) error {
+	stores, err := demo.NewRestoreStores(
+		auth.NewUserStore(pool),
+		fleet.NewStore(pool),
+		rentals.NewStore(pool),
+		simulation.NewStore(pool),
+	)
+	if err != nil {
+		return err
+	}
+	if err = demo.Restore(ctx, pool, stores); err != nil {
 		return err
 	}
 

@@ -9,6 +9,7 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // FinishCommand ends one ride of one account, whoever asks. Whether the caller may end it is decided
@@ -30,14 +31,17 @@ type FinishCommand struct {
 func (s *Service) Finish(ctx context.Context, command FinishCommand) (Answered, error) {
 	return s.answer(ctx, idempotency.ForAccount(command.Caller), command.Attempt,
 		rideParticipants(s.pool, RideCommand{Caller: command.Caller, RentalID: command.RentalID}),
-		func(ctx context.Context, moment time.Time) (Outcome, error) {
-			return s.finishWithin(ctx, moment, command)
+		func(ctx context.Context, tx pgx.Tx, moment time.Time) (Outcome, error) {
+			return s.finishWithin(ctx, tx, moment, command)
 		})
 }
 
 // finishWithin decides one finish with the participants locked and the moment fixed.
 func (s *Service) finishWithin(
-	ctx context.Context, moment time.Time, command FinishCommand,
+	ctx context.Context,
+	tx pgx.Tx,
+	moment time.Time,
+	command FinishCommand,
 ) (Outcome, error) {
 	target, err := rentalByIDFor(ctx, s.pool, command.Caller, command.RentalID)
 	if errors.Is(err, ErrRentalNotFound) {
@@ -53,7 +57,7 @@ func (s *Service) finishWithin(
 	// moment are the ones the model ran it out at. A ride that runs out at the very moment of the
 	// command is answered the same way, which is what gives depletion priority over a finish of the
 	// same instant.
-	if _, err = s.reconcileVehicle(ctx, moment, target.VehicleID, &target); err != nil {
+	if _, err = s.reconcileVehicle(ctx, tx, moment, target.VehicleID, &target); err != nil {
 		return Outcome{}, err
 	}
 	target, err = rentalByIDFor(ctx, s.pool, command.Caller, command.RentalID)
@@ -78,7 +82,7 @@ func (s *Service) finishWithin(
 	if refusal != nil {
 		return refused(moment, *refusal), nil
 	}
-	return s.endRide(ctx, moment, target, Ending{Reason: finishReason, EndedAt: moment})
+	return s.endRide(ctx, tx, moment, target, Ending{Reason: finishReason, EndedAt: moment})
 }
 
 // finishPrepared reports what a finish requires of the vehicle before it may end the ride. Nothing is

@@ -7,6 +7,7 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/billing"
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -46,56 +47,85 @@ type Current struct {
 // read and a tick arriving together produce one ending rather than two.
 func (s *Service) Current(ctx context.Context, caller uuid.UUID) (Current, error) {
 	var current Current
-	err := transact(ctx, s.pool, currentParticipants(s.pool, caller),
-		func(txCtx context.Context, moment time.Time) error {
-			held, err := liveRentalAt(txCtx, s.pool, moment, userLiveRentalSelection, caller)
-			if err != nil {
-				return err
-			}
-			limit, err := readDailyLimit(txCtx, s.pool, caller, moment)
-			if err != nil {
-				return err
-			}
-			current = Current{Moment: moment, Limit: limit}
-			if held == nil {
-				return nil
-			}
-			if held.Riding() {
-				if _, err = s.reconcileVehicle(txCtx, moment, held.VehicleID, held); err != nil {
-					return err
-				}
-				held, err = liveRentalAt(txCtx, s.pool, moment, userLiveRentalSelection, caller)
-				if err != nil {
-					return err
-				}
-				if held == nil {
-					return nil
-				}
-			}
-			// The read fixes a warning the worker missed through the transition the worker performs,
-			// as it already fixes an expiry the worker missed: a person whose worker was stopped
-			// still learns about the last minute when they open the application.
-			if _, err = createDueWarning(txCtx, s.pool, *held, moment); err != nil {
-				return err
-			}
-			vehicle, err := s.vehicles.VehicleAt(txCtx, held.VehicleID, moment)
-			if err != nil {
-				return err
-			}
-			current.Rental = held
-			current.Vehicle = vehicle
-			if held.Riding() {
-				current.Progress, err = readProgress(txCtx, s.pool, *held, moment)
-				if err != nil {
-					return err
-				}
-			}
-			return nil
-		})
+	err := transact(
+		ctx,
+		s.pool,
+		currentParticipants(s.pool, caller),
+		func(txCtx context.Context, tx pgx.Tx, moment time.Time) error {
+			var err error
+			current, err = s.currentAt(txCtx, tx, caller, moment)
+			return err
+		},
+	)
 	if err != nil {
 		return Current{}, err
 	}
 	return current, nil
+}
+
+func (s *Service) currentAt(
+	ctx context.Context,
+	tx pgx.Tx,
+	caller uuid.UUID,
+	moment time.Time,
+) (Current, error) {
+	held, err := s.currentRentalAt(ctx, tx, caller, moment)
+	if err != nil {
+		return Current{}, err
+	}
+	limit, err := readDailyLimit(ctx, s.pool, caller, moment)
+	if err != nil {
+		return Current{}, err
+	}
+	current := Current{Moment: moment, Limit: limit, Rental: held}
+	if held == nil {
+		return current, nil
+	}
+	if _, err = createDueWarning(ctx, s.warnings, *held, moment); err != nil {
+		return Current{}, err
+	}
+	current.Vehicle, err = s.vehicles.VehicleAt(ctx, held.VehicleID, moment)
+	if err != nil {
+		return Current{}, err
+	}
+	if held.Riding() {
+		current.Progress, err = readProgress(ctx, s.pool, *held, moment)
+	}
+	return current, err
+}
+
+func (s *Service) currentRentalAt(
+	ctx context.Context,
+	tx pgx.Tx,
+	caller uuid.UUID,
+	moment time.Time,
+) (*Rental, error) {
+	held, err := liveRentalAt(
+		ctx,
+		s.pool,
+		s.vehicles,
+		s.warnings,
+		tx,
+		moment,
+		userLiveRentalSelection,
+		caller,
+	)
+	if err != nil || held == nil || !held.Riding() {
+		return held, err
+	}
+	if _, err = s.reconcileVehicle(ctx, tx, moment, held.VehicleID, held); err != nil {
+		return nil, err
+	}
+	return liveRentalAt(
+		ctx,
+		s.pool,
+		s.vehicles,
+		s.warnings,
+		tx,
+		moment,
+		userLiveRentalSelection,
+		caller,
+	)
 }
 
 // currentParticipants is the rows this read touches: the account, and the vehicle and rental that

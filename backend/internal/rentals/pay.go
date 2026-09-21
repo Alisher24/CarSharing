@@ -9,6 +9,7 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
 	"github.com/Alisher24/CarSharing/backend/internal/invoices"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -30,7 +31,7 @@ type PayCommand struct {
 func (s *Service) Pay(ctx context.Context, command PayCommand) (Answered, error) {
 	return s.answer(ctx, idempotency.ForAccount(command.Caller), command.Attempt,
 		payParticipants(s.pool, command),
-		func(ctx context.Context, moment time.Time) (Outcome, error) {
+		func(ctx context.Context, _ pgx.Tx, moment time.Time) (Outcome, error) {
 			return s.payWithin(ctx, moment, command)
 		})
 }

@@ -5,33 +5,23 @@ import (
 	"errors"
 	"time"
 
-	"github.com/Alisher24/CarSharing/backend/internal/notifications"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // warning creates the warning of a reservation that has entered the minute before its deadline. It
 // is the rentals module's own transition for the same reason the expiry is: what the record tells
 // about is a reservation, and the module that owns the stages owns what a stage means.
-type warning struct{ pool *pgxpool.Pool }
+type warning struct {
+	pool       *pgxpool.Pool
+	operations WarningOperations
+}
 
-func newWarning(pool *pgxpool.Pool) *warning { return &warning{pool: pool} }
-
-// dueWarnings finds the reservations whose last minute is due. The selection takes no lock: a
-// reservation an equally timed pass or a command has dealt with since is left alone by the
-// transition below, which is where the decision is made rather than here.
-//
-// The window is stated with the lead the module declares, so "one minute" stands in one place, and
-// both of its ends are read from the database clock: the moment a pass acts on is the database's,
-// never this process's.
-const dueWarningsStatement = `
-SELECT id
-FROM rentals
-WHERE stage = $1
-  AND expires_at > clock_timestamp()
-  AND expires_at - make_interval(secs => $2) <= clock_timestamp()
-ORDER BY expires_at, id`
+func newWarning(pool *pgxpool.Pool, operations WarningOperations) *warning {
+	return &warning{pool: pool, operations: operations}
+}
 
 func dueWarnings(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
 	rows, err := database.QuerierFrom(ctx, pool).Query(ctx, dueWarningsStatement,
@@ -84,7 +74,7 @@ func (w *warning) warnDue(ctx context.Context) (int64, error) {
 func (w *warning) warn(ctx context.Context, id string) (bool, error) {
 	var created bool
 	err := transact(ctx, w.pool, rentalParticipants(w.pool, id),
-		func(txCtx context.Context, moment time.Time) error {
+		func(txCtx context.Context, _ pgx.Tx, moment time.Time) error {
 			held, err := rentalByID(txCtx, w.pool, id)
 			if errors.Is(err, ErrRentalNotFound) {
 				return nil
@@ -92,7 +82,7 @@ func (w *warning) warn(ctx context.Context, id string) (bool, error) {
 			if err != nil {
 				return err
 			}
-			created, err = createDueWarning(txCtx, w.pool, held, moment)
+			created, err = createDueWarning(txCtx, w.operations, held, moment)
 			return err
 		})
 	return created, err
@@ -107,17 +97,15 @@ func (w *warning) warn(ctx context.Context, id string) (bool, error) {
 // created at the moment the reservation was judged to be inside the window rather than at the moment
 // a request happened to arrive.
 func createDueWarning(
-	ctx context.Context, pool *pgxpool.Pool, held Rental, moment time.Time,
+	ctx context.Context,
+	operations WarningOperations,
+	held Rental,
+	moment time.Time,
 ) (bool, error) {
 	if !held.WarningDue(moment) {
 		return false, nil
 	}
-	_, created, err := notifications.NewStore(pool).Create(ctx, notifications.About{
-		UserID:   held.UserID,
-		RentalID: held.ID,
-		Kind:     notifications.ReservationExpiring,
-	}, moment)
-	return created, err
+	return operations.Create(ctx, held.UserID, held.ID, moment)
 }
 
 // deactivateWarning makes the warning of a rental that has left the reserved stage inactive, in the
@@ -127,8 +115,10 @@ func createDueWarning(
 //
 // Nothing here creates a warning. A reservation that ended before its last minute never had one, and
 // a belated warning does not exist.
-func deactivateWarning(ctx context.Context, pool *pgxpool.Pool, released Rental) error {
-	_, _, err := notifications.NewStore(pool).Deactivate(
-		ctx, released.ID, notifications.ReservationExpiring)
-	return err
+func deactivateWarning(
+	ctx context.Context,
+	operations WarningOperations,
+	released Rental,
+) error {
+	return operations.End(ctx, released.ID)
 }

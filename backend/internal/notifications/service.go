@@ -18,6 +18,13 @@ type Result struct {
 	Moment       time.Time
 }
 
+// Collection is one page of notifications together with the moment the coordinated read fixed.
+type Collection struct {
+	Notifications []Notification
+	Next          *Position
+	Moment        time.Time
+}
+
 // Service serves the notification operations over one pool and one store. It is the module's runtime
 // rather than a second place that decides what a notification is: every statement belongs to the
 // store, and the transaction here is what makes the stored change and the signal that announces it

@@ -17,23 +17,10 @@ const (
 	Paused  Mode = "paused"
 )
 
-// closeOpenSegment ends the interval the ride is in at the given moment. The pairing of the end and
-// the absence of one is the whole of "still open", so a ride another transaction has already moved on
-// is left alone: exactly one interval per transition is closed, and never an already closed one.
-const closeOpenSegmentStatement = `
-UPDATE ride_segments
-SET ended_at = $2
-WHERE rental_id = $1 AND ended_at IS NULL`
-
 func closeOpenSegment(ctx context.Context, pool *pgxpool.Pool, rentalID string, moment time.Time) error {
 	_, err := database.QuerierFrom(ctx, pool).Exec(ctx, closeOpenSegmentStatement, rentalID, moment)
 	return err
 }
-
-// openSegment starts a new interval of a ride at the given moment. The partial unique index on the
-// open interval is what refuses a second one, so no caller reads before it writes.
-const openSegmentStatement = `
-INSERT INTO ride_segments (rental_id, mode, started_at) VALUES ($1, $2, $3)`
 
 func openSegment(ctx context.Context, pool *pgxpool.Pool, rentalID string, mode Mode, moment time.Time) error {
 	_, err := database.QuerierFrom(ctx, pool).Exec(ctx, openSegmentStatement, rentalID, mode, moment)

@@ -91,12 +91,18 @@ it (`npm --prefix tools/openapi run generate`), never the Go file.
 
 ## Modules and the database
 
-- A module owns its rules and its SQL: the `store.go` of `fleet`, `events`, `notifications`, `rentals`
-  or `outbox` holds the statements for its own tables. A handler moves a request between the contract
-  and the module and writes no SQL itself.
+- A module owns its rules and its SQL. Rental row statements and the shared rental projection live in
+  `rentals/store.go`; focused owner operations for another aggregate live beside that aggregate, such
+  as fleet installation and telemetry confirmation. A handler or a demonstration moves values between
+  owners and writes no SQL for their tables.
+- An operation used inside another module's transaction accepts the concrete `pgx.Tx`. The caller keeps
+  ownership of commit and rollback, while the callee keeps ownership of its table and statement. Rental
+  transactions acquire their participants through the one `users`, `vehicles`, `rentals` lock plan.
 - What two modules both need is joined at the composition root, not by one module importing the other's
-  records. `notificationOperations` in `cmd/api/main.go` is the example: the collection belongs to
-  `rentals`, the read of one notification to `notifications`, and neither learns about the other.
+  records. `notificationOperations` in `cmd/api/main.go` supplies notification-owned callbacks to the
+  rental transaction and adapts the collection result; neither module imports the other's record types.
+- The fleet owner alone changes `vehicles.version`. Callers describe a `fleet.VehicleChange`; the owner
+  increments the stored value and returns the resulting version, so restoration cannot put it back.
 - A value written in the same transaction as the change it describes stays consistent by construction:
   a signal, an outbox task and an idempotent result are all inserted through the request's transaction,
   so a rolled-back change leaves none of them behind.

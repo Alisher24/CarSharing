@@ -7,6 +7,7 @@ import (
 
 	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // TickCommand is one call of the simulator: the identifier of the call, which is what a repeated call
@@ -34,16 +35,19 @@ type TickOutcome struct {
 func (s *Service) Tick(ctx context.Context, command TickCommand) (Answered, error) {
 	return s.answer(ctx, idempotency.ForInstallation(), command.Attempt,
 		s.tickParticipants,
-		func(ctx context.Context, moment time.Time) (Outcome, error) {
-			return s.tickWithin(ctx, moment, command)
+		func(ctx context.Context, tx pgx.Tx, moment time.Time) (Outcome, error) {
+			return s.tickWithin(ctx, tx, moment, command)
 		})
 }
 
 // tickWithin advances the fleet with the participants locked and the moment fixed.
 func (s *Service) tickWithin(
-	ctx context.Context, moment time.Time, command TickCommand,
+	ctx context.Context,
+	tx pgx.Tx,
+	moment time.Time,
+	command TickCommand,
 ) (Outcome, error) {
-	outcomes, err := s.reconcileFleet(ctx, moment)
+	outcomes, err := s.reconcileFleet(ctx, tx, moment)
 	if err != nil {
 		return Outcome{}, err
 	}

@@ -9,19 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// modeDurationsStatement sums the intervals of one ride per mode. It sums and does not round: the
-// billing policy is declared in the billing package and applied there, so the database holds no
-// second copy of the rule. The sum reads the interval the ride is in up to the answered moment, and no
-// interval that began after it, so a read taken before a transition never counts time the transition
-// has not made yet; a ride that has ended is read at the moment it ended, so every interval of it is
-// whole.
-const modeDurationsStatement = `
-SELECT mode,
-       COALESCE(sum(COALESCE(ended_at, $2::timestamptz) - started_at), '0'::interval)
-FROM ride_segments
-WHERE rental_id = $1 AND started_at <= $2
-GROUP BY mode`
-
 // readProgress builds what a ride has taken from its own intervals and the rates stored with the
 // rental. A charge the billing module refuses is reported rather than published, so an amount outside
 // the range the contract states cannot reach a client.

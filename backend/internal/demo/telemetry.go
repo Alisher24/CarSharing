@@ -2,11 +2,13 @@ package demo
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/Alisher24/CarSharing/backend/internal/events"
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/simulation"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -23,72 +25,49 @@ const ConfirmationInterval = fleet.MaxTelemetryAge / 3
 //
 // Reading the catalog is not a confirmation. Only an arrival recorded here makes a position fresh.
 type Confirmations struct {
-	pool   *pgxpool.Pool
-	models *simulation.Store
+	pool     *pgxpool.Pool
+	vehicles *fleet.Store
+	models   *simulation.Store
 }
 
-func NewConfirmations(pool *pgxpool.Pool, models *simulation.Store) *Confirmations {
-	return &Confirmations{pool: pool, models: models}
+// NewConfirmations assembles the demonstration telemetry source from its required record owners.
+func NewConfirmations(
+	pool *pgxpool.Pool,
+	vehicles *fleet.Store,
+	models *simulation.Store,
+) (*Confirmations, error) {
+	for _, dependency := range []struct {
+		name     string
+		supplied bool
+	}{
+		{"database pool", pool != nil},
+		{"vehicle records", vehicles != nil},
+		{"simulation models", models != nil},
+	} {
+		if !dependency.supplied {
+			return nil, fmt.Errorf("demonstration confirmation dependency %s is missing", dependency.name)
+		}
+	}
+	return &Confirmations{pool: pool, vehicles: vehicles, models: models}, nil
 }
-
-// reportingVehiclesStatement names the vehicles that are sending telemetry. A vehicle that is not
-// linked and one that is linked but silent are both left out, which is the difference this source
-// exists to demonstrate.
-const reportingVehiclesStatement = `
-SELECT id FROM vehicles WHERE reporting ORDER BY id`
-
-// confirmPositionStatement publishes where the named vehicles stand, at one moment read from the
-// database: a confirmation that dated each vehicle by its own clock would let two vehicles in one
-// answer claim to have been confirmed at different instants.
-const confirmPositionStatement = `
-UPDATE vehicle_telemetry telemetry
-SET position = ST_SetSRID(ST_MakePoint(confirmed.longitude, confirmed.latitude), $4),
-    confirmed_at = clock_timestamp()
-FROM unnest($1::uuid[], $2::double precision[], $3::double precision[])
-    AS confirmed(vehicle_id, longitude, latitude)
-WHERE telemetry.vehicle_id = confirmed.vehicle_id`
-
-// confirmReserveStatement publishes what each source of the named vehicles holds now.
-const confirmReserveStatement = `
-UPDATE vehicle_energy_sources source
-SET remaining = confirmed.remaining
-FROM unnest($1::uuid[], $2::text[], $3::numeric[])
-    AS confirmed(vehicle_id, source_kind, remaining)
-WHERE source.vehicle_id = confirmed.vehicle_id
-  AND source.source_kind = confirmed.source_kind`
-
-// refreshTelemetryStatement moves the moment of a confirmation for vehicles nothing is modelled for:
-// a vehicle the model does not travel still reports that it is where it was.
-const refreshTelemetryStatement = `
-UPDATE vehicle_telemetry
-SET confirmed_at = clock_timestamp()
-WHERE vehicle_id = ANY($1)`
-
-// raisedVersionsStatement raises the version of every confirmed vehicle in one statement, so a
-// confirmation and the change it publishes cannot come apart.
-const raisedVersionsStatement = `
-UPDATE vehicles
-SET version = version + 1
-WHERE id = ANY($1)
-RETURNING id, version`
 
 // Confirm records one arrival from every vehicle that is still reporting and returns how many
 // vehicles confirmed. The signals of the new versions are recorded with the confirmation itself: a
 // reading that was stored without telling anybody would leave every map showing an older one.
 func (c *Confirmations) Confirm(ctx context.Context) (int64, error) {
 	var confirmed int64
-	err := database.InTransaction(ctx, c.pool, func(txCtx context.Context) error {
-		reporting, err := c.reportingVehicles(txCtx)
+	err := database.InTransactionWithHandle(ctx, c.pool, func(txCtx context.Context, tx pgx.Tx) error {
+		reporting, err := c.vehicles.ReportingVehicleIDs(txCtx, tx)
 		if err != nil {
 			return err
 		}
 		if len(reporting) == 0 {
 			return nil
 		}
-		if err = c.publishArrivals(txCtx, reporting); err != nil {
+		if err = c.publishArrivals(txCtx, tx, reporting); err != nil {
 			return err
 		}
-		signals, err := confirmationSignals(txCtx, c.pool, reporting)
+		signals, err := c.confirmationSignals(txCtx, tx, reporting)
 		if err != nil {
 			return err
 		}
@@ -98,65 +77,29 @@ func (c *Confirmations) Confirm(ctx context.Context) (int64, error) {
 	return confirmed, err
 }
 
-func (c *Confirmations) reportingVehicles(ctx context.Context) ([]string, error) {
-	rows, err := database.QuerierFrom(ctx, c.pool).Query(ctx, reportingVehiclesStatement)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	reporting := []string{}
-	for rows.Next() {
-		var vehicleID string
-		if err = rows.Scan(&vehicleID); err != nil {
-			return nil, err
-		}
-		reporting = append(reporting, vehicleID)
-	}
-	return reporting, rows.Err()
-}
-
-// confirmedArrivals is one confirmation of the whole reporting fleet, stated as the arrays the two
-// statements read: where each modelled vehicle stands, and what each of its sources holds. The three
-// reserve arrays are read by one index, so they are built together rather than joined afterwards.
 type confirmedArrivals struct {
-	vehicleIDs []string
-	longitudes []float64
-	latitudes  []float64
-
-	reserveVehicleIDs []string
-	reserveKinds      []string
-	reserveAmounts    []string
-
-	unmodelled []string
+	confirmations []fleet.Confirmation
+	unmodelled    []string
 }
 
 // publishArrivals writes the confirmed reading of every reporting vehicle: where the model stands and
 // what it holds for the vehicles it travels, and the moment alone for the vehicles it does not.
-func (c *Confirmations) publishArrivals(ctx context.Context, reporting []string) error {
+func (c *Confirmations) publishArrivals(
+	ctx context.Context,
+	tx pgx.Tx,
+	reporting []string,
+) error {
 	states, err := c.models.States(ctx, reporting)
 	if err != nil {
 		return err
 	}
 	arrivals := arrivalsOf(reporting, states)
-	querier := database.QuerierFrom(ctx, c.pool)
-	if len(arrivals.vehicleIDs) > 0 {
-		if _, err = querier.Exec(ctx, confirmPositionStatement, arrivals.vehicleIDs,
-			arrivals.longitudes, arrivals.latitudes, fleet.WGS84SRID); err != nil {
+	for _, confirmation := range arrivals.confirmations {
+		if err = c.vehicles.Confirm(ctx, tx, confirmation); err != nil {
 			return err
 		}
 	}
-	if len(arrivals.reserveKinds) > 0 {
-		if _, err = querier.Exec(ctx, confirmReserveStatement, arrivals.reserveVehicleIDs,
-			arrivals.reserveKinds, arrivals.reserveAmounts); err != nil {
-			return err
-		}
-	}
-	if len(arrivals.unmodelled) == 0 {
-		return nil
-	}
-	_, err = querier.Exec(ctx, refreshTelemetryStatement, arrivals.unmodelled)
-	return err
+	return c.vehicles.RefreshTelemetry(ctx, tx, arrivals.unmodelled)
 }
 
 // arrivalsOf states what one confirmation publishes about the reporting fleet.
@@ -170,36 +113,32 @@ func arrivalsOf(reporting []string, states map[string]simulation.State) confirme
 			arrivals.unmodelled = append(arrivals.unmodelled, vehicleID)
 			continue
 		}
-		arrivals.vehicleIDs = append(arrivals.vehicleIDs, vehicleID)
-		arrivals.longitudes = append(arrivals.longitudes, state.Position.Longitude)
-		arrivals.latitudes = append(arrivals.latitudes, state.Position.Latitude)
-		for _, source := range state.Sources {
-			arrivals.reserveVehicleIDs = append(arrivals.reserveVehicleIDs, vehicleID)
-			arrivals.reserveKinds = append(arrivals.reserveKinds, string(source.Kind))
-			arrivals.reserveAmounts = append(arrivals.reserveAmounts, source.Remaining().Decimal())
+		confirmation := fleet.Confirmation{
+			VehicleID: vehicleID,
+			Position:  state.Position,
 		}
+		for _, source := range state.Sources {
+			confirmation.Sources = append(confirmation.Sources, fleet.EnergySource{
+				Kind:      source.Kind,
+				Remaining: source.Remaining(),
+			})
+		}
+		arrivals.confirmations = append(arrivals.confirmations, confirmation)
 	}
 	return arrivals
 }
 
 // confirmationSignals raises the version of every confirmed vehicle and states the public change each
 // one is.
-func confirmationSignals(
-	ctx context.Context, pool *pgxpool.Pool, reporting []string,
+func (c *Confirmations) confirmationSignals(
+	ctx context.Context,
+	tx pgx.Tx,
+	reporting []string,
 ) ([]events.Signal, error) {
-	rows, err := database.QuerierFrom(ctx, pool).Query(ctx, raisedVersionsStatement, reporting)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var signals []events.Signal
-	for rows.Next() {
-		var (
-			vehicleID string
-			version   int64
-		)
-		if err := rows.Scan(&vehicleID, &version); err != nil {
+	signals := make([]events.Signal, 0, len(reporting))
+	for _, vehicleID := range reporting {
+		version, err := c.vehicles.PublishChange(ctx, tx, vehicleID, fleet.VehicleChange{})
+		if err != nil {
 			return nil, err
 		}
 		signals = append(signals, events.Signal{
@@ -208,5 +147,5 @@ func confirmationSignals(
 			Version:    version,
 		})
 	}
-	return signals, rows.Err()
+	return signals, nil
 }
