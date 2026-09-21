@@ -10,9 +10,8 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/events"
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/invoices"
-	"github.com/Alisher24/CarSharing/backend/internal/notifications"
-	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -43,7 +42,11 @@ func Depleted(at time.Time, exhausted []fleet.SourceKind) Ending {
 // anything noticed: the ride is priced to the moment it ended, and the records of it are written at
 // the moment they were written.
 func (s *Service) endRide(
-	ctx context.Context, moment time.Time, target Rental, ending Ending,
+	ctx context.Context,
+	tx pgx.Tx,
+	moment time.Time,
+	target Rental,
+	ending Ending,
 ) (Outcome, error) {
 	ended, err := completeRental(ctx, s.pool, target, ending)
 	if err != nil {
@@ -61,7 +64,7 @@ func (s *Service) endRide(
 	if err != nil {
 		return Outcome{}, err
 	}
-	if err = s.completions.Record(ctx, ended.UserID, ended.ID, notifications.Completion{
+	if err = s.recordCompletion(ctx, ended.UserID, ended.ID, CompletionReport{
 		InvoiceID: issued.ID,
 		Reason:    issued.Completion,
 		Exhausted: ending.Exhausted,
@@ -69,7 +72,7 @@ func (s *Service) endRide(
 	}, moment); err != nil {
 		return Outcome{}, err
 	}
-	if err = announceEnding(ctx, s.pool, ended, issued, ending); err != nil {
+	if err = announceEnding(ctx, s.pool, s.vehicles, tx, ended, issued, ending); err != nil {
 		return Outcome{}, err
 	}
 
@@ -80,60 +83,10 @@ func (s *Service) endRide(
 	return Outcome{Rental: ended, Vehicle: vehicle, Moment: moment, Invoice: issued}, nil
 }
 
-// completeRentalStatement writes the end of one ride. The stages it applies to are part of the
-// statement, so a rental another transaction has ended is reported as unmoved rather than written
-// over, and the moment the ending fixed is the moment the ride ended. A ride that is over is in no
-// mode, so it releases the moment its current mode began, exactly as an ended reservation does.
-//
-// The reason is written with the ride rather than only with the invoice, because the answer to a
-// command that meets a ride somebody else ended is that ride: the reason and the details of it have
-// to be readable without the invoice that was issued beside them.
-const completeRentalStatement = `
-UPDATE rentals
-SET stage = $2::text,
-    ended_at = $3,
-    mode_started_at = NULL,
-    completion_reason = $4::text,
-    exhausted_sources = $5::text[],
-    version = version + 1
-WHERE id = $1 AND stage = ANY($6::text[])
-RETURNING` + rentalFields
-
 // errRentalNotEnded reports a rental that no longer stood in a stage a finish applies to. The stage is
 // read under the lock of the same transaction, so this is a defect of that reading rather than a
 // refusal a client caused.
 var errRentalNotEnded = errors.New("the rental was not a ride that could be ended")
-
-// completeRental writes one ending. It is the only place a rental reaches the completed stage, so the
-// reason, the moment and the release of the vehicle are written together or not at all.
-func completeRental(
-	ctx context.Context, pool *pgxpool.Pool, target Rental, ending Ending,
-) (Rental, error) {
-	rows, err := database.QuerierFrom(ctx, pool).Query(ctx, completeRentalStatement,
-		target.ID,
-		string(stage.Completed),
-		ending.EndedAt,
-		string(ending.Reason),
-		fleet.SourceNames(ending.Exhausted),
-		rideStages,
-	)
-	if err != nil {
-		return Rental{}, err
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		if err = rows.Err(); err != nil {
-			return Rental{}, err
-		}
-		return Rental{}, errRentalNotEnded
-	}
-	var ended Rental
-	if err = scanRental(rows, &ended); err != nil {
-		return Rental{}, err
-	}
-	return ended, rows.Err()
-}
 
 // rideStages are the stages a ride that has begun stands in, which is what an ending applies to: a
 // reservation is given back or runs out rather than being ended.
@@ -185,10 +138,20 @@ func invoiceDraft(ended Rental, priced billing.Charge, ending Ending, moment tim
 // cost nothing is settled by the moment its invoice was issued вЂ” and that question is asked of the
 // state the invoice was stored with rather than of a second comparison of its amount with zero.
 func announceEnding(
-	ctx context.Context, pool *pgxpool.Pool, ended Rental, issued invoices.Invoice, ending Ending,
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	vehicles *fleet.Store,
+	tx pgx.Tx,
+	ended Rental,
+	issued invoices.Invoice,
+	ending Ending,
 ) error {
-	version, err := publishVehicleChange(ctx, pool, ended.VehicleID,
-		ending.Reason == completion.EnergyDepleted)
+	change := fleet.VehicleChange{}
+	if ending.Reason == completion.EnergyDepleted {
+		serviceRequired := true
+		change.ServiceRequired = &serviceRequired
+	}
+	version, err := vehicles.PublishChange(ctx, tx, ended.VehicleID, change)
 	if err != nil {
 		return err
 	}

@@ -8,10 +8,10 @@ import (
 
 	"github.com/Alisher24/CarSharing/backend/internal/auth"
 	"github.com/Alisher24/CarSharing/backend/internal/events"
-	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
+	"github.com/Alisher24/CarSharing/backend/internal/rentals"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
-	"github.com/Alisher24/CarSharing/backend/internal/simulation"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -29,50 +29,79 @@ var ErrScenarioVehicleInUse = errors.New(
 // model of every vehicle it puts back is dropped with it, so the next reading of the fleet begins from
 // the reserves and the position the restoration installed rather than from what a previous ride made
 // of them.
-func Restore(ctx context.Context, pool *pgxpool.Pool, models *simulation.Store) error {
-	restoration := restorer{store: store{pool: pool}, users: auth.NewUserStore(pool), models: models}
-	return database.InTransaction(ctx, pool, restoration.restore)
+func Restore(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	stores RestoreStores,
+) error {
+	scenario := scenarioVehicles()
+	accounts, err := scenarioAccounts(ctx, stores.Users, scenario)
+	if err != nil {
+		return err
+	}
+	restoration := restorer{
+		pool:          pool,
+		stores:        stores,
+		accounts:      accounts,
+		scenarioUsers: scenarioUserIDs(scenario, accounts),
+	}
+	return rentals.WithScenarioRowsLocked(
+		ctx,
+		pool,
+		identifiersOf(scenario),
+		restoration.scenarioUsers,
+		func(txCtx context.Context, tx pgx.Tx) error {
+			return restoration.restore(txCtx, tx, scenario)
+		},
+	)
 }
 
 type restorer struct {
-	store  store
-	users  *auth.UserStore
-	models *simulation.Store
+	pool          *pgxpool.Pool
+	stores        RestoreStores
+	accounts      map[string]uuid.UUID
+	scenarioUsers []uuid.UUID
 }
 
-func (r restorer) restore(ctx context.Context) error {
-	scenario := scenarioVehicles()
+func (r restorer) restore(ctx context.Context, tx pgx.Tx, scenario []Vehicle) error {
 	vehicleIDs := identifiersOf(scenario)
 
-	// The vehicles are locked before anything is read, so a rental created while this runs either
-	// finishes before the conflict check sees it or waits until the restoration has committed.
-	if err := r.store.lockScenarioVehicles(ctx, vehicleIDs); err != nil {
+	if err := r.refuseVehiclesRentedByPeople(ctx, tx, vehicleIDs); err != nil {
 		return err
 	}
-	if err := r.refuseVehiclesRentedByPeople(ctx, scenario, vehicleIDs); err != nil {
+	if err := r.stores.Rentals.DeleteScenarioRentals(
+		ctx,
+		tx,
+		vehicleIDs,
+		preparedRentalIDs(scenario),
+	); err != nil {
 		return err
 	}
-	if err := r.store.deleteScenarioRentals(ctx, vehicleIDs, preparedRentalIDs(scenario)); err != nil {
-		return err
-	}
-	signals, err := r.restoreVehicles(ctx, scenario)
+	signals, err := r.restoreVehicles(ctx, tx, scenario)
 	if err != nil {
 		return err
 	}
-	rentals, err := r.restoreRentals(ctx, scenario)
+	rentalSignals, err := r.restoreRentals(ctx, tx, scenario)
 	if err != nil {
 		return err
 	}
-	if err = r.models.Forget(ctx, vehicleIDs); err != nil {
+	if err = r.stores.Models.Forget(ctx, vehicleIDs); err != nil {
 		return err
 	}
-	return events.Record(ctx, r.store.pool, append(signals, rentals...)...)
+	return events.Record(ctx, r.pool, append(signals, rentalSignals...)...)
 }
 
 func (r restorer) refuseVehiclesRentedByPeople(
-	ctx context.Context, scenario []Vehicle, vehicleIDs []string,
+	ctx context.Context,
+	tx pgx.Tx,
+	vehicleIDs []string,
 ) error {
-	inUse, err := r.store.vehiclesRentedByPeople(ctx, vehicleIDs, scenarioAddressesOf(scenario))
+	inUse, err := r.stores.Rentals.VehiclesRentedByPeople(
+		ctx,
+		tx,
+		vehicleIDs,
+		r.scenarioUsers,
+	)
 	if err != nil {
 		return err
 	}
@@ -85,10 +114,14 @@ func (r restorer) refuseVehiclesRentedByPeople(
 // restoreVehicles puts every scenario vehicle back and states the public change each one is, because
 // a restoration that nobody was told about would leave every connected map showing the state the
 // previous person left behind.
-func (r restorer) restoreVehicles(ctx context.Context, scenario []Vehicle) ([]events.Signal, error) {
+func (r restorer) restoreVehicles(
+	ctx context.Context,
+	tx pgx.Tx,
+	scenario []Vehicle,
+) ([]events.Signal, error) {
 	signals := make([]events.Signal, 0, len(scenario))
 	for _, vehicle := range scenario {
-		version, err := r.store.restoreVehicle(ctx, vehicle)
+		version, err := r.stores.Fleet.Restore(ctx, tx, vehicle.installed())
 		if err != nil {
 			return nil, err
 		}
@@ -102,18 +135,23 @@ func (r restorer) restoreVehicles(ctx context.Context, scenario []Vehicle) ([]ev
 }
 
 // restoreRentals puts the prepared rentals back and states the private change each holder is told.
-func (r restorer) restoreRentals(ctx context.Context, scenario []Vehicle) ([]events.Signal, error) {
+func (r restorer) restoreRentals(
+	ctx context.Context,
+	tx pgx.Tx,
+	scenario []Vehicle,
+) ([]events.Signal, error) {
 	zone, tariff := Zone(), Tariff()
 	var signals []events.Signal
 	for _, vehicle := range scenario {
 		if vehicle.HeldBy == stage.NotHeld {
 			continue
 		}
-		owner, err := r.scenarioAccount(ctx, vehicle.ScenarioAccount)
-		if err != nil {
-			return nil, err
-		}
-		version, err := r.store.restoreRental(ctx, vehicle.preparedRental(owner, tariff.ID, zone.ID))
+		owner := r.accounts[vehicle.ScenarioAccount]
+		version, err := r.stores.Rentals.RestorePrepared(
+			ctx,
+			tx,
+			vehicle.preparedRental(owner, tariff.ID, zone.ID),
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -125,18 +163,6 @@ func (r restorer) restoreRentals(ctx context.Context, scenario []Vehicle) ([]eve
 		})
 	}
 	return signals, nil
-}
-
-func (r restorer) scenarioAccount(ctx context.Context, address string) (uuid.UUID, error) {
-	email, err := auth.ParseEmail(address)
-	if err != nil {
-		return uuid.UUID{}, err
-	}
-	user, _, err := r.users.ByEmail(ctx, email)
-	if err != nil {
-		return uuid.UUID{}, fmt.Errorf("scenario account %s is missing; seed first: %w", address, err)
-	}
-	return user.ID, nil
 }
 
 // scenarioVehicles are the vehicles the command puts back: every vehicle the demonstration declares.
@@ -181,4 +207,32 @@ func scenarioAddressesOf(vehicles []Vehicle) []string {
 		}
 	}
 	return addresses
+}
+
+func scenarioAccounts(
+	ctx context.Context,
+	users *auth.UserStore,
+	vehicles []Vehicle,
+) (map[string]uuid.UUID, error) {
+	accounts := make(map[string]uuid.UUID)
+	for _, address := range scenarioAddressesOf(vehicles) {
+		email, err := auth.ParseEmail(address)
+		if err != nil {
+			return nil, err
+		}
+		user, _, err := users.ByEmail(ctx, email)
+		if err != nil {
+			return nil, fmt.Errorf("scenario account %s is missing; seed first: %w", address, err)
+		}
+		accounts[address] = user.ID
+	}
+	return accounts, nil
+}
+
+func scenarioUserIDs(vehicles []Vehicle, accounts map[string]uuid.UUID) []uuid.UUID {
+	identifiers := make([]uuid.UUID, 0, len(accounts))
+	for _, address := range scenarioAddressesOf(vehicles) {
+		identifiers = append(identifiers, accounts[address])
+	}
+	return identifiers
 }

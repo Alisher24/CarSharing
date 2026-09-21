@@ -13,7 +13,7 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 	"github.com/Alisher24/CarSharing/backend/internal/simulation"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5"
 )
 
 // DemoActionKind is one set-to-value change a demonstration may make. The spelling is the one the
@@ -117,8 +117,8 @@ func (s *Service) ApplyDemo(ctx context.Context, command DemoCommand) (Answered,
 	}
 	return s.answer(ctx, idempotency.ForInstallation(), command.Attempt,
 		s.demoParticipants(command),
-		func(ctx context.Context, moment time.Time) (Outcome, error) {
-			return s.demoWithin(ctx, moment, command)
+		func(ctx context.Context, tx pgx.Tx, moment time.Time) (Outcome, error) {
+			return s.demoWithin(ctx, tx, moment, command)
 		})
 }
 
@@ -158,19 +158,25 @@ func (s *Service) demoParticipants(command DemoCommand) func(context.Context) (p
 }
 
 func (s *Service) demoWithin(
-	ctx context.Context, moment time.Time, command DemoCommand,
+	ctx context.Context,
+	tx pgx.Tx,
+	moment time.Time,
+	command DemoCommand,
 ) (Outcome, error) {
 	if command.Kind == SetNextPaymentOutcome {
 		return s.setPaymentOutcome(ctx, moment, command)
 	}
-	return s.setVehicleState(ctx, moment, command)
+	return s.setVehicleState(ctx, tx, moment, command)
 }
 
 // setVehicleState applies a change to what a vehicle is or where it stands. Every kind begins the same
 // way: the vehicle is read, its model is brought to the moment of the command, and the rental that
 // holds it is read again as the model left it.
 func (s *Service) setVehicleState(
-	ctx context.Context, moment time.Time, command DemoCommand,
+	ctx context.Context,
+	tx pgx.Tx,
+	moment time.Time,
+	command DemoCommand,
 ) (Outcome, error) {
 	vehicle, err := s.vehicles.SimulatedVehicle(ctx, command.VehicleID)
 	if errors.Is(err, fleet.ErrVehicleNotFound) {
@@ -183,7 +189,7 @@ func (s *Service) setVehicleState(
 	if err != nil {
 		return Outcome{}, err
 	}
-	reconciled, err := s.reconcileRead(ctx, moment, vehicle, held)
+	reconciled, err := s.reconcileRead(ctx, tx, moment, vehicle, held)
 	if err != nil {
 		return Outcome{}, err
 	}
@@ -212,7 +218,7 @@ func (s *Service) setVehicleState(
 	if err = s.models.Save(ctx, vehicle.ID, changed); err != nil {
 		return Outcome{}, err
 	}
-	if err = s.publishVehicleState(ctx, vehicle, changed, command); err != nil {
+	if err = s.publishVehicleState(ctx, tx, vehicle, changed, command); err != nil {
 		return Outcome{}, err
 	}
 	return Outcome{Moment: moment}, nil
@@ -271,15 +277,18 @@ func changeVehicle(
 // vehicle that has just been unlinked therefore keeps the position and the reserve a client already
 // had, and the reading of it ages out of freshness on the ordinary rule.
 func (s *Service) publishVehicleState(
-	ctx context.Context, vehicle fleet.SimulatedVehicle, state simulation.State, command DemoCommand,
+	ctx context.Context,
+	tx pgx.Tx,
+	vehicle fleet.SimulatedVehicle,
+	state simulation.State,
+	command DemoCommand,
 ) error {
-	connectivity, serviceRequired := pendingVehicleFlags(vehicle, command)
-	version, err := publishDemoChange(ctx, s.pool, vehicle.ID, connectivity, serviceRequired)
+	version, err := s.vehicles.PublishChange(ctx, tx, vehicle.ID, pendingVehicleChange(command))
 	if err != nil {
 		return err
 	}
 	if confirming(vehicle, command) {
-		if err = confirmModel(ctx, s.pool, vehicle.ID, state); err != nil {
+		if err = s.vehicles.Confirm(ctx, tx, confirmedVehicleState(vehicle.ID, state)); err != nil {
 			return err
 		}
 	}
@@ -290,19 +299,31 @@ func (s *Service) publishVehicleState(
 	})
 }
 
-// pendingVehicleFlags is what a command states about a vehicle beyond its model: whether it is linked
+// pendingVehicleChange is what a command states about a vehicle beyond its model: whether it is linked
 // and whether it is out of service. A flag the command does not speak about is absent, which the
 // statement reads as "leave it as it is".
-func pendingVehicleFlags(vehicle fleet.SimulatedVehicle, command DemoCommand) (any, any) {
-	var connectivity any
+func pendingVehicleChange(command DemoCommand) fleet.VehicleChange {
+	var change fleet.VehicleChange
 	if command.Kind == SetTelemetryState {
-		connectivity = command.Online
+		change.Connected = &command.Online
+		change.Reporting = &command.Online
 	}
-	var serviceRequired any
 	if command.Kind == MarkServiced {
-		serviceRequired = false
+		serviceRequired := false
+		change.ServiceRequired = &serviceRequired
 	}
-	return connectivity, serviceRequired
+	return change
+}
+
+func confirmedVehicleState(vehicleID string, state simulation.State) fleet.Confirmation {
+	confirmation := fleet.Confirmation{VehicleID: vehicleID, Position: state.Position}
+	for _, source := range state.Sources {
+		confirmation.Sources = append(confirmation.Sources, fleet.EnergySource{
+			Kind:      source.Kind,
+			Remaining: source.Remaining(),
+		})
+	}
+	return confirmation
 }
 
 // confirming reports whether the vehicle confirms what it does after this command. Linking a vehicle
@@ -334,11 +355,6 @@ func (s *Service) setPaymentOutcome(
 	}
 	return Outcome{Rental: target, Moment: moment}, nil
 }
-
-const recordPaymentDemandStatement = `
-INSERT INTO demo_payment_outcomes (rental_id, outcome, set_at)
-VALUES ($1, $2, $3)
-ON CONFLICT (rental_id) DO UPDATE SET outcome = EXCLUDED.outcome, set_at = EXCLUDED.set_at`
 
 // carriesSource reports whether the powertrain of a vehicle moves it on this kind of source. A source
 // the profile does not carry cannot be refilled, because nothing would ever spend it.
@@ -429,58 +445,4 @@ func serviced(state simulation.State) simulation.State {
 	state.Sources = sources
 	state.Depleted = false
 	return state
-}
-
-// The statements a demonstration command uses to publish what it changed. A confirmation states where
-// the vehicle stands and what it holds at one moment, which is why the moment is read from the
-// database rather than taken from the command.
-const (
-	publishDemoChangeStatement = `
-UPDATE vehicles
-SET version = version + 1,
-    connected = coalesce($2::boolean, connected),
-    reporting = coalesce($2::boolean, reporting),
-    service_required = coalesce($3::boolean, service_required)
-WHERE id = $1
-RETURNING version`
-
-	confirmPositionStatement = `
-UPDATE vehicle_telemetry
-SET position = ST_SetSRID(ST_MakePoint($2, $3), $4),
-    confirmed_at = clock_timestamp()
-WHERE vehicle_id = $1`
-
-	confirmSourceStatement = `
-UPDATE vehicle_energy_sources
-SET remaining = $3::numeric
-WHERE vehicle_id = $1 AND source_kind = $2`
-)
-
-func publishDemoChange(
-	ctx context.Context, pool *pgxpool.Pool, vehicleID string, connectivity, serviceRequired any,
-) (int64, error) {
-	var version int64
-	err := database.QuerierFrom(ctx, pool).QueryRow(ctx, publishDemoChangeStatement,
-		vehicleID, connectivity, serviceRequired).Scan(&version)
-	return version, err
-}
-
-// confirmModel publishes what the model holds and where it stands as the vehicle's confirmed reading.
-// It is what restores the difference between a vehicle that is linked and one that is not: a vehicle
-// this runs for has said where it is, and one it does not keeps the reading it last confirmed.
-func confirmModel(
-	ctx context.Context, pool *pgxpool.Pool, vehicleID string, state simulation.State,
-) error {
-	querier := database.QuerierFrom(ctx, pool)
-	if _, err := querier.Exec(ctx, confirmPositionStatement,
-		vehicleID, state.Position.Longitude, state.Position.Latitude, fleet.WGS84SRID); err != nil {
-		return err
-	}
-	for _, source := range state.Sources {
-		if _, err := querier.Exec(ctx, confirmSourceStatement,
-			vehicleID, string(source.Kind), source.Remaining().Decimal()); err != nil {
-			return err
-		}
-	}
-	return nil
 }

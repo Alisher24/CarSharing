@@ -8,6 +8,7 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/events"
 	"github.com/Alisher24/CarSharing/backend/internal/invoices"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -62,7 +63,7 @@ func (p *RentalPayment) Attempt(ctx context.Context, invoiceID string) (PaymentR
 	var result PaymentResult
 	err := transact(ctx, p.pool,
 		paymentParticipants(p.pool, invoiceID),
-		func(txCtx context.Context, moment time.Time) error {
+		func(txCtx context.Context, _ pgx.Tx, moment time.Time) error {
 			attempted, err := p.attemptWithin(txCtx, moment, invoiceID)
 			if err != nil {
 				return err

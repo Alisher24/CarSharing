@@ -2,7 +2,9 @@ package rentals
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -16,8 +18,28 @@ type Deadlines struct {
 	warning *warning
 }
 
-func NewDeadlines(pool *pgxpool.Pool) *Deadlines {
-	return &Deadlines{expiry: newExpiry(pool), warning: newWarning(pool)}
+// NewDeadlines assembles the reservation deadline pass from its required record owners.
+func NewDeadlines(
+	pool *pgxpool.Pool,
+	vehicles *fleet.Store,
+	warnings WarningOperations,
+) (*Deadlines, error) {
+	for _, dependency := range []struct {
+		name     string
+		supplied bool
+	}{
+		{"database pool", pool != nil},
+		{"vehicle records", vehicles != nil},
+		{"reservation warning operations", warnings.complete()},
+	} {
+		if !dependency.supplied {
+			return nil, fmt.Errorf("%w: %s", ErrIncompleteModule, dependency.name)
+		}
+	}
+	return &Deadlines{
+		expiry:  newExpiry(pool, vehicles, warnings),
+		warning: newWarning(pool, warnings),
+	}, nil
 }
 
 // Due runs one pass and reports how many reservations it moved: the ones it released and the ones it

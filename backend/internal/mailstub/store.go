@@ -38,6 +38,15 @@ type Store struct{ pool *pgxpool.Pool }
 
 func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 
+const countMessagesStatement = `SELECT count(*) FROM mailstub.messages`
+
+// Ready reports whether the mailbox schema is usable. Counting keeps an empty box ready while still
+// reaching the record the process owns.
+func (s *Store) Ready(ctx context.Context) error {
+	var stored int64
+	return database.QuerierFrom(ctx, s.pool).QueryRow(ctx, countMessagesStatement).Scan(&stored)
+}
+
 // messageFields is the shape every read of a letter answers with. One declaration keeps the read of
 // one letter and the read of a page from drifting apart.
 const messageFields = `

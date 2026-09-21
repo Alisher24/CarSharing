@@ -67,35 +67,6 @@ type RidePage struct {
 // operation that serves it cannot disagree about it.
 const RidePageSize = 20
 
-// ridePageSelection walks one account's finished rides from a position, newest first. The join to the
-// invoice is an outer one so that a ride nothing was written for still reaches the reader, which
-// reports it: an inner join would drop that ride from the history without anybody noticing.
-//
-// A page that starts at the newest ride states no position: the comparison is then against the last
-// moment there can be, where every stored one is below it, and the identifier it is compared with
-// second never has to decide anything.
-const ridePageSelection = `
-SELECT rental.id,
-       rental.started_at,
-       rental.ended_at,
-       rental.completion_reason,
-       rental.exhausted_sources,
-       vehicle.id,
-       vehicle.model,
-       vehicle.powertrain_type,
-       invoice.id
-FROM rentals rental
-JOIN vehicles vehicle ON vehicle.id = rental.vehicle_id
-LEFT JOIN invoices invoice ON invoice.rental_id = rental.id
-WHERE rental.user_id = $1
-  AND rental.stage = 'completed'
-  AND rental.started_at IS NOT NULL
-  AND (rental.ended_at, rental.id) <
-      (COALESCE($2::timestamptz, 'infinity'::timestamptz),
-       COALESCE($3::uuid, '00000000-0000-0000-0000-000000000000'::uuid))
-ORDER BY rental.ended_at DESC, rental.id DESC
-LIMIT $4`
-
 // Rides answers one page of the caller's own finished rides, newest first. The owner is the account
 // the caller signed in as rather than anything the request carries, so no page can name another
 // account's rides.

@@ -13,8 +13,12 @@ import (
 
 	"github.com/Alisher24/CarSharing/backend/internal/auth"
 	"github.com/Alisher24/CarSharing/backend/internal/demo"
+	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/config"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
+	"github.com/Alisher24/CarSharing/backend/internal/rentals"
+	"github.com/Alisher24/CarSharing/backend/internal/tariffs"
+	"github.com/Alisher24/CarSharing/backend/internal/zones"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -63,10 +67,30 @@ func run() error {
 	}
 	defer pool.Close()
 
-	if err = recordSeedSet(ctx, pool); err != nil {
+	return install(ctx, pool, cfg)
+}
+
+func install(ctx context.Context, pool *pgxpool.Pool, cfg config.Config) error {
+	if err := recordSeedSet(ctx, pool); err != nil {
 		return err
 	}
-	if err = demo.Seed(ctx, pool, auth.NewPasswordHasher(cfg.Argon2), cfg.DemoUserPassword); err != nil {
+	stores, err := demo.NewSeedStores(
+		auth.NewUserStore(pool),
+		fleet.NewStore(pool),
+		rentals.NewStore(pool),
+		tariffs.NewStore(pool),
+		zones.NewStore(pool),
+	)
+	if err != nil {
+		return err
+	}
+	if err = demo.Seed(
+		ctx,
+		pool,
+		stores,
+		auth.NewPasswordHasher(cfg.Argon2),
+		cfg.DemoUserPassword,
+	); err != nil {
 		return err
 	}
 

@@ -1,18 +1,14 @@
 package rentals
 
 import (
-	"context"
 	"errors"
 	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/completion"
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
-	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 	"github.com/Alisher24/CarSharing/backend/internal/tariffs"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // ErrRentalNotFound reports an identifier no rental of this account carries.
@@ -58,160 +54,4 @@ type Rental struct {
 // mode moment and a progress.
 func (r Rental) Riding() bool {
 	return (r.Stage == stage.Active || r.Stage == stage.Paused) && r.ModeStartedAt != nil
-}
-
-// rentalFields is the shape every rental read and every rental transition returns. One declaration
-// keeps a rental read by identifier, by owner or by vehicle, and a rental returned by a transition,
-// from drifting apart.
-const rentalFields = `
-    id,
-    user_id,
-    vehicle_id,
-    zone_id,
-    stage,
-    version,
-    reserved_at,
-    expires_at,
-    started_at,
-    ended_at,
-    completion_reason,
-    exhausted_sources,
-    mode_started_at,
-    tariff_id,
-    tariff_currency,
-    tariff_billing_policy,
-    tariff_driving_rate_tyiyn_per_started_minute,
-    tariff_paused_rate_tyiyn_per_started_minute,
-    tariff_version`
-
-const rentalColumns = `
-SELECT` + rentalFields + `
-FROM rentals`
-
-const (
-	rentalByIDSelection = rentalColumns + `
-WHERE id = $1`
-
-	userLiveRentalSelection = rentalColumns + `
-WHERE user_id = $1 AND ended_at IS NULL`
-
-	vehicleLiveRentalSelection = rentalColumns + `
-WHERE vehicle_id = $1 AND ended_at IS NULL`
-
-	liveRentalsSelection = rentalColumns + `
-WHERE ended_at IS NULL
-ORDER BY vehicle_id`
-)
-
-// rentalByID reads one rental by its identifier, whatever account it belongs to.
-func rentalByID(ctx context.Context, pool *pgxpool.Pool, id string) (Rental, error) {
-	return readRental(ctx, pool, rentalByIDSelection, id)
-}
-
-// rentalByIDFor reads one rental the account owns. A rental of another account is reported as
-// absent, so a caller cannot use the answer to learn that somebody else's rental exists.
-func rentalByIDFor(
-	ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID, id string,
-) (Rental, error) {
-	found, err := readRental(ctx, pool, rentalByIDSelection, id)
-	if err != nil {
-		return Rental{}, err
-	}
-	if found.UserID != userID {
-		return Rental{}, ErrRentalNotFound
-	}
-	return found, nil
-}
-
-// liveRentalOf reads the one rental that still holds a user or a vehicle. The partial unique indexes
-// on the table make "the one" a guarantee of the database rather than of this query.
-func liveRentalOf(
-	ctx context.Context, pool *pgxpool.Pool, selection string, identifier any,
-) (*Rental, error) {
-	found, err := readRental(ctx, pool, selection, identifier)
-	if errors.Is(err, ErrRentalNotFound) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &found, nil
-}
-
-// readRental reads at most one rental, so that a selection matching several rows is reported as a
-// failure of the caller's expectation rather than silently answering the first.
-func readRental(
-	ctx context.Context, pool *pgxpool.Pool, selection string, arguments ...any,
-) (Rental, error) {
-	rows, err := database.QuerierFrom(ctx, pool).Query(ctx, selection, arguments...)
-	if err != nil {
-		return Rental{}, err
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		if err = rows.Err(); err != nil {
-			return Rental{}, err
-		}
-		return Rental{}, ErrRentalNotFound
-	}
-	var found Rental
-	if err = scanRental(rows, &found); err != nil {
-		return Rental{}, err
-	}
-	if rows.Next() {
-		return Rental{}, errors.New("the selection matched more than one rental")
-	}
-	return found, rows.Err()
-}
-
-func scanRental(rows pgx.Rows, found *Rental) error {
-	var exhausted []string
-	err := rows.Scan(
-		&found.ID,
-		&found.UserID,
-		&found.VehicleID,
-		&found.ZoneID,
-		&found.Stage,
-		&found.Version,
-		&found.ReservedAt,
-		&found.ExpiresAt,
-		&found.StartedAt,
-		&found.EndedAt,
-		&found.CompletionReason,
-		&exhausted,
-		&found.ModeStartedAt,
-		&found.Tariff.ID,
-		&found.Tariff.Currency,
-		&found.Tariff.BillingPolicy,
-		&found.Tariff.DrivingRateTyiynPerStartedMinute,
-		&found.Tariff.PausedRateTyiynPerStartedMinute,
-		&found.Tariff.Version,
-	)
-	if err != nil {
-		return err
-	}
-	found.Exhausted = fleet.SourceKinds(exhausted)
-	return nil
-}
-
-// liveRentals reads every rental that still holds a vehicle, ordered by the vehicle it holds. It is
-// the fleet-wide reading a tick needs: the mode of every vehicle the model moves comes from the one
-// rental that holds it.
-func liveRentals(ctx context.Context, pool *pgxpool.Pool) ([]Rental, error) {
-	rows, err := database.QuerierFrom(ctx, pool).Query(ctx, liveRentalsSelection)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	held := []Rental{}
-	for rows.Next() {
-		var found Rental
-		if err = scanRental(rows, &found); err != nil {
-			return nil, err
-		}
-		held = append(held, found)
-	}
-	return held, rows.Err()
 }

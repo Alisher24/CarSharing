@@ -6,10 +6,11 @@ import (
 	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/events"
+	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
-	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -29,8 +30,8 @@ type CancelCommand struct {
 func (s *Service) Cancel(ctx context.Context, command CancelCommand) (Answered, error) {
 	return s.answer(ctx, idempotency.ForAccount(command.Caller), command.Attempt,
 		cancelParticipants(s.pool, command),
-		func(ctx context.Context, moment time.Time) (Outcome, error) {
-			return s.cancellationWithin(ctx, moment, command)
+		func(ctx context.Context, tx pgx.Tx, moment time.Time) (Outcome, error) {
+			return s.cancellationWithin(ctx, tx, moment, command)
 		})
 }
 
@@ -69,7 +70,10 @@ func cancelParticipants(pool *pgxpool.Pool, command CancelCommand) func(context.
 
 // cancellationWithin decides the command with the participants locked and the moment fixed.
 func (s *Service) cancellationWithin(
-	ctx context.Context, moment time.Time, command CancelCommand,
+	ctx context.Context,
+	tx pgx.Tx,
+	moment time.Time,
+	command CancelCommand,
 ) (Outcome, error) {
 	target, err := rentalByIDFor(ctx, s.pool, command.Caller, command.RentalID)
 	if errors.Is(err, ErrRentalNotFound) {
@@ -82,9 +86,9 @@ func (s *Service) cancellationWithin(
 	switch target.Stage {
 	case stage.Reserved:
 		if target.Overdue(moment) {
-			return s.recordExpiry(ctx, moment, target)
+			return s.recordExpiry(ctx, tx, moment, target)
 		}
-		return s.cancelWithin(ctx, moment, target)
+		return s.cancelWithin(ctx, tx, moment, target)
 	case stage.Expired:
 		return refused(moment, Refusal{Kind: ReservationExpired}), nil
 	case stage.Completed:
@@ -97,7 +101,12 @@ func (s *Service) cancellationWithin(
 // cancelWithin moves one reservation to cancelled and announces the change. A cancelled reservation
 // leaves no billable interval, no invoice and no message behind, and it does not return the day's
 // allowance: that was spent when the reservation was made.
-func (s *Service) cancelWithin(ctx context.Context, moment time.Time, target Rental) (Outcome, error) {
+func (s *Service) cancelWithin(
+	ctx context.Context,
+	tx pgx.Tx,
+	moment time.Time,
+	target Rental,
+) (Outcome, error) {
 	cancelled, moved, err := endReservationAs(ctx, s.pool, target.ID, stage.Cancelled, moment)
 	if err != nil {
 		return Outcome{}, err
@@ -110,10 +119,10 @@ func (s *Service) cancelWithin(ctx context.Context, moment time.Time, target Ren
 	}
 	// The reservation has left the reserved stage, so its warning stops being current in the same
 	// transaction that moved it.
-	if err = deactivateWarning(ctx, s.pool, cancelled); err != nil {
+	if err = deactivateWarning(ctx, s.warnings, cancelled); err != nil {
 		return Outcome{}, err
 	}
-	if err = announceEnd(ctx, s.pool, target, cancelled); err != nil {
+	if err = announceEnd(ctx, s.pool, s.vehicles, tx, target, cancelled); err != nil {
 		return Outcome{}, err
 	}
 	vehicle, err := s.vehicles.VehicleAt(ctx, target.VehicleID, moment)
@@ -126,43 +135,16 @@ func (s *Service) cancelWithin(ctx context.Context, moment time.Time, target Ren
 // recordExpiry ends a reservation whose deadline the command discovered, then answers that it has
 // run out. The transition is written before the answer and committed with it, so a client told that
 // the reservation has expired is told about a release that actually happened.
-func (s *Service) recordExpiry(ctx context.Context, moment time.Time, target Rental) (Outcome, error) {
-	if _, err := endReservation(ctx, s.pool, target); err != nil {
+func (s *Service) recordExpiry(
+	ctx context.Context,
+	tx pgx.Tx,
+	moment time.Time,
+	target Rental,
+) (Outcome, error) {
+	if _, err := endReservation(ctx, s.pool, s.vehicles, s.warnings, tx, target); err != nil {
 		return Outcome{}, err
 	}
 	return refused(moment, Refusal{Kind: ReservationExpired}), nil
-}
-
-// endReservationAs moves one reservation to a stage that releases its vehicle and returns the rental
-// as it now stands. The stage it moves from is part of the statement, so a rental another
-// transaction has already moved is left alone and reported as unmoved.
-const releaseRentalStatement = `
-UPDATE rentals
-SET stage = $3, ended_at = $4, mode_started_at = NULL, version = version + 1
-WHERE id = $1 AND stage = $2
-RETURNING` + rentalFields
-
-func endReservationAs(
-	ctx context.Context, pool *pgxpool.Pool, id string, ending stage.Stage, at time.Time,
-) (Rental, bool, error) {
-	rows, err := database.QuerierFrom(ctx, pool).Query(ctx, releaseRentalStatement,
-		id, stage.Reserved, ending, at)
-	if err != nil {
-		return Rental{}, false, err
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		if err = rows.Err(); err != nil {
-			return Rental{}, false, err
-		}
-		return Rental{}, false, nil
-	}
-	var ended Rental
-	if err = scanRental(rows, &ended); err != nil {
-		return Rental{}, false, err
-	}
-	return ended, true, rows.Err()
 }
 
 // endReservation ends one reservation at its own deadline, releases its vehicle, deactivates its
@@ -172,22 +154,36 @@ func endReservationAs(
 // The rental ends at its deadline rather than at the moment this ran, so a sweep that arrives late
 // does not extend a reservation that had already run out. A reservation another transaction has
 // already ended is left alone and reported as not ended here.
-func endReservation(ctx context.Context, pool *pgxpool.Pool, due Rental) (bool, error) {
+func endReservation(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	vehicles *fleet.Store,
+	warnings WarningOperations,
+	tx pgx.Tx,
+	due Rental,
+) (bool, error) {
 	ended, moved, err := endReservationAs(ctx, pool, due.ID, stage.Expired, due.ExpiresAt)
 	if err != nil || !moved {
 		return false, err
 	}
-	if err = deactivateWarning(ctx, pool, ended); err != nil {
+	if err = deactivateWarning(ctx, warnings, ended); err != nil {
 		return false, err
 	}
-	return true, announceEnd(ctx, pool, due, ended)
+	return true, announceEnd(ctx, pool, vehicles, tx, due, ended)
 }
 
 // announceEnd raises the version of the vehicle a rental has released and records the signals of
 // both changes, so the fleet a visitor reads and the account that held the rental hear about the
 // release in the same transaction that made it.
-func announceEnd(ctx context.Context, pool *pgxpool.Pool, held, released Rental) error {
-	version, err := publishVehicleChange(ctx, pool, held.VehicleID, false)
+func announceEnd(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	vehicles *fleet.Store,
+	tx pgx.Tx,
+	held Rental,
+	released Rental,
+) error {
+	version, err := vehicles.PublishChange(ctx, tx, held.VehicleID, fleet.VehicleChange{})
 	if err != nil {
 		return err
 	}

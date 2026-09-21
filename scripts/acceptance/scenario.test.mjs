@@ -16,6 +16,7 @@ import {
   VEHICLES_PATH,
 } from './fleet.mjs';
 import { insertRental } from './rentalrows.mjs';
+import { availableVehicle, endSuiteReservations, newAccount, newCommandKey, reserve } from './reservations.mjs';
 
 /** The rentals these cases write on behalf of a person, and remove again afterwards. */
 const COMMITTED_PERSONAL_RENTAL = '01994342-6ba7-7000-8000-000900000001';
@@ -268,9 +269,9 @@ describe('restoring beside a person who rented a scenario vehicle', () => {
     assert.equal(restored.ok, true, restored.output);
   });
 
-  // A rental created while the restoration is already running must not be overwritten either. The
-  // restoration takes the scenario vehicles for update before it reads anything, so it waits for
-  // the transaction that is creating the rental and then finds it.
+  // A rental created while the restoration is already running must not be overwritten either. Both
+  // paths wait on the same rows, then the restoration discovers the new relationship and starts its
+  // shared lock sequence again.
   test('waits for a rental being created at the same moment, and then refuses', async () => {
     restoreScenario();
     resetRateLimits();
@@ -287,6 +288,35 @@ describe('restoring beside a person who rented a scenario vehicle', () => {
       assert.equal(scalar(`SELECT count(*) FROM rentals WHERE id = '${CONCURRENT_PERSONAL_RENTAL}'`), '1');
     } finally {
       sql(`DELETE FROM rentals WHERE id = '${CONCURRENT_PERSONAL_RENTAL}'`);
+    }
+  });
+
+  test('does not deadlock an API reservation racing the restoration', async () => {
+    restoreScenario();
+    const account = await newAccount('scenario-api-race');
+    const vehicleId = await availableVehicle();
+    const reserves = () => sql(`SELECT remaining FROM vehicle_energy_sources ORDER BY vehicle_id, source_kind`);
+    const before = reserves();
+    const holdingVehicle = holdTransaction(
+      `SELECT id FROM vehicles WHERE id = '${vehicleId}' FOR UPDATE;`,
+      HELD_SECONDS,
+    );
+    await delay(REACHES_THE_LOCK_MILLISECONDS);
+
+    const reserving = reserve(vehicleId, newCommandKey(), account);
+    await delay(REACHES_THE_LOCK_MILLISECONDS);
+    const refusal = tryRestoreScenario();
+    await holdingVehicle;
+    const answer = await reserving;
+
+    try {
+      assert.equal(answer.status, 201, answer.text);
+      assert.equal(refusal.ok, false, 'the restoration overtook the API reservation');
+      assert.match(refusal.output, /restoration refused/);
+      assert.equal(reserves(), before, 'the refused restoration changed vehicle reserves');
+      assert.equal(scalar(`SELECT count(*) FROM rentals WHERE id = '${answer.json.rental.id}'`), '1');
+    } finally {
+      await endSuiteReservations();
     }
   });
 

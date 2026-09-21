@@ -75,10 +75,11 @@ func assemble(server config.MailstubServer, pool *pgxpool.Pool) (assembled, erro
 	if err != nil {
 		return assembled{}, err
 	}
+	box := mailstub.NewStore(pool)
 	internal, err := httpapi.NewMailstubInternalListener(httpapi.MailstubInternalDependencies{
 		Deliveries: acceptor,
 		Actions:    actions,
-		Probe:      httpapi.MailDatabaseProbe(pool),
+		Probe:      box.Ready,
 		Tokens: httpapi.MailstubTokens{
 			Delivery: server.DeliveryToken,
 			Demo:     server.DemoToken,
@@ -89,7 +90,7 @@ func assemble(server config.MailstubServer, pool *pgxpool.Pool) (assembled, erro
 		return assembled{}, err
 	}
 	inbox, err := httpapi.NewMailstubInboxListener(httpapi.MailstubInboxDependencies{
-		Inbox:   mailstub.NewStore(pool),
+		Inbox:   box,
 		Cursors: cursors,
 	})
 	if err != nil {

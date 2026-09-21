@@ -5,8 +5,10 @@ import (
 	"errors"
 	"time"
 
+	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -17,18 +19,19 @@ const DeadlineSweepInterval = time.Second
 
 // expiry ends reservations whose deadline has passed. It is the rentals module's own transition: the
 // catalog reads the result rather than depicting a release the database has not made.
-type expiry struct{ pool *pgxpool.Pool }
+type expiry struct {
+	pool     *pgxpool.Pool
+	vehicles *fleet.Store
+	warnings WarningOperations
+}
 
-func newExpiry(pool *pgxpool.Pool) *expiry { return &expiry{pool: pool} }
-
-// dueReservations finds the reservations that have run out. The selection takes no lock: a
-// reservation an equally timed sweep or a command has already ended since is left alone by the
-// transition below, which is where the decision is made rather than here.
-const dueReservationsStatement = `
-SELECT id
-FROM rentals
-WHERE stage = $1 AND expires_at <= clock_timestamp()
-ORDER BY expires_at, id`
+func newExpiry(
+	pool *pgxpool.Pool,
+	vehicles *fleet.Store,
+	warnings WarningOperations,
+) *expiry {
+	return &expiry{pool: pool, vehicles: vehicles, warnings: warnings}
+}
 
 func dueReservations(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
 	rows, err := database.QuerierFrom(ctx, pool).Query(ctx, dueReservationsStatement, stage.Reserved)
@@ -78,7 +81,7 @@ func (e *expiry) expireDue(ctx context.Context) (int64, error) {
 func (e *expiry) expire(ctx context.Context, id string) (bool, error) {
 	var ended bool
 	err := transact(ctx, e.pool, rentalParticipants(e.pool, id),
-		func(txCtx context.Context, moment time.Time) error {
+		func(txCtx context.Context, tx pgx.Tx, moment time.Time) error {
 			due, err := rentalByID(txCtx, e.pool, id)
 			if errors.Is(err, ErrRentalNotFound) {
 				return nil
@@ -89,7 +92,7 @@ func (e *expiry) expire(ctx context.Context, id string) (bool, error) {
 			if !due.Overdue(moment) {
 				return nil
 			}
-			ended, err = endReservation(txCtx, e.pool, due)
+			ended, err = endReservation(txCtx, e.pool, e.vehicles, e.warnings, tx, due)
 			return err
 		})
 	return ended, err
@@ -103,7 +106,14 @@ func (e *expiry) expire(ctx context.Context, id string) (bool, error) {
 // release is therefore committed with that decision, and a domain refusal does not undo it, which is
 // what lets another account take a vehicle the fleet has not swept yet.
 func liveRentalAt(
-	ctx context.Context, pool *pgxpool.Pool, moment time.Time, selection string, identifier any,
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	vehicles *fleet.Store,
+	warnings WarningOperations,
+	tx pgx.Tx,
+	moment time.Time,
+	selection string,
+	identifier any,
 ) (*Rental, error) {
 	held, err := liveRentalOf(ctx, pool, selection, identifier)
 	if err != nil || held == nil {
@@ -112,7 +122,7 @@ func liveRentalAt(
 	if !held.Overdue(moment) {
 		return held, nil
 	}
-	if _, err = endReservation(ctx, pool, *held); err != nil {
+	if _, err = endReservation(ctx, pool, vehicles, warnings, tx, *held); err != nil {
 		return nil, err
 	}
 	return nil, nil

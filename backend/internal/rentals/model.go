@@ -8,6 +8,7 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 	"github.com/Alisher24/CarSharing/backend/internal/simulation"
+	"github.com/jackc/pgx/v5"
 )
 
 // Reconciled is what bringing the model of one vehicle to a moment decided.
@@ -35,7 +36,11 @@ type ReconciledVehicle struct {
 // A vehicle this installation does not publish a simulated reading for — one no route was placed on,
 // or one that has never confirmed a position — is left exactly as it is rather than guessed at.
 func (s *Service) reconcileVehicle(
-	ctx context.Context, moment time.Time, vehicleID string, held *Rental,
+	ctx context.Context,
+	tx pgx.Tx,
+	moment time.Time,
+	vehicleID string,
+	held *Rental,
 ) (Reconciled, error) {
 	vehicle, err := s.vehicles.SimulatedVehicle(ctx, vehicleID)
 	if errors.Is(err, fleet.ErrVehicleNotFound) {
@@ -44,13 +49,17 @@ func (s *Service) reconcileVehicle(
 	if err != nil {
 		return Reconciled{}, err
 	}
-	return s.reconcileRead(ctx, moment, vehicle, held)
+	return s.reconcileRead(ctx, tx, moment, vehicle, held)
 }
 
 // reconcileFleet brings every vehicle the model travels to a moment, in the order the fleet is read.
 // The rentals are read once for the whole fleet, because the mode of every vehicle comes from the one
 // rental that holds it and the transaction already holds those rows.
-func (s *Service) reconcileFleet(ctx context.Context, moment time.Time) ([]ReconciledVehicle, error) {
+func (s *Service) reconcileFleet(
+	ctx context.Context,
+	tx pgx.Tx,
+	moment time.Time,
+) ([]ReconciledVehicle, error) {
 	vehicles, err := s.vehicles.Simulated(ctx)
 	if err != nil {
 		return nil, err
@@ -66,7 +75,7 @@ func (s *Service) reconcileFleet(ctx context.Context, moment time.Time) ([]Recon
 
 	outcomes := make([]ReconciledVehicle, 0, len(vehicles))
 	for _, vehicle := range vehicles {
-		outcome, err := s.reconcileRead(ctx, moment, vehicle, holders[vehicle.ID])
+		outcome, err := s.reconcileRead(ctx, tx, moment, vehicle, holders[vehicle.ID])
 		if err != nil {
 			return nil, err
 		}
@@ -80,7 +89,11 @@ func (s *Service) reconcileFleet(ctx context.Context, moment time.Time) ([]Recon
 // window since then in the mode the vehicle is in, saves what it reached, and ends the ride if the
 // sources ran out.
 func (s *Service) reconcileRead(
-	ctx context.Context, moment time.Time, vehicle fleet.SimulatedVehicle, held *Rental,
+	ctx context.Context,
+	tx pgx.Tx,
+	moment time.Time,
+	vehicle fleet.SimulatedVehicle,
+	held *Rental,
 ) (Reconciled, error) {
 	state, stored, err := s.restore(ctx, moment, vehicle)
 	if err != nil {
@@ -118,7 +131,7 @@ func (s *Service) reconcileRead(
 		// still, which only a reserve that was already empty can do.
 		return Reconciled{Moved: spent}, nil
 	}
-	if _, err = s.endRide(ctx, moment, *held, ending); err != nil {
+	if _, err = s.endRide(ctx, tx, moment, *held, ending); err != nil {
 		return Reconciled{}, err
 	}
 	return Reconciled{Ended: held, Moved: true}, nil

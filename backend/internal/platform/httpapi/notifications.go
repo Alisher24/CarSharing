@@ -6,7 +6,6 @@ import (
 
 	"github.com/Alisher24/CarSharing/backend/internal/notifications"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/cursor"
-	"github.com/Alisher24/CarSharing/backend/internal/rentals"
 	"github.com/google/uuid"
 )
 
@@ -17,7 +16,7 @@ import (
 type Notifications interface {
 	Collection(
 		ctx context.Context, caller uuid.UUID, after *notifications.Position, limit int,
-	) (rentals.NotificationPage, error)
+	) (notifications.Collection, error)
 
 	MarkRead(ctx context.Context, owner uuid.UUID, id string) (notifications.Result, error)
 }

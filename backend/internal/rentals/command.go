@@ -10,11 +10,11 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
 	"github.com/Alisher24/CarSharing/backend/internal/invoices"
-	"github.com/Alisher24/CarSharing/backend/internal/notifications"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/simulation"
 	"github.com/Alisher24/CarSharing/backend/internal/tariffs"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -166,11 +166,12 @@ type Service struct {
 	prices   *tariffs.Store
 	results  *idempotency.Store
 
-	// invoices records what a finished ride cost and completions reports it to the account that
+	// invoices records what a finished ride cost and recordCompletion reports it to the account that
 	// rode. Both are reached inside the transaction that ends the ride, so neither can describe an
 	// ending that was rolled back.
-	invoices    *invoices.Store
-	completions *notifications.Completer
+	invoices         *invoices.Store
+	warnings         WarningOperations
+	recordCompletion RecordCompletion
 
 	// models is the simulated state of the fleet. A command reaches it inside its own transaction,
 	// so the model a command advances is advanced with the change it makes rather than beside it.
@@ -184,7 +185,8 @@ func NewService(
 	vehicles *fleet.Store,
 	prices *tariffs.Store,
 	issued *invoices.Store,
-	completions *notifications.Completer,
+	warnings WarningOperations,
+	recordCompletion RecordCompletion,
 	models *simulation.Store,
 ) (*Service, error) {
 	for _, required := range []struct {
@@ -195,7 +197,8 @@ func NewService(
 		{"vehicle catalog", vehicles != nil},
 		{"price lists", prices != nil},
 		{"invoice records", issued != nil},
-		{"completion reports", completions != nil},
+		{"reservation warning operations", warnings.complete()},
+		{"completion reports", recordCompletion != nil},
 		{"simulated state", models != nil},
 	} {
 		if !required.supplied {
@@ -203,13 +206,14 @@ func NewService(
 		}
 	}
 	return &Service{
-		pool:        pool,
-		vehicles:    vehicles,
-		prices:      prices,
-		results:     idempotency.NewStore(pool),
-		invoices:    issued,
-		completions: completions,
-		models:      models,
+		pool:             pool,
+		vehicles:         vehicles,
+		prices:           prices,
+		results:          idempotency.NewStore(pool),
+		invoices:         issued,
+		warnings:         warnings,
+		recordCompletion: recordCompletion,
+		models:           models,
 	}, nil
 }
 
@@ -224,6 +228,22 @@ type participants struct {
 	users    []uuid.UUID
 	vehicles []string
 	rentals  []string
+}
+
+type participantLock struct {
+	name        string
+	statement   string
+	identifiers any
+	empty       bool
+}
+
+// locks is the single declaration of the row-lock order shared by every rental transaction.
+func (p participants) locks() []participantLock {
+	return []participantLock{
+		{name: "users", statement: lockUsersStatement, identifiers: p.users, empty: len(p.users) == 0},
+		{name: "vehicles", statement: lockVehiclesStatement, identifiers: p.vehicles, empty: len(p.vehicles) == 0},
+		{name: "rentals", statement: lockRentalsStatement, identifiers: p.rentals, empty: len(p.rentals) == 0},
+	}
 }
 
 // sameRows reports whether two plans describe the same rows. The reads that produce them are
@@ -246,20 +266,6 @@ func sameOrder[T comparable](left, right []T) bool {
 	return true
 }
 
-// The order every rental transaction locks in: accounts, then vehicles, then rentals. A transaction
-// that took them in another order could wait for one another for ever, so the command, the read of
-// what is current and the expiry sweep all come through here.
-const (
-	lockUsersStatement    = `SELECT id FROM users WHERE id = ANY($1) ORDER BY id FOR UPDATE`
-	lockVehiclesStatement = `SELECT id FROM vehicles WHERE id = ANY($1) ORDER BY id FOR UPDATE`
-	lockRentalsStatement  = `SELECT id FROM rentals WHERE id = ANY($1) ORDER BY id FOR UPDATE`
-)
-
-// momentStatement reads the one moment a transaction acts on. It is read after the locks rather
-// than at the start of the transaction, because a wait for a lock can outlast the moment the
-// request arrived, and a deadline computed from the arrival would be wrong by the wait.
-const momentStatement = `SELECT clock_timestamp()`
-
 // maxTransactionAttempts bounds how many times one command starts over. A transaction that keeps
 // meeting a new participant is refused rather than retried for ever, and the refusal is repeatable:
 // the client may send the same command again.
@@ -278,16 +284,16 @@ func transact(
 	ctx context.Context,
 	pool *pgxpool.Pool,
 	discover func(context.Context) (participants, error),
-	work func(context.Context, time.Time) error,
+	work func(context.Context, pgx.Tx, time.Time) error,
 ) error {
 	var last error
 	for attempt := 1; attempt <= maxTransactionAttempts; attempt++ {
-		last = database.InTransaction(ctx, pool, func(txCtx context.Context) error {
+		last = database.InTransactionWithHandle(ctx, pool, func(txCtx context.Context, tx pgx.Tx) error {
 			planned, err := discover(txCtx)
 			if err != nil {
 				return err
 			}
-			if err = lock(txCtx, pool, planned); err != nil {
+			if err = lock(txCtx, tx, planned); err != nil {
 				return err
 			}
 			locked, err := discover(txCtx)
@@ -297,11 +303,11 @@ func transact(
 			if !planned.sameRows(locked) {
 				return errParticipantsChanged
 			}
-			moment, err := readMoment(txCtx, pool)
+			moment, err := readMoment(txCtx, tx)
 			if err != nil {
 				return err
 			}
-			return work(txCtx, moment)
+			return work(txCtx, tx, moment)
 		})
 		if last == nil {
 			return nil
@@ -335,29 +341,21 @@ func rentalParticipants(pool *pgxpool.Pool, id string) func(context.Context) (pa
 
 // lock takes the planned rows in the shared order. Each selection is ordered, so two transactions
 // reaching the same set wait in the same sequence.
-func lock(ctx context.Context, pool *pgxpool.Pool, planned participants) error {
-	querier := database.QuerierFrom(ctx, pool)
-	if len(planned.users) > 0 {
-		if _, err := querier.Exec(ctx, lockUsersStatement, planned.users); err != nil {
-			return err
+func lock(ctx context.Context, tx pgx.Tx, planned participants) error {
+	for _, target := range planned.locks() {
+		if target.empty {
+			continue
 		}
-	}
-	if len(planned.vehicles) > 0 {
-		if _, err := querier.Exec(ctx, lockVehiclesStatement, planned.vehicles); err != nil {
-			return err
-		}
-	}
-	if len(planned.rentals) > 0 {
-		if _, err := querier.Exec(ctx, lockRentalsStatement, planned.rentals); err != nil {
+		if _, err := tx.Exec(ctx, target.statement, target.identifiers); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func readMoment(ctx context.Context, pool *pgxpool.Pool) (time.Time, error) {
+func readMoment(ctx context.Context, tx pgx.Tx) (time.Time, error) {
 	var moment time.Time
-	err := database.QuerierFrom(ctx, pool).QueryRow(ctx, momentStatement).Scan(&moment)
+	err := tx.QueryRow(ctx, momentStatement).Scan(&moment)
 	return moment, err
 }
 

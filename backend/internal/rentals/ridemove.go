@@ -3,12 +3,8 @@ package rentals
 import (
 	"context"
 	"errors"
-	"time"
 
-	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
-	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // StartRideCommand starts the ride of one reservation.
@@ -73,53 +69,6 @@ func (s *Service) FinishRide(ctx context.Context, command FinishCommand) (Answer
 // PayInvoice settles the caller's invoice for a ride that has ended.
 func (s *Service) PayInvoice(ctx context.Context, command PayCommand) (Answered, error) {
 	return s.Pay(ctx, command)
-}
-
-// startRideStatement moves one reservation into a ride that is driving. The ride begins at the moment
-// the transaction fixed, which becomes both the moment the ride started and the moment its first mode
-// began: they are one instant, so they are one value.
-const startRideStatement = `
-UPDATE rentals
-SET stage = $2, started_at = $3, mode_started_at = $3, version = version + 1
-WHERE id = $1 AND stage = $4
-RETURNING` + rentalFields
-
-// changeModeStatement moves a ride between its two modes. It changes when the current mode began and
-// nothing else: the ride started once and keeps the moment it did.
-const changeModeStatement = `
-UPDATE rentals
-SET stage = $2, mode_started_at = $3, version = version + 1
-WHERE id = $1 AND stage = $4
-RETURNING` + rentalFields
-
-// moveRide writes one transition of a ride and returns the rental as it now stands. The stage it moves
-// from is part of the statement, so a rental another transaction has already moved is reported as
-// unmoved rather than written over, and no interval is opened for it.
-func moveRide(
-	ctx context.Context, pool *pgxpool.Pool, target Rental, transition rideTransition, moment time.Time,
-) (Rental, error) {
-	statement := changeModeStatement
-	if transition.from == stage.Reserved {
-		statement = startRideStatement
-	}
-	rows, err := database.QuerierFrom(ctx, pool).Query(ctx, statement,
-		target.ID, transition.to, moment, transition.from)
-	if err != nil {
-		return Rental{}, err
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		if err = rows.Err(); err != nil {
-			return Rental{}, err
-		}
-		return Rental{}, errRentalMoved
-	}
-	var moved Rental
-	if err = scanRental(rows, &moved); err != nil {
-		return Rental{}, err
-	}
-	return moved, rows.Err()
 }
 
 // errRentalMoved reports that the rental no longer stood in the stage the command was judged against.

@@ -8,7 +8,6 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/notifications"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/cursor"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/timestamp"
-	"github.com/Alisher24/CarSharing/backend/internal/rentals"
 	"github.com/google/uuid"
 )
 
@@ -66,7 +65,7 @@ func (h notificationHandlers) positionOf(
 // last or empty page carries no cursor: there is nothing to continue from, and the contract
 // publishes that as a null cursor.
 func (h notificationHandlers) collectionBody(
-	page rentals.NotificationPage, owner uuid.UUID, limit int,
+	page notifications.Collection, owner uuid.UUID, limit int,
 ) (servedapi.NotificationCollection, error) {
 	items := make([]servedapi.Notification, 0, len(page.Notifications))
 	for _, stored := range page.Notifications {

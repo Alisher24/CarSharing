@@ -119,8 +119,8 @@ type fixedNotifications struct{}
 
 func (fixedNotifications) Collection(
 	context.Context, uuid.UUID, *notifications.Position, int,
-) (rentals.NotificationPage, error) {
-	return rentals.NotificationPage{}, nil
+) (notifications.Collection, error) {
+	return notifications.Collection{}, nil
 }
 
 func (fixedNotifications) MarkRead(

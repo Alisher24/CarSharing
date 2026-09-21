@@ -9,10 +9,9 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/events"
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
-	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
-	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 	"github.com/Alisher24/CarSharing/backend/internal/tariffs"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -32,8 +31,8 @@ type ReserveCommand struct {
 func (s *Service) Reserve(ctx context.Context, command ReserveCommand) (Answered, error) {
 	return s.answer(ctx, idempotency.ForAccount(command.Caller), command.Attempt,
 		reserveParticipants(s.pool, command),
-		func(ctx context.Context, moment time.Time) (Outcome, error) {
-			return s.reservationWithin(ctx, moment, command)
+		func(ctx context.Context, tx pgx.Tx, moment time.Time) (Outcome, error) {
+			return s.reservationWithin(ctx, tx, moment, command)
 		})
 }
 
@@ -46,10 +45,10 @@ func (s *Service) answer(
 	owner idempotency.Owner,
 	attempt Attempt,
 	discover func(context.Context) (participants, error),
-	decide func(context.Context, time.Time) (Outcome, error),
+	decide func(context.Context, pgx.Tx, time.Time) (Outcome, error),
 ) (Answered, error) {
 	var answered Answered
-	err := transact(ctx, s.pool, discover, func(txCtx context.Context, moment time.Time) error {
+	err := transact(ctx, s.pool, discover, func(txCtx context.Context, tx pgx.Tx, moment time.Time) error {
 		claim, err := s.results.Claim(txCtx, owner, attempt.Key, attempt.Fingerprint)
 		if err != nil {
 			return err
@@ -59,7 +58,7 @@ func (s *Service) answer(
 			return nil
 		}
 
-		decided, err := decide(txCtx, moment)
+		decided, err := decide(txCtx, tx, moment)
 		if err != nil {
 			return err
 		}
@@ -107,58 +106,118 @@ func reserveParticipants(pool *pgxpool.Pool, command ReserveCommand) func(contex
 
 // reservationWithin decides the command with the participants locked and the moment fixed.
 func (s *Service) reservationWithin(
-	ctx context.Context, moment time.Time, command ReserveCommand,
+	ctx context.Context,
+	tx pgx.Tx,
+	moment time.Time,
+	command ReserveCommand,
 ) (Outcome, error) {
-	// An overdue reservation is not live for any path, so the two this command meets are released
-	// before anything is judged: the one holding the caller and the one holding the chosen vehicle.
-	// Both releases happen in this transaction, which is what lets a vehicle the fleet has not swept
-	// yet be taken here and now — and why the refusals below do not undo them, because the answer is
-	// committed with the transitions it describes.
-	held, err := liveRentalAt(ctx, s.pool, moment, userLiveRentalSelection, command.Caller)
+	held, err := s.releaseOverdueReservations(ctx, tx, moment, command)
 	if err != nil {
 		return Outcome{}, err
 	}
-	if _, err = liveRentalAt(ctx, s.pool, moment, vehicleLiveRentalSelection, command.VehicleID); err != nil {
-		return Outcome{}, err
-	}
-
-	// A debt is judged first of what remains, before the day's allowance and before anything about the
-	// vehicle is read: it is the one condition here a person clears themselves, and a client told
-	// about an allowance or a vehicle instead would be offered nothing it could do about the answer.
-	owed, err := s.invoices.Outstanding(ctx, command.Caller)
+	refusal, err := s.accountReservationRefusal(ctx, command.Caller, moment, held)
 	if err != nil {
 		return Outcome{}, err
 	}
-	if owed {
-		return refused(moment, Refusal{Kind: OutstandingInvoice}), nil
-	}
-
-	// The day's allowance is judged next, because it is what a person must be told about: their own
-	// live rental is a consequence of having spent it, and a client told only about the rental would
-	// offer the command again as soon as that rental ended.
-	limit, err := readDailyLimit(ctx, s.pool, command.Caller, moment)
-	if err != nil {
-		return Outcome{}, err
-	}
-	if !limit.Available {
-		return refused(moment, Refusal{Kind: DailyLimitReached, Limit: limit}), nil
-	}
-
-	if held != nil {
-		return refused(moment, Refusal{Kind: ActiveRentalExists}), nil
-	}
-
-	vehicle, err := s.vehicles.VehicleAt(ctx, command.VehicleID, moment)
-	if errors.Is(err, fleet.ErrVehicleNotFound) {
-		return refused(moment, Refusal{Kind: VehicleUnavailable}), nil
-	}
-	if err != nil {
-		return Outcome{}, err
-	}
-	if refusal := vehicleRefusal(vehicle, moment); refusal != nil {
+	if refusal != nil {
 		return refused(moment, *refusal), nil
 	}
+	vehicle, refusal, err := s.reservableVehicle(ctx, command.VehicleID, moment)
+	if err != nil {
+		return Outcome{}, err
+	}
+	if refusal != nil {
+		return refused(moment, *refusal), nil
+	}
+	return s.createReservation(ctx, tx, moment, command, vehicle)
+}
 
+// releaseOverdueReservations updates both live relationships before the command judges either one.
+func (s *Service) releaseOverdueReservations(
+	ctx context.Context,
+	tx pgx.Tx,
+	moment time.Time,
+	command ReserveCommand,
+) (*Rental, error) {
+	held, err := liveRentalAt(
+		ctx,
+		s.pool,
+		s.vehicles,
+		s.warnings,
+		tx,
+		moment,
+		userLiveRentalSelection,
+		command.Caller,
+	)
+	if err != nil {
+		return nil, err
+	}
+	_, err = liveRentalAt(
+		ctx,
+		s.pool,
+		s.vehicles,
+		s.warnings,
+		tx,
+		moment,
+		vehicleLiveRentalSelection,
+		command.VehicleID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return held, nil
+}
+
+// accountReservationRefusal applies account rules in the order useful to the caller.
+func (s *Service) accountReservationRefusal(
+	ctx context.Context,
+	caller uuid.UUID,
+	moment time.Time,
+	held *Rental,
+) (*Refusal, error) {
+	owed, err := s.invoices.Outstanding(ctx, caller)
+	if err != nil {
+		return nil, err
+	}
+	if owed {
+		return &Refusal{Kind: OutstandingInvoice}, nil
+	}
+
+	limit, err := readDailyLimit(ctx, s.pool, caller, moment)
+	if err != nil {
+		return nil, err
+	}
+	if !limit.Available {
+		return &Refusal{Kind: DailyLimitReached, Limit: limit}, nil
+	}
+	if held != nil {
+		return &Refusal{Kind: ActiveRentalExists}, nil
+	}
+	return nil, nil
+}
+
+func (s *Service) reservableVehicle(
+	ctx context.Context,
+	vehicleID string,
+	moment time.Time,
+) (fleet.Vehicle, *Refusal, error) {
+	vehicle, err := s.vehicles.VehicleAt(ctx, vehicleID, moment)
+	if errors.Is(err, fleet.ErrVehicleNotFound) {
+		return fleet.Vehicle{}, &Refusal{Kind: VehicleUnavailable}, nil
+	}
+	if err != nil {
+		return fleet.Vehicle{}, nil, err
+	}
+	return vehicle, vehicleRefusal(vehicle, moment), nil
+}
+
+func (s *Service) createReservation(
+	ctx context.Context,
+	tx pgx.Tx,
+	moment time.Time,
+	command ReserveCommand,
+	vehicle fleet.Vehicle,
+) (Outcome, error) {
 	price, err := s.prices.InForce(ctx)
 	if err != nil {
 		return Outcome{}, err
@@ -174,13 +233,10 @@ func (s *Service) reservationWithin(
 		return Outcome{}, err
 	}
 	if !reserved {
-		// The indexes that allow one live rental of a vehicle and one of a person refused the row
-		// after the locks were taken. Which of the two it was decides the answer, and nothing was
-		// written either way.
 		return refused(moment, contendedRefusal(ctx, s.pool, command)), nil
 	}
 
-	raised, err := publishVehicleChange(ctx, s.pool, command.VehicleID, false)
+	raised, err := s.vehicles.PublishChange(ctx, tx, command.VehicleID, fleet.VehicleChange{})
 	if err != nil {
 		return Outcome{}, err
 	}
@@ -191,8 +247,6 @@ func (s *Service) reservationWithin(
 	); err != nil {
 		return Outcome{}, err
 	}
-	// The vehicle is read again rather than reused: the answer publishes it as it now stands, held
-	// by the reservation that has just been made and carrying the version that change reached.
 	published, err := s.vehicles.VehicleAt(ctx, command.VehicleID, moment)
 	if err != nil {
 		return Outcome{}, err
@@ -237,67 +291,6 @@ type reservation struct {
 	zoneID    string
 	price     tariffs.Tariff
 	moment    time.Time
-}
-
-// insertReservation writes the reservation together with the conditions it was made under and the
-// deadline it was given. The deadline is written once, here: repeating the command, restarting the
-// process and reading the rental again all report the moment that was stored.
-//
-// The insert does not fail on a conflicting live rental: it writes nothing and says so, because a
-// refusal must leave this transaction alive long enough to store the refusal itself.
-const insertReservationStatement = `
-INSERT INTO rentals (
-    id,
-    user_id,
-    vehicle_id,
-    stage,
-    tariff_id,
-    zone_id,
-    reserved_at,
-    expires_at,
-    tariff_currency,
-    tariff_billing_policy,
-    tariff_driving_rate_tyiyn_per_started_minute,
-    tariff_paused_rate_tyiyn_per_started_minute,
-    tariff_version,
-    version
-)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-ON CONFLICT DO NOTHING`
-
-const reservationInitialVersion = 1
-
-func insertReservation(
-	ctx context.Context, pool *pgxpool.Pool, about reservation,
-) (Rental, bool, error) {
-	id, err := uuid.NewV7()
-	if err != nil {
-		return Rental{}, false, err
-	}
-	written, err := database.QuerierFrom(ctx, pool).Exec(ctx, insertReservationStatement,
-		id.String(),
-		about.userID,
-		about.vehicleID,
-		stage.Reserved,
-		about.price.ID,
-		about.zoneID,
-		about.moment,
-		about.moment.Add(ReservationLifetime),
-		about.price.Currency,
-		about.price.BillingPolicy,
-		about.price.DrivingRateTyiynPerStartedMinute,
-		about.price.PausedRateTyiynPerStartedMinute,
-		about.price.Version,
-		reservationInitialVersion,
-	)
-	if err != nil {
-		return Rental{}, false, err
-	}
-	if written.RowsAffected() == 0 {
-		return Rental{}, false, nil
-	}
-	rental, err := rentalByID(ctx, pool, id.String())
-	return rental, err == nil, err
 }
 
 // distinctUsers orders the accounts of a transaction the way the lock statement reads them.

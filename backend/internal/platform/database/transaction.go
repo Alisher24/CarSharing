@@ -42,6 +42,19 @@ func QuerierFrom(ctx context.Context, pool *pgxpool.Pool) Querier {
 // InTransaction runs work in one transaction, rolling back on error or panic. The commit error is
 // returned to the caller, because work that cannot commit has not happened.
 func InTransaction(ctx context.Context, pool *pgxpool.Pool, work func(context.Context) error) error {
+	return InTransactionWithHandle(ctx, pool, func(txCtx context.Context, _ pgx.Tx) error {
+		return work(txCtx)
+	})
+}
+
+// InTransactionWithHandle runs work in one transaction and also hands the transaction to operations
+// whose owner requires it explicitly. The context continues to carry the same handle for stores that
+// participate further down the call.
+func InTransactionWithHandle(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	work func(context.Context, pgx.Tx) error,
+) error {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -49,7 +62,7 @@ func InTransaction(ctx context.Context, pool *pgxpool.Pool, work func(context.Co
 	// Rollback after a successful commit is a no-op, so one deferred call covers the error path,
 	// the panic path and the ordinary path alike.
 	defer func() { _ = tx.Rollback(ctx) }()
-	if err = work(WithTransaction(ctx, tx)); err != nil {
+	if err = work(WithTransaction(ctx, tx), tx); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

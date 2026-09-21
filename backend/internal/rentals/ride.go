@@ -6,9 +6,11 @@ import (
 	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/events"
+	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -48,8 +50,8 @@ func (s *Service) Ride(ctx context.Context, kind RideKind, command RideCommand) 
 	}
 	return s.answer(ctx, idempotency.ForAccount(command.Caller), command.Attempt,
 		rideParticipants(s.pool, command),
-		func(ctx context.Context, moment time.Time) (Outcome, error) {
-			return s.rideWithin(ctx, transition, moment, command)
+		func(ctx context.Context, tx pgx.Tx, moment time.Time) (Outcome, error) {
+			return s.rideWithin(ctx, tx, transition, moment, command)
 		})
 }
 
@@ -95,36 +97,13 @@ func rideParticipants(pool *pgxpool.Pool, command RideCommand) func(context.Cont
 
 // rideWithin decides one ride command with the participants locked and the moment fixed.
 func (s *Service) rideWithin(
-	ctx context.Context, transition rideTransition, moment time.Time, command RideCommand,
+	ctx context.Context,
+	tx pgx.Tx,
+	transition rideTransition,
+	moment time.Time,
+	command RideCommand,
 ) (Outcome, error) {
-	target, err := rentalByIDFor(ctx, s.pool, command.Caller, command.RentalID)
-	if errors.Is(err, ErrRentalNotFound) {
-		return refused(moment, Refusal{Kind: RentalNotFound}), nil
-	}
-	if err != nil {
-		return Outcome{}, err
-	}
-
-	// The model is brought to the moment of the command before the transition is judged. A ride whose
-	// sources have run out is over whatever this command was going to do with it, which is what keeps
-	// a pause or a continuation from reopening a ride the model has already ended.
-	if _, err = s.reconcileVehicle(ctx, moment, target.VehicleID, &target); err != nil {
-		return Outcome{}, err
-	}
-	target, err = rentalByIDFor(ctx, s.pool, command.Caller, command.RentalID)
-	if err != nil {
-		return Outcome{}, err
-	}
-
-	// A reservation whose deadline has been reached is not a reservation for any path, so the command
-	// records the expiry and answers it rather than starting a ride its own deadline forbids.
-	if target.Overdue(moment) {
-		return s.recordExpiry(ctx, moment, target)
-	}
-	if refusal := rideRefusal(target, transition); refusal != nil {
-		return refused(moment, *refusal), nil
-	}
-	refusal, err := s.ridePrepared(ctx, transition, moment, target)
+	target, refusal, err := s.reconciledRideTarget(ctx, tx, moment, command)
 	if err != nil {
 		return Outcome{}, err
 	}
@@ -132,6 +111,52 @@ func (s *Service) rideWithin(
 		return refused(moment, *refusal), nil
 	}
 
+	if target.Overdue(moment) {
+		return s.recordExpiry(ctx, tx, moment, target)
+	}
+	if refusal := rideRefusal(target, transition); refusal != nil {
+		return refused(moment, *refusal), nil
+	}
+	refusal, err = s.ridePrepared(ctx, transition, moment, target)
+	if err != nil {
+		return Outcome{}, err
+	}
+	if refusal != nil {
+		return refused(moment, *refusal), nil
+	}
+	return s.movePreparedRide(ctx, tx, transition, moment, target)
+}
+
+func (s *Service) reconciledRideTarget(
+	ctx context.Context,
+	tx pgx.Tx,
+	moment time.Time,
+	command RideCommand,
+) (Rental, *Refusal, error) {
+	target, err := rentalByIDFor(ctx, s.pool, command.Caller, command.RentalID)
+	if errors.Is(err, ErrRentalNotFound) {
+		return Rental{}, &Refusal{Kind: RentalNotFound}, nil
+	}
+	if err != nil {
+		return Rental{}, nil, err
+	}
+	if _, err = s.reconcileVehicle(ctx, tx, moment, target.VehicleID, &target); err != nil {
+		return Rental{}, nil, err
+	}
+	target, err = rentalByIDFor(ctx, s.pool, command.Caller, command.RentalID)
+	if err != nil {
+		return Rental{}, nil, err
+	}
+	return target, nil, nil
+}
+
+func (s *Service) movePreparedRide(
+	ctx context.Context,
+	tx pgx.Tx,
+	transition rideTransition,
+	moment time.Time,
+	target Rental,
+) (Outcome, error) {
 	moved, err := moveRide(ctx, s.pool, target, transition, moment)
 	if err != nil {
 		return Outcome{}, err
@@ -139,12 +164,10 @@ func (s *Service) rideWithin(
 	if err = beginSegment(ctx, s.pool, target.ID, transition.mode, moment); err != nil {
 		return Outcome{}, err
 	}
-	// The rental has left the reserved stage, so the warning of its reservation stops being current in
-	// the transaction that moved it, as it does when the reservation is cancelled or runs out.
-	if err = deactivateWarning(ctx, s.pool, moved); err != nil {
+	if err = deactivateWarning(ctx, s.warnings, moved); err != nil {
 		return Outcome{}, err
 	}
-	if err = announceRide(ctx, s.pool, moved); err != nil {
+	if err = announceRide(ctx, s.pool, s.vehicles, tx, moved); err != nil {
 		return Outcome{}, err
 	}
 	vehicle, err := s.vehicles.VehicleAt(ctx, moved.VehicleID, moment)
@@ -197,8 +220,14 @@ func (s *Service) ridePrepared(
 // announceRide raises the version of the vehicle the ride holds and records the signals of both
 // changes, so the catalog a visitor reads and the account that holds the ride hear about the mode it
 // entered in the transaction that entered it.
-func announceRide(ctx context.Context, pool *pgxpool.Pool, moved Rental) error {
-	version, err := publishVehicleChange(ctx, pool, moved.VehicleID, false)
+func announceRide(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	vehicles *fleet.Store,
+	tx pgx.Tx,
+	moved Rental,
+) error {
+	version, err := vehicles.PublishChange(ctx, tx, moved.VehicleID, fleet.VehicleChange{})
 	if err != nil {
 		return err
 	}
