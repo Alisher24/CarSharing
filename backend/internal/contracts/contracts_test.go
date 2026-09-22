@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	internalapi "github.com/Alisher24/CarSharing/backend/internal/contracts/internalapi"
 	mailstubapi "github.com/Alisher24/CarSharing/backend/internal/contracts/mailstubapi"
 	publicapi "github.com/Alisher24/CarSharing/backend/internal/contracts/publicapi"
+	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
@@ -25,48 +27,29 @@ const (
 	commandID = "11111111-1111-4111-8111-111111111111"
 )
 
-var contracts = map[string]struct {
-	load       func() (*openapi3.T, error)
-	operations []string
-}{
-	"public": {publicapi.GetSwagger, []string{
-		"GET /api/v1/health/live",
-		"GET /api/v1/health/ready",
-		"POST /api/v1/auth/register",
-		"POST /api/v1/auth/login",
-		"POST /api/v1/auth/logout",
-		"GET /api/v1/me",
-		"GET /api/v1/me/current",
-		"GET /api/v1/vehicles",
-		"GET /api/v1/vehicles/{id}",
-		"GET /api/v1/zones",
-		"GET /api/v1/tariffs",
-		"POST /api/v1/reservations",
-		"POST /api/v1/reservations/{id}/cancel",
-		"POST /api/v1/reservations/{id}/start",
-		"POST /api/v1/rides/{id}/pause",
-		"POST /api/v1/rides/{id}/resume",
-		"POST /api/v1/rides/{id}/finish",
-		"GET /api/v1/me/rides",
-		"GET /api/v1/me/invoices",
-		"GET /api/v1/me/invoices/{id}",
-		"POST /api/v1/me/invoices/{id}/pay",
-		"GET /api/v1/me/notifications",
-		"POST /api/v1/me/notifications/{id}/read",
-		"GET /api/v1/events",
-		"GET /api/v1/me/events",
-	}},
-	"internal": {internalapi.GetSwagger, []string{
-		"POST /internal/v1/simulation/tick",
-		"POST /internal/v1/demo/actions",
-	}},
-	"mailstub": {mailstubapi.GetSwagger, []string{
-		"POST /internal/v1/messages",
-		"POST /internal/v1/demo/actions",
-		"GET /api/v1/messages",
-		"GET /api/v1/messages/{id}",
-	}},
+// The manifest naming every contract, which sits at the repository root three directories above this
+// package and is the same file the generators read.
+const manifestPath = "../../../openapi/contracts.json"
+
+// contract is one entry of the manifest: the name its source, its generator configuration and its
+// bundle carry, and whether the production boundary registers its operations.
+type contract struct {
+	Name               string `json:"name"`
+	ServedByProduction bool   `json:"servedByProduction"`
 }
+
+// generatedPackages names the projection each contract is checked through, so these checks read the
+// document the processes serve rather than the sources a second time. The manifest names the
+// contracts and this map says how to read one, and the test below holds the two sets together.
+var generatedPackages = map[string]func() (*openapi3.T, error){
+	"public":   publicapi.GetSwagger,
+	"internal": internalapi.GetSwagger,
+	"mailstub": mailstubapi.GetSwagger,
+}
+
+// servedPackage is the projection of the contract the production boundary serves: the operations
+// `openapi/served.codegen.yaml` lists, and the ones this repository promises are routed.
+var servedPackage = servedapi.GetSwagger
 
 // The OpenAPI version every source contract declares, how a status key from a contract is read,
 // and the first status that makes a response an error rather than a result.
@@ -81,23 +64,77 @@ const (
 // each of them whether or not the operation itself does.
 var transportHeaders = []string{"X-Request-ID", "Cache-Control"}
 
+// implementationStatus is the status an operation the production boundary serves declares.
+const implementationStatus = "implemented"
+
 // implementationStatuses is the closed set an operation may declare. An operation is routed only
 // once it is marked implemented, and the router tests hold the two halves to each other: a planned
 // operation must answer as an unknown resource, an implemented one must not.
-var implementationStatuses = map[any]bool{"implemented": true, "planned": true}
+var implementationStatuses = map[any]bool{implementationStatus: true, "planned": true}
 
 func TestContractInventorySchemasAndExamples(t *testing.T) {
-	for name, contract := range contracts {
-		t.Run(name, func(t *testing.T) {
-			spec, err := contract.load()
-			if err != nil {
-				t.Fatal(err)
-			}
-			checkContractDocument(t, spec)
-			operations := checkContractOperations(t, spec)
-			checkOperationInventory(t, operations, contract.operations)
-			checkComponentSchemas(t, spec)
-		})
+	declared := declaredContracts(t)
+	for _, one := range declared {
+		load, generated := generatedPackages[one.Name]
+		if !generated {
+			t.Fatalf("the manifest declares the contract %s and no generated package reads it", one.Name)
+		}
+		t.Run(one.Name, func(t *testing.T) { checkContract(t, load, one.ServedByProduction) })
+	}
+	for name := range generatedPackages {
+		if !declares(declared, name) {
+			t.Errorf("the package of the contract %s is read and the manifest does not declare it", name)
+		}
+	}
+}
+
+// declaredContracts reads the manifest, which is the one declaration of the contract set the
+// generators project and these checks hold to their declarations.
+func declaredContracts(t *testing.T) []contract {
+	t.Helper()
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest struct {
+		Contracts []contract `json:"contracts"`
+	}
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	if len(manifest.Contracts) == 0 {
+		t.Fatalf("%s declares no contract", manifestPath)
+	}
+	return manifest.Contracts
+}
+
+func declares(declared []contract, name string) bool {
+	for _, one := range declared {
+		if one.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// checkContract holds one contract's document to everything this repository promises about it, and,
+// for the contract the production boundary serves, to the operations that boundary registers.
+func checkContract(t *testing.T, load func() (*openapi3.T, error), servedByProduction bool) {
+	t.Helper()
+	spec, err := load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkContractDocument(t, spec)
+	checkContractOperations(t, spec)
+	checkComponentSchemas(t, spec)
+	checkBodyLimits(t, spec)
+	if servedByProduction {
+		served, err := servedPackage()
+		if err != nil {
+			t.Fatal(err)
+		}
+		checkServedOperations(t, spec, served)
 	}
 }
 
@@ -114,21 +151,106 @@ func checkContractDocument(t *testing.T, spec *openapi3.T) {
 }
 
 // checkContractOperations walks every operation, holds it to a known implementation status and
-// checks the examples and error codes of every response it declares. It returns the inventory it
-// saw, as "METHOD /path", so the caller can compare it with the one the contract promises.
-func checkContractOperations(t *testing.T, spec *openapi3.T) []string {
+// checks the examples, error codes and shared bodies of every response it declares.
+func checkContractOperations(t *testing.T, spec *openapi3.T) {
 	t.Helper()
+	shared := sharedResponses(spec)
+	seen := sharedErrorBodies(spec)
+	for path, pathItem := range spec.Paths.Map() {
+		for method, operation := range pathItem.Operations() {
+			checkOperation(t, method, path, operation, shared, seen)
+		}
+	}
+}
+
+// sharedResponses is the set of bodies the contract declares once under components.responses, which
+// its operations reference rather than repeat.
+func sharedResponses(spec *openapi3.T) map[*openapi3.Response]bool {
+	shared := make(map[*openapi3.Response]bool, len(spec.Components.Responses))
+	for _, response := range spec.Components.Responses {
+		shared[response.Value] = true
+	}
+	return shared
+}
+
+// checkBodyLimits holds every operation that accepts a body to the one limit its surface declares: an
+// operation that states none is bounded by a constant of the process rather than by the contract, and
+// two values on one surface would mean the contract does not state the limit at all.
+func checkBodyLimits(t *testing.T, spec *openapi3.T) {
+	t.Helper()
+	limit, declared := 0.0, ""
+	for path, pathItem := range spec.Paths.Map() {
+		for method, operation := range pathItem.Operations() {
+			if operation.RequestBody == nil {
+				continue
+			}
+			value, stated := operation.Extensions["x-body-limit"].(float64)
+			if !stated {
+				t.Errorf("%s %s accepts a body and declares no x-body-limit", method, path)
+				continue
+			}
+			switch {
+			case declared == "":
+				limit, declared = value, method+" "+path
+			case value != limit:
+				t.Errorf("%s %s declares x-body-limit %v; %s declares %v", method, path, value, declared, limit)
+			}
+		}
+	}
+}
+
+// checkServedOperations holds the production boundary to the statuses the contract declares: every
+// operation marked implemented must be one the boundary registers, and every operation it registers
+// must be marked implemented. The two documents the processes serve are compared rather than the text
+// of the configuration, because the generated document spells an operation id as the Go name it
+// becomes while `openapi/served.codegen.yaml` lists it as the contract declares it.
+func checkServedOperations(t *testing.T, source, served *openapi3.T) {
+	t.Helper()
+	implemented := operationsOf(source, implementationStatus)
+	registered := operationsOf(served, "")
+	for _, operation := range difference(implemented, registered) {
+		t.Errorf("%s is implemented and the production boundary does not serve it", operation)
+	}
+	for _, operation := range difference(registered, implemented) {
+		t.Errorf("the production boundary serves %s and the contract does not mark it implemented", operation)
+	}
+}
+
+// operationsOf names every operation of a document as "METHOD /path", or only those declaring the
+// wanted status when one is given.
+func operationsOf(spec *openapi3.T, status string) []string {
 	var operations []string
 	for path, pathItem := range spec.Paths.Map() {
 		for method, operation := range pathItem.Operations() {
+			if status != "" && operation.Extensions["x-implementation-status"] != status {
+				continue
+			}
 			operations = append(operations, method+" "+path)
-			checkOperation(t, method, path, operation)
 		}
 	}
 	return operations
 }
 
-func checkOperation(t *testing.T, method, path string, operation *openapi3.Operation) {
+// difference returns the entries of want that allowed does not hold, sorted.
+func difference(want, allowed []string) []string {
+	held := make(map[string]bool, len(allowed))
+	for _, entry := range allowed {
+		held[entry] = true
+	}
+	var missing []string
+	for _, entry := range want {
+		if !held[entry] {
+			missing = append(missing, entry)
+		}
+	}
+	sort.Strings(missing)
+	return missing
+}
+
+func checkOperation(
+	t *testing.T, method, path string, operation *openapi3.Operation,
+	shared map[*openapi3.Response]bool, seen map[string]string,
+) {
 	t.Helper()
 	if !implementationStatuses[operation.Extensions["x-implementation-status"]] {
 		t.Errorf("%s %s declares no known implementation status", method, path)
@@ -138,7 +260,56 @@ func checkOperation(t *testing.T, method, path string, operation *openapi3.Opera
 	}
 	for status, response := range operation.Responses.Map() {
 		checkResponse(t, operation.OperationID, status, response.Value)
+		checkErrorBodyIsDeclaredOnce(t, method, path, status, response.Value, shared, seen)
 	}
+}
+
+// checkErrorBodyIsDeclaredOnce holds an error body two operations answer with to one declaration: the
+// second copy is the place the two come to disagree, so a shared body belongs under
+// components.responses, where the operations reference it instead of restating it.
+func checkErrorBodyIsDeclaredOnce(
+	t *testing.T, method, path, status string, response *openapi3.Response,
+	shared map[*openapi3.Response]bool, seen map[string]string,
+) {
+	t.Helper()
+	statusCode, ok := parseStatus(status)
+	if !ok || statusCode < firstErrorStatus || shared[response] {
+		return
+	}
+	declared := method + " " + path + " " + status
+	body := errorBody(response)
+	if first, repeated := seen[body]; repeated {
+		t.Errorf("%s answers with the body %s declares; declare it once under components.responses", declared, first)
+		return
+	}
+	seen[body] = declared
+}
+
+// sharedErrorBodies names every body the contract declares under components.responses, so a copy of
+// one written into an operation is reported as the second declaration it is.
+func sharedErrorBodies(spec *openapi3.T) map[string]string {
+	declared := make(map[string]string, len(spec.Components.Responses))
+	for name, response := range spec.Components.Responses {
+		declared[errorBody(response.Value)] = "components.responses " + name
+	}
+	return declared
+}
+
+// errorBody reads what an error response says: the codes it answers with and the examples it carries,
+// which together are what two operations declaring one body would come to disagree about.
+func errorBody(response *openapi3.Response) string {
+	codes, _ := json.Marshal(response.Extensions["x-error-codes"])
+	examples := map[string]any{}
+	for _, media := range response.Content {
+		for name, example := range media.Examples {
+			examples[name] = example.Value.Value
+		}
+		if media.Example != nil {
+			examples["example"] = media.Example
+		}
+	}
+	values, _ := json.Marshal(examples)
+	return string(codes) + "|" + string(values)
 }
 
 func checkResponse(t *testing.T, operationID, status string, response *openapi3.Response) {
@@ -166,19 +337,6 @@ func parseStatus(status string) (int, bool) {
 		return 0, false
 	}
 	return int(code), true
-}
-
-// checkOperationInventory holds the contract to the operations this repository promises it serves.
-// Both sides are sorted, so a contract that merely reorders its paths is not reported as a change.
-func checkOperationInventory(t *testing.T, served, promised []string) {
-	t.Helper()
-	sortedServed := append([]string(nil), served...)
-	sort.Strings(sortedServed)
-	sortedPromised := append([]string(nil), promised...)
-	sort.Strings(sortedPromised)
-	if strings.Join(sortedServed, "\n") != strings.Join(sortedPromised, "\n") {
-		t.Fatalf("operation inventory differs:\n%s", strings.Join(sortedServed, "\n"))
-	}
 }
 
 // checkComponentSchemas checks every named schema once. The schemas are visited transitively, so a
@@ -415,9 +573,9 @@ func wireFormatBoundaries() []wireFormat {
 // responses that can be saved: successes and verified domain failures of operations that carry an
 // idempotency key. Auth, validation, in-flight and technical rollback results are never saved.
 func TestReplayHeaderOnlyWhereResultsAreSaved(t *testing.T) {
-	for name, contract := range contracts {
-		t.Run(name, func(t *testing.T) {
-			spec, err := contract.load()
+	for _, one := range declaredContracts(t) {
+		t.Run(one.Name, func(t *testing.T) {
+			spec, err := generatedPackages[one.Name]()
 			if err != nil {
 				t.Fatal(err)
 			}

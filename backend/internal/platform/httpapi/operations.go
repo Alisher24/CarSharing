@@ -195,7 +195,7 @@ func startConflict(body servedapi.ApiError, headers answerHeaders) any {
 func pauseConflict(body servedapi.ApiError, headers answerHeaders) any {
 	return servedapi.PauseRental409JSONResponse{
 		Body: body,
-		Headers: servedapi.PauseRental409ResponseHeaders{
+		Headers: servedapi.RideMoveConflictResponseHeaders{
 			IdempotencyReplayed: replayedHeader(headers.replayed),
 			RetryAfter:          headers.retry(body.Code),
 		},
@@ -205,7 +205,7 @@ func pauseConflict(body servedapi.ApiError, headers answerHeaders) any {
 func resumeConflict(body servedapi.ApiError, headers answerHeaders) any {
 	return servedapi.ResumeRental409JSONResponse{
 		Body: body,
-		Headers: servedapi.ResumeRental409ResponseHeaders{
+		Headers: servedapi.RideMoveConflictResponseHeaders{
 			IdempotencyReplayed: replayedHeader(headers.replayed),
 			RetryAfter:          headers.retry(body.Code),
 		},

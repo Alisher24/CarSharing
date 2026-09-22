@@ -8,6 +8,7 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/notifications"
 	"github.com/Alisher24/CarSharing/backend/internal/outbox"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/config"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/heartbeat"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/periodic"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/retention"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals"
@@ -48,6 +49,9 @@ func work(ctx context.Context, pool *pgxpool.Pool, letters config.InternalClient
 			periodic.Run(ctx, "reservation deadlines", rentals.DeadlineSweepInterval, deadlines.Due)
 		},
 		func(ctx context.Context) { retention.Run(ctx, pool, retentionSweeps()) },
+		// The process serves nothing, so its container health check reads this mark: a worker that
+		// hangs keeps its container running, and the mark is what tells the two apart.
+		func(ctx context.Context) { heartbeat.Beat(ctx, heartbeat.Path) },
 	)
 
 	slog.Info("worker stopped")

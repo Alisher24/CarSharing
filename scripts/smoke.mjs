@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict';
-import { setTimeout as delay } from 'node:timers/promises';
-import { POSTGRES_DATABASE, POSTGRES_SERVICE, SERVICE_ORIGIN, composeWith, sql } from './service.mjs';
+import {
+  POSTGRES_DATABASE,
+  POSTGRES_SERVICE,
+  READINESS_PATH,
+  SERVICE_ORIGIN,
+  composeWith,
+  sql,
+  waitForReady,
+} from './service.mjs';
 
 const LOCAL_ORIGIN_PATTERN = /^http:\/\/(127\.0\.0\.1|localhost):\d+$/;
 const ORIGIN_ARGUMENT_INDEX = 2;
 
-const READINESS_ATTEMPTS = 60;
-const READINESS_RETRY_DELAY_MS = 1_000;
-const READINESS_REQUEST_TIMEOUT_MS = 3_000;
 const OUTAGE_REQUEST_TIMEOUT_MS = 5_000;
 
 const MIGRATION_SERVICE = 'migrate';
@@ -16,7 +20,6 @@ const SEED_SERVICE = 'seed';
 const DEMO_COMPOSE_PROFILE = 'demo';
 
 const API_PREFIX = '/api/v1';
-const READINESS_PATH = `${API_PREFIX}/health/ready`;
 const LIVENESS_PATH = `${API_PREFIX}/health/live`;
 const BOOTSTRAP_SEED = 'bootstrap-v1';
 
@@ -74,29 +77,16 @@ function assertReadinessPayload(payload) {
 }
 
 /**
- * Waits until the API reports itself ready, and returns the payload it answered with. Every attempt
- * is abandoned after READINESS_REQUEST_TIMEOUT_MS, so a service that accepts connections without
- * answering cannot hold the wait open past its deadline.
+ * Waits until the API reports itself ready and holds that answer to what the readiness operation
+ * promises: the city, the currency and the time zone of the service, and the transport headers every
+ * response carries. The wait itself is the shared one, so this check and the suites that follow it
+ * wait the same way.
  */
-async function awaitReady(origin) {
-  for (let attempt = 0; attempt < READINESS_ATTEMPTS; attempt += 1) {
-    try {
-      const response = await fetch(`${origin}${READINESS_PATH}`, {
-        signal: AbortSignal.timeout(READINESS_REQUEST_TIMEOUT_MS),
-      });
-      if (response.ok) {
-        const payload = await response.json();
-        assertReadinessPayload(payload);
-        assert.equal(response.headers.get('cache-control'), 'no-store');
-        assert.ok(response.headers.get('x-request-id'));
-        return payload;
-      }
-    } catch {
-      // Keep waiting within the bounded deadline: the stack is still starting or reconnecting.
-    }
-    await delay(READINESS_RETRY_DELAY_MS);
-  }
-  throw new Error('API did not become ready');
+async function checkReadiness(origin) {
+  const answer = await waitForReady(origin);
+  assertReadinessPayload(await answer.json());
+  assert.equal(answer.headers.get('cache-control'), 'no-store');
+  assert.ok(answer.headers.get('x-request-id'));
 }
 
 async function checkFrontendIsServed(origin) {
@@ -178,7 +168,7 @@ async function checkOutageIsReportedAndRecovered(origin) {
   } finally {
     composeWith({}, 'start', POSTGRES_SERVICE);
   }
-  await awaitReady(origin);
+  await checkReadiness(origin);
 }
 
 async function main() {
@@ -187,7 +177,7 @@ async function main() {
     throw new Error(`Smoke test accepts only a local HTTP origin, for example ${origin}`);
   }
 
-  await awaitReady(origin);
+  await checkReadiness(origin);
   await checkFrontendIsServed(origin);
   await checkUnreachablePaths(origin);
   await checkPublicCatalogIsServed(origin);

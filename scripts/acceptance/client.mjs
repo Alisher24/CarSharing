@@ -3,14 +3,8 @@
 // running service presents them rather than asserted about the code that produces them.
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
-import { SERVICE_ORIGIN, SESSION_COOKIE_NAME, compose, composeWith, sql } from '../service.mjs';
+import { SERVICE_ORIGIN, SESSION_COOKIE_NAME, compose, composeWith, sql, waitForReady } from '../service.mjs';
 
-const READINESS_ATTEMPTS = 60;
-const READINESS_RETRY_DELAY_MS = 1_000;
-const READINESS_REQUEST_TIMEOUT_MS = 3_000;
-
-const HEALTH_PREFIX = '/api/v1/health';
-const READINESS_PATH = `${HEALTH_PREFIX}/ready`;
 const AUTH_PREFIX = '/api/v1/auth';
 export const REGISTRATION_PATH = `${AUTH_PREFIX}/register`;
 export const SIGN_IN_PATH = `${AUTH_PREFIX}/login`;
@@ -32,7 +26,8 @@ const SETTLE_RETRY_DELAY_MS = 500;
 
 export const serviceOrigin = SERVICE_ORIGIN;
 
-export { compose, composeWith, sql };
+/** The stack's own helpers, re-exported so a suite reaches the assembled stack through one module. */
+export { compose, composeWith, sql, waitForReady };
 
 /** The origin the local profile allows. A suite uses it unless it is testing a refusal. */
 export const allowedOrigin = serviceOrigin;
@@ -145,22 +140,6 @@ export async function signInFromSecondDevice(email) {
     }
     await delay(BUSY_RETRY_DELAY_MS);
   }
-}
-
-/** Waits for the API to answer, so a suite started beside a restart does not race it. */
-export async function waitForReady() {
-  for (let attempt = 0; attempt < READINESS_ATTEMPTS; attempt += 1) {
-    try {
-      const response = await fetch(`${serviceOrigin}${READINESS_PATH}`, {
-        signal: AbortSignal.timeout(READINESS_REQUEST_TIMEOUT_MS),
-      });
-      if (response.ok) return;
-    } catch {
-      // Keep waiting within the bounded deadline: the stack is still starting or reconnecting.
-    }
-    await delay(READINESS_RETRY_DELAY_MS);
-  }
-  throw new Error('API did not become ready');
 }
 
 /**

@@ -44,9 +44,10 @@ Ten commands, each one process:
 - `migrate` — goose `up` or `status` under a lock and a two-minute deadline; it refuses any other word.
 - `seed` — installs the demonstration, and refuses to run outside `APP_ENV=demo`.
 - `demoscenario` — puts the prepared scenario back, and refuses to run outside `APP_ENV=demo`.
-- `healthcheck` — the container's readiness probe; it takes its port from
-  `config.HTTPAddrFromEnvironment` and its path from `httpapi.ReadyPath`, so it follows the listener
-  rather than a copy of it.
+- `healthcheck` — one probe of a container, named by the argument the service passes it: `ready` asks
+  the API in this container, taking its port from `config.HTTPAddrFromEnvironment` and its path from
+  `httpapi.ReadyPath` so it follows the listener rather than a copy of it, and `heartbeat` reads the
+  mark a process with nothing to serve leaves behind.
 - `contracts` — bundles the OpenAPI sources for the generators; build-time only, deliberately not built
   into the image.
 
@@ -144,6 +145,10 @@ it (`npm --prefix tools/openapi run generate`), never the Go file.
   all worker tasks before the process closes the pool.
 - `platform/httpserver` supplies listener bounds and shutdown for API and mailstub. `httpheader` owns
   their shared protocol names. Internal clients receive their HTTP transport from command assembly.
+- `platform/heartbeat` is how a process that serves nothing proves it is running: `Beat` writes a mark
+  to a file every `Interval` and `Fresh` reads it, so the worker's container health check — the
+  `heartbeat` probe of `cmd/healthcheck` — reports a hung process as unhealthy. Both the mark's path
+  and the interval are declared once, there.
 - Stream timing is passed by API assembly and validated when handlers are built. Stream and internal
   client timeout tests use `testing/synctest`, so their deadlines advance without wall-clock waits.
 

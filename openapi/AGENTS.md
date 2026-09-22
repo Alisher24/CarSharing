@@ -9,8 +9,11 @@ code decides a shape on its own. Repository-wide rules live in the root `AGENTS.
 From the repository root, after `npm ci`, `npm --prefix frontend ci` and `npm --prefix tools/openapi ci`:
 
 - `npm --prefix tools/openapi run generate` — rebuild every generated projection of these sources.
-- `npm --prefix tools/openapi run check` — the gate: deterministic generation, then Go, setup and
-  frontend checks. Run it before a pull request.
+- `npm --prefix tools/openapi run check` — the gate: every committed projection is digested, the
+  pipeline runs again, and a difference says the committed tree is stale. Run it before a pull request.
+  The other checks a contract edit can break — the Go tests that read the documents, `npm test` for the
+  declarations shared with the rest of the repository, and the frontend build — are steps of their own
+  elsewhere in the pipeline.
 
 An edit here is not finished until `generate` has run and the regenerated files are committed.
 
@@ -26,27 +29,40 @@ An edit here is not finished until `generate` has run and the regenerated files 
   `components/identifiers.yaml` (ResourceId, CommandId, RequestId) and `components/errors.yaml`
   (ApiError and the domain errors) hold what the three contracts share.
 
+`contracts.json` is the one declaration of the contract set: every name, which contract the production
+boundary serves, and the committed directory each projection is written into. `generate-contracts.mjs`,
+`check-contracts.mjs`, `tools/openapi/generate.mjs` and `openapi`'s own Go tests all read it, so adding
+a contract is a new `<name>.yaml` beside its `<name>.codegen.yaml` and one entry there.
+
 `*.codegen.yaml` is **not** contract: each one is an oapi-codegen configuration naming the Go package
-and output file for one projection. Adding a contract means adding both files.
+and output file for one projection.
 
 A reference to a shared schema is a relative local one —
 `$ref: ./components/common.yaml#/components/schemas/Timestamp` — and the bundler inlines them into a
 single document. Anything with a scheme or a host is refused: the build must not depend on a document
 this repository does not own.
 
+A response body more than one operation answers with is declared once under that contract's
+`components.responses` and referenced as `$ref: '#/components/responses/<Name>'`. Naming a response
+after the codes it carries keeps the name and the body saying the same thing, and the contract tests
+fail on a body two operations declare in full.
+
 ## `x-implementation-status` is the contract's honesty
 
 Every operation states `implemented` or `planned`. A planned operation is not routed and answers
 `404 RESOURCE_NOT_FOUND` exactly as an unknown path does, so writing it down costs nothing and claiming
-it works is impossible. Two consequences to keep in step:
+it works is impossible. Three consequences to keep in step:
 
 - `openapi/served.codegen.yaml` lists the operation ids the production boundary registers
-  (`include-operation-ids`). It is the served set, and it is derived from the same public source so a
-  planned operation cannot be registered by accident.
-- The Go tests hold the two halves together: `TestImplementedRoutesAreServed` requires every
-  `implemented` operation to answer, and `TestPlannedRoutesRemainAbsentFromProduction` requires every
-  `planned` one to stay an unknown resource. Flipping the status without routing the operation fails
-  the build.
+  (`include-operation-ids`), and generates `servedapi` from the same public bundle, so a planned
+  operation cannot be registered by accident.
+- The contract tests compare the two directly: every operation the source marks `implemented` must be
+  one the served document registers, and every operation it registers must be marked `implemented`.
+  Deriving the served set from the status is what makes the status the only list.
+- The router tests hold the routed surface to the same statuses: `TestImplementedRoutesAreServed`
+  requires every `implemented` operation to answer, and `TestPlannedRoutesRemainAbsentFromProduction`
+  requires every `planned` one to stay an unknown resource. Flipping the status without routing the
+  operation fails the build.
 
 ## Extensions this repository checks
 
@@ -55,8 +71,11 @@ tests enforce them:
 
 - `x-error-codes` — the error codes an operation answers with; the inventory test holds every operation
   to the ones its responses declare.
-- `x-body-limit` — the byte cap of a request body. The proxy restates 65536 as its own
-  `client_max_body_size`, because nginx cannot import this file; keep the two in step.
+- `x-body-limit` — the byte cap of a request body, declared on every operation of a surface. The tests
+  require every operation that accepts a body to declare it and every declared value on one surface to
+  be the same one, so the limit cannot drift between operations. The proxy restates the public 65536 as
+  its own `client_max_body_size`, because nginx cannot import this file; the acceptance suite keeps the
+  two in step.
 - `x-idempotency-retention-seconds` — how long an idempotent result remains repeatable. The repository
   check keeps every operation, the service retention and the browser repeat window equal.
 - `x-event-schemas` — the events a stream carries; `x-listener` — which listener of the mail stub a path

@@ -21,14 +21,17 @@ Both are built with the **repository root** as context (`build.context: .` in `c
 `COPY` source is stated from the root (`backend/go.mod`, `frontend/package.json`). A file an image needs
 is added to its Dockerfile, not by widening the context.
 
-- `backend.Dockerfile` compiles the eight runnable commands into `/out` in one stage and copies them
+- `backend.Dockerfile` compiles the nine runnable commands into `/out` in one stage and copies them
   into `/usr/local/bin/` of a `scratch` image running as `10001:10001`. Each service then picks one
   with `entrypoint:`. A new command under `backend/cmd/` must be added to the `go build` list here
   **and** given an entrypoint by the service that runs it, or that service starts into "not found".
   `cmd/contracts` is deliberately absent: it runs under `go run` while contracts are generated, never
-  in a container.
+  in a container. `cmd/healthcheck` is the exception in the other direction: it is the probe of every
+  service that has one, and its argument names which probe to run.
 - `frontend.Dockerfile` has five stages: `extractor` (the pinned `protomaps/go-pmtiles` image, taken as
-  an image rather than built from source because its module graph takes minutes to fetch), `basemap`
+  an image rather than built from source because its module graph takes minutes to fetch — its tag is
+  the `toolVersion` the frontend declares, and `tools/basemap/manifest.test.mjs` holds the two
+  together), `basemap`
   (the tools in `tools/basemap` and the declaration in the frontend — it cuts the archive, fetches the
   glyphs and the sprite, and checks what it produced), `dev` (what `compose.dev.yaml` runs with
   `frontend/src` bind-mounted), `build` (`npm run build` — typecheck, stylelint, unit tests, then
@@ -44,7 +47,10 @@ is added to its Dockerfile, not by widening the context.
 
 ## The proxy
 
-`nginx.conf` is the only service published to the host; it listens on 8080.
+The proxy is the published application: it listens on 8080, which the frontend service maps to
+`APP_PORT` on the loopback address. One other service is published, the mail stub's read-only inbox on
+8025; nothing else is. `nginx.conf` is the proxy that serves the application and closes the internal
+surface.
 
 - `/api/` is proxied to `api:8080` with `proxy_buffering off` and a 60s read timeout, because two of
   those responses are SSE streams that must arrive frame by frame. The resolver `127.0.0.11` keeps the
@@ -76,8 +82,14 @@ migration exists and cannot carry them.
 
 A service's health check is the contract its dependents wait on, so it moves with the code it probes:
 
-- `api` runs the built `/usr/local/bin/healthcheck`, which takes the port from the same setting the API
-  listens on and the path from `httpapi.ReadyPath`.
+- `api` and `mailstub` run the built `/usr/local/bin/healthcheck ready`, which takes the port from the
+  same setting the process listens on and the path from `httpapi.ReadyPath`.
+- `worker` serves nothing, so it runs `healthcheck heartbeat`: the process writes a mark to `/tmp`
+  every `heartbeat.Interval`, and the probe reports the container unhealthy once the mark is older than
+  `heartbeat.StaleAfter`. A hung worker keeps its container running, and this is what tells the two
+  apart.
 - `frontend` fetches `/api/v1/health/live`; `postgres` runs `pg_isready` as `carsharing_migrator`.
 
-Renaming a route, a binary or a port means editing the check in `compose.yaml` in the same change.
+A service that leaves a mark needs a writable `/tmp`, which is why `worker` declares the `tmpfs` the
+frontend already declares. Renaming a route, a binary, a probe or a port means editing the check in
+`compose.yaml` in the same change.

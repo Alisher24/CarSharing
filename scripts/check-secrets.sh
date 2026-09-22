@@ -1,5 +1,5 @@
 #!/bin/sh
-set -eu
+set -euo pipefail
 
 # Every path below is relative to the repository root, so establish it before reading any argument.
 cd "$(git rev-parse --show-toplevel)"

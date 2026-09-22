@@ -79,7 +79,7 @@ services:
     depends_on:
       migrate: { condition: service_completed_successfully }
     healthcheck:
-      test: [CMD, /usr/local/bin/healthcheck]
+      test: [CMD, /usr/local/bin/healthcheck, ready]
       interval: 5s
       timeout: 4s
       retries: 12
@@ -128,6 +128,15 @@ services:
     depends_on:
       migrate: { condition: service_completed_successfully }
       mailstub: { condition: service_healthy }
+    # This process serves nothing, so its probe reads the mark it writes to /tmp: a worker that hangs
+    # stops marking and is shown as unhealthy, which a running container otherwise never says.
+    tmpfs: [/tmp]
+    healthcheck:
+      test: [CMD, /usr/local/bin/healthcheck, heartbeat]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
     restart: unless-stopped
     stop_grace_period: 15s
 
@@ -156,7 +165,7 @@ services:
     depends_on:
       migrate: { condition: service_completed_successfully }
     healthcheck:
-      test: [CMD, /usr/local/bin/healthcheck]
+      test: [CMD, /usr/local/bin/healthcheck, ready]
       interval: 5s
       timeout: 4s
       retries: 12

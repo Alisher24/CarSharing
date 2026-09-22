@@ -1,6 +1,6 @@
 #!/bin/sh
 # Runs with Git Bash on Windows or sh on Linux (x86_64).
-set -eu
+set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 gitleaks_version=8.30.1

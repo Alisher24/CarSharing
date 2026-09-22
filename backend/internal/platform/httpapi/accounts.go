@@ -118,7 +118,7 @@ func (a accounts) registrationPreflight(
 		seconds := retryAfterSeconds(refusal.Wait)
 		return "", servedapi.Register429JSONResponse{
 			Body:    apiErrorBody(ctx, codeRateLimited, messageRateLimited),
-			Headers: servedapi.Register429ResponseHeaders{RetryAfter: &seconds},
+			Headers: servedapi.RateLimitedResponseHeaders{RetryAfter: &seconds},
 		}, nil
 	}
 	if err != nil {
@@ -170,7 +170,7 @@ func (a accounts) Login(
 		seconds := retryAfterSeconds(reached.Reached.Wait)
 		return servedapi.Login429JSONResponse{
 			Body:    apiErrorBody(ctx, codeRateLimited, messageRateLimited),
-			Headers: servedapi.Login429ResponseHeaders{RetryAfter: &seconds},
+			Headers: servedapi.RateLimitedResponseHeaders{RetryAfter: &seconds},
 		}, nil
 	}
 

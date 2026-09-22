@@ -3,6 +3,7 @@
 // script that happens to need them, and a changed port or database name is one edit.
 import { execFileSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
 export const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -13,6 +14,40 @@ export const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '
  * one is reached by stating it here.
  */
 export const SERVICE_ORIGIN = process.env.ACCEPTANCE_BASE ?? 'http://127.0.0.1:8080';
+
+/**
+ * The path the API answers its readiness probe on, which is where a caller waits for the stack.
+ * `httpapi.ReadyPath` declares the same path for the process that serves it.
+ */
+export const READINESS_PATH = '/api/v1/health/ready';
+
+/**
+ * How long a caller waits for that answer: the attempts, the delay between them, and the bound on one
+ * attempt, so a service that accepts a connection without answering cannot hold the wait open past
+ * its deadline. The smoke check and the suites wait the same way rather than each stating a budget.
+ */
+const READINESS_ATTEMPTS = 60;
+const READINESS_RETRY_DELAY_MS = 1_000;
+const READINESS_REQUEST_TIMEOUT_MS = 3_000;
+
+/**
+ * Waits until the API reports itself ready and returns the answer it gave, so a caller can hold the
+ * payload and the headers of that answer to what the readiness operation promises.
+ */
+export async function waitForReady(origin = SERVICE_ORIGIN) {
+  for (let attempt = 0; attempt < READINESS_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(`${origin}${READINESS_PATH}`, {
+        signal: AbortSignal.timeout(READINESS_REQUEST_TIMEOUT_MS),
+      });
+      if (response.ok) return response;
+    } catch {
+      // Keep waiting within the bounded deadline: the stack is still starting or reconnecting.
+    }
+    await delay(READINESS_RETRY_DELAY_MS);
+  }
+  throw new Error('API did not become ready');
+}
 
 /**
  * The address the mail stub publishes its inbox on, which is the loopback address of the host and the

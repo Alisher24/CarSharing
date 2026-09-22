@@ -14,6 +14,12 @@ export const MANIFEST = fileURLToPath(new URL('../../frontend/src/features/map/b
 export const RECORDS = fileURLToPath(new URL('../../.tools/basemap', import.meta.url));
 
 /**
+ * The image whose build cuts the archive, which is where the extractor the declaration pins is named
+ * as the tag and digest the build actually runs.
+ */
+export const FRONTEND_IMAGE = fileURLToPath(new URL('../../infra/frontend.Dockerfile', import.meta.url));
+
+/**
  * One file the map is drawn from besides the archive: the path it is served at, the name it is
  * written under, and the address it comes from. A font stack carries spaces in its name and `%20` in
  * the URL a browser asks for, so the two are stated separately rather than one being derived from the
