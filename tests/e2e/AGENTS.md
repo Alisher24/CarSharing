@@ -35,7 +35,10 @@ turns a slow delivery into a misleading failure.
   the words the interface uses for those controls. Two suites drive the same interface, so a control
   they both press is described once, here.
 - `scenario.mjs` is the prepared demonstration: the vehicles it holds, their identifiers read by the
-  model the interface displays, and `restoreScenario()`.
+  model the interface displays, and the change that makes one reservation expire. It declares nothing
+  the acceptance helpers already do — `restoreScenario` comes from `scripts/acceptance/fleet.mjs` and
+  the expiry is `moveDeadline`, so the transition stays the rentals module's rather than a second
+  statement of it in SQL.
 - Anything about HTTP, SSE frames or the database that a browser check also needs already exists under
   `scripts/acceptance/` (`events.mjs`, `reservations.mjs`) and `scripts/service.mjs`. Import it instead
   of writing a second probe.

@@ -1,0 +1,18 @@
+{
+  "contracts": [
+    {
+      "name": "public",
+      "servedByProduction": true,
+      "browserClient": "frontend/src/shared/api/generated",
+      "projections": ["backend/internal/contracts/publicapi"]
+    },
+    {
+      "name": "internal",
+      "projections": ["backend/internal/contracts/internalapi"]
+    },
+    {
+      "name": "mailstub",
+      "projections": ["backend/internal/contracts/mailstubapi"]
+    }
+  ]
+}

@@ -30,7 +30,7 @@ const STATUS_OK = 200;
 const STATUS_CONFLICT = 409;
 const STATUS_SERVICE_UNAVAILABLE = 503;
 
-before(waitForReady);
+before(() => waitForReady());
 
 // The suite stops services and takes the database away, so it puts all of that back and removes its
 // rows before the prepared demonstration is restored: a run that failed part way through would

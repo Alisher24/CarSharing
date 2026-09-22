@@ -8,37 +8,41 @@ Repository-wide rules live in the root `AGENTS.md`.
 
 - `npm --prefix tools/openapi ci` — install the generators.
 - `npm --prefix tools/openapi run generate` — regenerate every projection.
-- `npm --prefix tools/openapi run check` — the gate CI runs.
+- `npm --prefix tools/openapi run check` — the staleness check of the committed projections.
 
 Both scripts call `scripts/`; they are the documented spelling of the commands, not a second
-implementation. `check` reads `npm_execpath`, so it needs the root `npm ci` as well, and it builds the
-frontend, so `npm --prefix frontend ci` must have run too.
+implementation. `check` regenerates, so it needs everything generation needs: the Go toolchain, the
+frontend directory it writes the client into, and the contract tools installed here.
 
 ## What generation does
 
 `scripts/generate-contracts.mjs` is the whole pipeline, in order:
 
-1. For each of `public`, `internal` and `mailstub`: `go run ./cmd/contracts openapi/<name>.yaml
-   .tools/contracts/<name>.json` bundles the local references into one self-contained document, then
-   `go tool oapi-codegen --config openapi/<name>.codegen.yaml` writes
+1. For every contract `openapi/contracts.json` declares — `public`, `internal` and `mailstub` — `go run
+   ./cmd/contracts openapi/<name>.yaml .tools/contracts/<name>.json` bundles the local references into
+   one self-contained document, then `go tool oapi-codegen --config openapi/<name>.codegen.yaml` writes
    `backend/internal/contracts/<name>api/generated.go` — models, a chi server and its strict interface.
-2. The served interface is generated from that same `public.json` with `openapi/served.codegen.yaml`,
-   which registers only the operation ids the production boundary serves.
-3. `tools/openapi/generate.mjs` runs `@hey-api/openapi-ts` over `public.json` into
-   `frontend/src/shared/api/generated`: types, SDK and the fetch client, including the SSE runtime the
-   streams use. It changes directory into `frontend/` because the generator resolves the tsconfig the
-   output is compiled with from the package it writes into.
+2. The served interface is generated from the bundle of the contract the manifest marks as served, with
+   `openapi/served.codegen.yaml`, which registers only the operation ids the production boundary serves.
+3. `tools/openapi/generate.mjs` runs `@hey-api/openapi-ts` over that contract's bundle into the frontend
+   directory the manifest names: types, SDK and the fetch client, including the SSE runtime the streams
+   use. It changes directory into `frontend/` because the generator resolves the tsconfig the output is
+   compiled with from the package it writes into.
 
 Intermediate bundles live in the git-ignored `.tools/contracts/`. Generation is deterministic, which is
 what makes the check below possible.
 
 ## What the check does
 
-`scripts/check-contracts.mjs` digests every file of the five committed generated directories, regenerates
-them all, and compares — a difference means the committed projection is stale. It then runs Go tests and
-vet, the setup and published-port tests and the frontend build. It stops there: regenerating leaves the
-new files on disk for review and commit rather than reverting them, so a failure that says "stale" is an
-instruction to look at the diff.
+`scripts/check-contracts.mjs` digests every committed directory the manifest projects into, regenerates
+them all, and compares — a difference means the committed projection is stale. It also holds each
+manifest entry to the output its generator configuration names, so a projection cannot be declared
+somewhere nobody regenerates. It stops there: regenerating leaves the new files on disk for review and
+commit rather than reverting them, so a failure that says "stale" is an instruction to look at the diff.
+
+Everything else a contract edit can break is a step of its own, named where it lives: the Go tests that
+read the generated documents in the backend job, `npm test` for the declarations the repository holds in
+step, the frontend build in the frontend job, and the assembled stack in the integration job.
 
 ## Pins
 
@@ -59,7 +63,8 @@ change — never a silent dependency update.
   reformatted only by regenerating them.
 - Which local schemas become which Go names, and which operation ids the production boundary registers,
   are decided in `openapi/*.codegen.yaml`, not in this directory.
-- A new contract needs an entry in `CONTRACT_NAMES` in `scripts/generate-contracts.mjs`, its
-  `openapi/<name>.codegen.yaml`, and — if a browser client consumes it — a second `createClient` call in
-  `generate.mjs`. Its output directory is then added to `GENERATED_DIRECTORIES` in
-  `scripts/check-contracts.mjs`, or the check would not notice it going stale.
+- A new contract is its `openapi/<name>.yaml`, its `openapi/<name>.codegen.yaml` and one entry in
+  `openapi/contracts.json`, which names the directories its projections are committed into; a second
+  browser client is a second `createClient` call here, writing into the directory that entry names.
+  Nothing else lists the contract set, so nothing else has to be edited for it to be generated and
+  checked.

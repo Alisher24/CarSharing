@@ -20,8 +20,10 @@ From `frontend/`:
   then Vite, so it is the one command that catches everything.
 - Prettier comes from the repository root: `npm run format:check` there, `npm run format` to fix.
 
-CI (`.github/workflows/repository-checks.yml`, `TypeScript checks`) runs the root install, then
-`format:check`, `lint:css`, `typecheck`, `test`, `build` and `npm audit --audit-level=low`.
+CI (`.github/workflows/repository-checks.yml`, `TypeScript checks`) runs the root install, the basemap
+and repository declaration checks, `format:check`, then `npm run build` — the type checker, stylelint
+and the unit tests in one step, so none of the three is a step of its own — and
+`npm audit --audit-level=low`.
 
 ## What lives where
 

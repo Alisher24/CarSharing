@@ -9,8 +9,10 @@
 
 # The extractor, from the release the declaration pins. It is taken as an image rather than built from
 # source: fetching its module graph and compiling it takes minutes and needs a Go toolchain in a stage
-# that otherwise has no use for one, and the published binary is the same program.
-FROM protomaps/go-pmtiles:v1.31.2 AS extractor
+# that otherwise has no use for one, and the published binary is the same program. The tag is the
+# version the declaration states and the digest is what the build actually runs, so the two are held
+# together by `tools/basemap/manifest.test.mjs`.
+FROM protomaps/go-pmtiles:v1.31.2@sha256:06574f01f55a78f78f887bc7ebf729a5c093c0d6e17d9876300cfcb0758b59d3 AS extractor
 
 FROM node:24.21.0-alpine@sha256:be80f76cf40ec8e42b9bec49f60a55e0660f30af58d3e5a25530785b30ea67e2 AS basemap
 # The declaration and the tools that read it are laid out exactly as the repository lays them out,

@@ -4,9 +4,10 @@
 // that is `verify.mjs`, which runs where they were written.
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
-import { archiveDestination, assets, destination, readManifest, sprites } from './manifest.mjs';
+import { archiveDestination, assets, destination, FRONTEND_IMAGE, readManifest, sprites } from './manifest.mjs';
 
 const manifest = await readManifest();
 const declared = assets(manifest);
@@ -22,6 +23,11 @@ const LATIN = '0-255';
 
 /** The range Cyrillic labels are drawn from, which the interface's own language needs. */
 const CYRILLIC = '1024-1279';
+
+/** The image definition, which names the extractor every stage of the build runs. */
+function readImage() {
+  return readFileSync(FRONTEND_IMAGE, 'utf8');
+}
 
 describe('what the map is drawn from', () => {
   test('is served under a path rather than an address of its own', () => {
@@ -59,6 +65,19 @@ describe('what the map is drawn from', () => {
     assert.match(manifest.archive, /^https:\/\/build\.protomaps\.com\/\d{8}\.pmtiles$/);
     assert.ok(Number.isInteger(manifest.maxzoom) && manifest.maxzoom > 0);
     assert.match(manifest.toolVersion, /^v\d+\.\d+\.\d+$/);
+  });
+
+  test('is cut by the extractor the declaration pins, and by the image the build actually runs', () => {
+    const extractor = /^FROM\s+protomaps\/go-pmtiles:(\S+)\s+AS\s+extractor$/m.exec(readImage());
+    assert.ok(extractor, 'the image declares no extractor stage');
+
+    const [tag, digest] = extractor[1].split('@');
+    assert.equal(tag, manifest.toolVersion, 'the extractor image is not the version the declaration pins');
+    assert.match(
+      digest ?? '',
+      /^sha256:[0-9a-f]{64}$/,
+      `the extractor image is not pinned by digest, so the build does not run what was reviewed: ${extractor[1]}`,
+    );
   });
 
   test('labels the map in the language the interface is written in', () => {

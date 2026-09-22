@@ -53,7 +53,7 @@ const REQUEST_BURST_SIZE = recordedConcurrentHashes * REQUEST_BURST_MULTIPLIER;
 // A burst is this suite's subject, and the suites after it inherit what it left.
 after(settleAfterBurst);
 
-before(waitForReady);
+before(() => waitForReady());
 beforeEach(resetRateLimits);
 
 function assertRecordedParameters(storedHash) {

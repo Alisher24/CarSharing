@@ -33,87 +33,13 @@ paths:
             Cache-Control:
               $ref: '#/components/headers/CacheControl'
         '400':
-          description: INVALID_HEADER
-          x-error-codes:
-            - INVALID_HEADER
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INVALID_HEADER:
-                  value:
-                    code: INVALID_HEADER
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InvalidHeader'
         '413':
-          description: BODY_TOO_LARGE
-          x-error-codes:
-            - BODY_TOO_LARGE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                BODY_TOO_LARGE:
-                  value:
-                    code: BODY_TOO_LARGE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/BodyTooLarge'
         '422':
-          description: VALIDATION_FAILED
-          x-error-codes:
-            - VALIDATION_FAILED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                VALIDATION_FAILED:
-                  value:
-                    code: VALIDATION_FAILED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                    details:
-                      violations:
-                        - location: body
-                          pointer: /email
-                          code: required
-                          message: Required value is missing
+          $ref: '#/components/responses/ValidationFailed'
         '500':
-          description: INTERNAL_ERROR
-          x-error-codes:
-            - INTERNAL_ERROR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INTERNAL_ERROR:
-                  value:
-                    code: INTERNAL_ERROR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InternalError'
       parameters:
         - name: X-Request-ID
           in: header
@@ -145,87 +71,13 @@ paths:
             Cache-Control:
               $ref: '#/components/headers/CacheControl'
         '400':
-          description: INVALID_HEADER
-          x-error-codes:
-            - INVALID_HEADER
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INVALID_HEADER:
-                  value:
-                    code: INVALID_HEADER
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InvalidHeader'
         '413':
-          description: BODY_TOO_LARGE
-          x-error-codes:
-            - BODY_TOO_LARGE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                BODY_TOO_LARGE:
-                  value:
-                    code: BODY_TOO_LARGE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/BodyTooLarge'
         '422':
-          description: VALIDATION_FAILED
-          x-error-codes:
-            - VALIDATION_FAILED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                VALIDATION_FAILED:
-                  value:
-                    code: VALIDATION_FAILED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                    details:
-                      violations:
-                        - location: body
-                          pointer: /email
-                          code: required
-                          message: Required value is missing
+          $ref: '#/components/responses/ValidationFailed'
         '500':
-          description: INTERNAL_ERROR
-          x-error-codes:
-            - INTERNAL_ERROR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INTERNAL_ERROR:
-                  value:
-                    code: INTERNAL_ERROR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InternalError'
         '503':
           description: Dependencies are unavailable; no internal failure text is disclosed.
           x-error-codes:
@@ -297,49 +149,9 @@ paths:
                 csrf_token: example-csrf-value
                 session_expires_at: '2026-09-12T19:15:30.123456Z'
         '400':
-          description: INVALID_HEADER, MALFORMED_JSON
-          x-error-codes:
-            - INVALID_HEADER
-            - MALFORMED_JSON
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INVALID_HEADER:
-                  value:
-                    code: INVALID_HEADER
-                    message: Request could not be completed
-                    request_id: example-request-1
-                MALFORMED_JSON:
-                  value:
-                    code: MALFORMED_JSON
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/MalformedJson'
         '403':
-          description: ORIGIN_NOT_ALLOWED
-          x-error-codes:
-            - ORIGIN_NOT_ALLOWED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                ORIGIN_NOT_ALLOWED:
-                  value:
-                    code: ORIGIN_NOT_ALLOWED
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/OriginNotAllowed'
         '409':
           description: EMAIL_ALREADY_REGISTERED
           x-error-codes:
@@ -360,127 +172,17 @@ paths:
                     message: Request could not be completed
                     request_id: example-request-1
         '413':
-          description: BODY_TOO_LARGE
-          x-error-codes:
-            - BODY_TOO_LARGE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                BODY_TOO_LARGE:
-                  value:
-                    code: BODY_TOO_LARGE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/BodyTooLarge'
         '415':
-          description: UNSUPPORTED_MEDIA_TYPE
-          x-error-codes:
-            - UNSUPPORTED_MEDIA_TYPE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                UNSUPPORTED_MEDIA_TYPE:
-                  value:
-                    code: UNSUPPORTED_MEDIA_TYPE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
-          description: VALIDATION_FAILED
-          x-error-codes:
-            - VALIDATION_FAILED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                VALIDATION_FAILED:
-                  value:
-                    code: VALIDATION_FAILED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                    details:
-                      violations:
-                        - location: body
-                          pointer: /email
-                          code: required
-                          message: Required value is missing
+          $ref: '#/components/responses/ValidationFailed'
         '429':
-          description: RATE_LIMITED
-          x-error-codes:
-            - RATE_LIMITED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-            Retry-After:
-              $ref: '#/components/headers/RetryAfterWait'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                RATE_LIMITED:
-                  value:
-                    code: RATE_LIMITED
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/RateLimited'
         '500':
-          description: INTERNAL_ERROR
-          x-error-codes:
-            - INTERNAL_ERROR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INTERNAL_ERROR:
-                  value:
-                    code: INTERNAL_ERROR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InternalError'
         '503':
-          description: SERVICE_UNAVAILABLE
-          x-error-codes:
-            - SERVICE_UNAVAILABLE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                SERVICE_UNAVAILABLE:
-                  value:
-                    code: SERVICE_UNAVAILABLE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ServiceUnavailable'
       requestBody:
         required: true
         content:
@@ -539,30 +241,7 @@ paths:
                 csrf_token: example-csrf-value
                 session_expires_at: '2026-09-12T19:15:30.123456Z'
         '400':
-          description: INVALID_HEADER, MALFORMED_JSON
-          x-error-codes:
-            - INVALID_HEADER
-            - MALFORMED_JSON
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INVALID_HEADER:
-                  value:
-                    code: INVALID_HEADER
-                    message: Request could not be completed
-                    request_id: example-request-1
-                MALFORMED_JSON:
-                  value:
-                    code: MALFORMED_JSON
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/MalformedJson'
         '401':
           description: INVALID_CREDENTIALS
           x-error-codes:
@@ -583,146 +262,19 @@ paths:
                     message: Request could not be completed
                     request_id: example-request-1
         '403':
-          description: ORIGIN_NOT_ALLOWED
-          x-error-codes:
-            - ORIGIN_NOT_ALLOWED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                ORIGIN_NOT_ALLOWED:
-                  value:
-                    code: ORIGIN_NOT_ALLOWED
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/OriginNotAllowed'
         '413':
-          description: BODY_TOO_LARGE
-          x-error-codes:
-            - BODY_TOO_LARGE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                BODY_TOO_LARGE:
-                  value:
-                    code: BODY_TOO_LARGE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/BodyTooLarge'
         '415':
-          description: UNSUPPORTED_MEDIA_TYPE
-          x-error-codes:
-            - UNSUPPORTED_MEDIA_TYPE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                UNSUPPORTED_MEDIA_TYPE:
-                  value:
-                    code: UNSUPPORTED_MEDIA_TYPE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
-          description: VALIDATION_FAILED
-          x-error-codes:
-            - VALIDATION_FAILED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                VALIDATION_FAILED:
-                  value:
-                    code: VALIDATION_FAILED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                    details:
-                      violations:
-                        - location: body
-                          pointer: /email
-                          code: required
-                          message: Required value is missing
+          $ref: '#/components/responses/ValidationFailed'
         '429':
-          description: RATE_LIMITED
-          x-error-codes:
-            - RATE_LIMITED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-            Retry-After:
-              $ref: '#/components/headers/RetryAfterWait'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                RATE_LIMITED:
-                  value:
-                    code: RATE_LIMITED
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/RateLimited'
         '500':
-          description: INTERNAL_ERROR
-          x-error-codes:
-            - INTERNAL_ERROR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INTERNAL_ERROR:
-                  value:
-                    code: INTERNAL_ERROR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InternalError'
         '503':
-          description: SERVICE_UNAVAILABLE
-          x-error-codes:
-            - SERVICE_UNAVAILABLE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                SERVICE_UNAVAILABLE:
-                  value:
-                    code: SERVICE_UNAVAILABLE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ServiceUnavailable'
       requestBody:
         required: true
         content:
@@ -778,131 +330,17 @@ paths:
             Set-Cookie:
               $ref: '#/components/headers/SessionCookie'
         '400':
-          description: INVALID_HEADER
-          x-error-codes:
-            - INVALID_HEADER
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INVALID_HEADER:
-                  value:
-                    code: INVALID_HEADER
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InvalidHeader'
         '403':
-          description: ORIGIN_NOT_ALLOWED, CSRF_INVALID
-          x-error-codes:
-            - ORIGIN_NOT_ALLOWED
-            - CSRF_INVALID
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                ORIGIN_NOT_ALLOWED:
-                  value:
-                    code: ORIGIN_NOT_ALLOWED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                CSRF_INVALID:
-                  value:
-                    code: CSRF_INVALID
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/OriginOrCsrfRefused'
         '413':
-          description: BODY_TOO_LARGE
-          x-error-codes:
-            - BODY_TOO_LARGE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                BODY_TOO_LARGE:
-                  value:
-                    code: BODY_TOO_LARGE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/BodyTooLarge'
         '422':
-          description: VALIDATION_FAILED
-          x-error-codes:
-            - VALIDATION_FAILED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                VALIDATION_FAILED:
-                  value:
-                    code: VALIDATION_FAILED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                    details:
-                      violations:
-                        - location: body
-                          pointer: /email
-                          code: required
-                          message: Required value is missing
+          $ref: '#/components/responses/ValidationFailed'
         '500':
-          description: INTERNAL_ERROR
-          x-error-codes:
-            - INTERNAL_ERROR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INTERNAL_ERROR:
-                  value:
-                    code: INTERNAL_ERROR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InternalError'
         '503':
-          description: SERVICE_UNAVAILABLE
-          x-error-codes:
-            - SERVICE_UNAVAILABLE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                SERVICE_UNAVAILABLE:
-                  value:
-                    code: SERVICE_UNAVAILABLE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ServiceUnavailable'
       security: []
   /api/v1/me:
     get:
@@ -943,125 +381,17 @@ paths:
                 csrf_token: example-csrf-value
                 session_expires_at: '2026-09-12T19:15:30.123456Z'
         '400':
-          description: INVALID_HEADER
-          x-error-codes:
-            - INVALID_HEADER
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INVALID_HEADER:
-                  value:
-                    code: INVALID_HEADER
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InvalidHeader'
         '401':
-          description: AUTHENTICATION_REQUIRED
-          x-error-codes:
-            - AUTHENTICATION_REQUIRED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                AUTHENTICATION_REQUIRED:
-                  value:
-                    code: AUTHENTICATION_REQUIRED
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/AuthenticationRequired'
         '413':
-          description: BODY_TOO_LARGE
-          x-error-codes:
-            - BODY_TOO_LARGE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                BODY_TOO_LARGE:
-                  value:
-                    code: BODY_TOO_LARGE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/BodyTooLarge'
         '422':
-          description: VALIDATION_FAILED
-          x-error-codes:
-            - VALIDATION_FAILED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                VALIDATION_FAILED:
-                  value:
-                    code: VALIDATION_FAILED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                    details:
-                      violations:
-                        - location: body
-                          pointer: /email
-                          code: required
-                          message: Required value is missing
+          $ref: '#/components/responses/ValidationFailed'
         '500':
-          description: INTERNAL_ERROR
-          x-error-codes:
-            - INTERNAL_ERROR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INTERNAL_ERROR:
-                  value:
-                    code: INTERNAL_ERROR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InternalError'
         '503':
-          description: SERVICE_UNAVAILABLE
-          x-error-codes:
-            - SERVICE_UNAVAILABLE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                SERVICE_UNAVAILABLE:
-                  value:
-                    code: SERVICE_UNAVAILABLE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ServiceUnavailable'
       security:
         - Session: []
   /api/v1/vehicles:
@@ -1118,106 +448,15 @@ paths:
                     version: '1'
                     status: available
         '400':
-          description: INVALID_HEADER
-          x-error-codes:
-            - INVALID_HEADER
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INVALID_HEADER:
-                  value:
-                    code: INVALID_HEADER
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InvalidHeader'
         '413':
-          description: BODY_TOO_LARGE
-          x-error-codes:
-            - BODY_TOO_LARGE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                BODY_TOO_LARGE:
-                  value:
-                    code: BODY_TOO_LARGE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/BodyTooLarge'
         '422':
-          description: VALIDATION_FAILED
-          x-error-codes:
-            - VALIDATION_FAILED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                VALIDATION_FAILED:
-                  value:
-                    code: VALIDATION_FAILED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                    details:
-                      violations:
-                        - location: body
-                          pointer: /email
-                          code: required
-                          message: Required value is missing
+          $ref: '#/components/responses/ValidationFailed'
         '500':
-          description: INTERNAL_ERROR
-          x-error-codes:
-            - INTERNAL_ERROR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INTERNAL_ERROR:
-                  value:
-                    code: INTERNAL_ERROR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InternalError'
         '503':
-          description: SERVICE_UNAVAILABLE
-          x-error-codes:
-            - SERVICE_UNAVAILABLE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                SERVICE_UNAVAILABLE:
-                  value:
-                    code: SERVICE_UNAVAILABLE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ServiceUnavailable'
       security: []
   /api/v1/vehicles/{id}:
     get:
@@ -1271,125 +510,17 @@ paths:
                 version: '1'
                 status: available
         '400':
-          description: INVALID_HEADER
-          x-error-codes:
-            - INVALID_HEADER
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INVALID_HEADER:
-                  value:
-                    code: INVALID_HEADER
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InvalidHeader'
         '404':
-          description: RESOURCE_NOT_FOUND
-          x-error-codes:
-            - RESOURCE_NOT_FOUND
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                RESOURCE_NOT_FOUND:
-                  value:
-                    code: RESOURCE_NOT_FOUND
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ResourceNotFound'
         '413':
-          description: BODY_TOO_LARGE
-          x-error-codes:
-            - BODY_TOO_LARGE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                BODY_TOO_LARGE:
-                  value:
-                    code: BODY_TOO_LARGE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/BodyTooLarge'
         '422':
-          description: VALIDATION_FAILED
-          x-error-codes:
-            - VALIDATION_FAILED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                VALIDATION_FAILED:
-                  value:
-                    code: VALIDATION_FAILED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                    details:
-                      violations:
-                        - location: body
-                          pointer: /email
-                          code: required
-                          message: Required value is missing
+          $ref: '#/components/responses/ValidationFailed'
         '500':
-          description: INTERNAL_ERROR
-          x-error-codes:
-            - INTERNAL_ERROR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INTERNAL_ERROR:
-                  value:
-                    code: INTERNAL_ERROR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InternalError'
         '503':
-          description: SERVICE_UNAVAILABLE
-          x-error-codes:
-            - SERVICE_UNAVAILABLE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                SERVICE_UNAVAILABLE:
-                  value:
-                    code: SERVICE_UNAVAILABLE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ServiceUnavailable'
       security: []
   /api/v1/zones:
     get:
@@ -1435,106 +566,15 @@ paths:
                             - 42.8
                     version: '1'
         '400':
-          description: INVALID_HEADER
-          x-error-codes:
-            - INVALID_HEADER
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INVALID_HEADER:
-                  value:
-                    code: INVALID_HEADER
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InvalidHeader'
         '413':
-          description: BODY_TOO_LARGE
-          x-error-codes:
-            - BODY_TOO_LARGE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                BODY_TOO_LARGE:
-                  value:
-                    code: BODY_TOO_LARGE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/BodyTooLarge'
         '422':
-          description: VALIDATION_FAILED
-          x-error-codes:
-            - VALIDATION_FAILED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                VALIDATION_FAILED:
-                  value:
-                    code: VALIDATION_FAILED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                    details:
-                      violations:
-                        - location: body
-                          pointer: /email
-                          code: required
-                          message: Required value is missing
+          $ref: '#/components/responses/ValidationFailed'
         '500':
-          description: INTERNAL_ERROR
-          x-error-codes:
-            - INTERNAL_ERROR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INTERNAL_ERROR:
-                  value:
-                    code: INTERNAL_ERROR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InternalError'
         '503':
-          description: SERVICE_UNAVAILABLE
-          x-error-codes:
-            - SERVICE_UNAVAILABLE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                SERVICE_UNAVAILABLE:
-                  value:
-                    code: SERVICE_UNAVAILABLE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ServiceUnavailable'
       security: []
   /api/v1/tariffs:
     get:
@@ -1572,106 +612,15 @@ paths:
                     paused_rate_tyiyn_per_started_minute: '500'
                     version: '1'
         '400':
-          description: INVALID_HEADER
-          x-error-codes:
-            - INVALID_HEADER
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INVALID_HEADER:
-                  value:
-                    code: INVALID_HEADER
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InvalidHeader'
         '413':
-          description: BODY_TOO_LARGE
-          x-error-codes:
-            - BODY_TOO_LARGE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                BODY_TOO_LARGE:
-                  value:
-                    code: BODY_TOO_LARGE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/BodyTooLarge'
         '422':
-          description: VALIDATION_FAILED
-          x-error-codes:
-            - VALIDATION_FAILED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                VALIDATION_FAILED:
-                  value:
-                    code: VALIDATION_FAILED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                    details:
-                      violations:
-                        - location: body
-                          pointer: /email
-                          code: required
-                          message: Required value is missing
+          $ref: '#/components/responses/ValidationFailed'
         '500':
-          description: INTERNAL_ERROR
-          x-error-codes:
-            - INTERNAL_ERROR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INTERNAL_ERROR:
-                  value:
-                    code: INTERNAL_ERROR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InternalError'
         '503':
-          description: SERVICE_UNAVAILABLE
-          x-error-codes:
-            - SERVICE_UNAVAILABLE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                SERVICE_UNAVAILABLE:
-                  value:
-                    code: SERVICE_UNAVAILABLE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ServiceUnavailable'
       security: []
   /api/v1/me/current:
     get:
@@ -1757,125 +706,17 @@ paths:
                       state: reserved
                       expires_at: '2026-09-12T07:30:30.123456Z'
         '400':
-          description: INVALID_HEADER
-          x-error-codes:
-            - INVALID_HEADER
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INVALID_HEADER:
-                  value:
-                    code: INVALID_HEADER
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InvalidHeader'
         '401':
-          description: AUTHENTICATION_REQUIRED
-          x-error-codes:
-            - AUTHENTICATION_REQUIRED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                AUTHENTICATION_REQUIRED:
-                  value:
-                    code: AUTHENTICATION_REQUIRED
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/AuthenticationRequired'
         '413':
-          description: BODY_TOO_LARGE
-          x-error-codes:
-            - BODY_TOO_LARGE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                BODY_TOO_LARGE:
-                  value:
-                    code: BODY_TOO_LARGE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/BodyTooLarge'
         '422':
-          description: VALIDATION_FAILED
-          x-error-codes:
-            - VALIDATION_FAILED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                VALIDATION_FAILED:
-                  value:
-                    code: VALIDATION_FAILED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                    details:
-                      violations:
-                        - location: body
-                          pointer: /email
-                          code: required
-                          message: Required value is missing
+          $ref: '#/components/responses/ValidationFailed'
         '500':
-          description: INTERNAL_ERROR
-          x-error-codes:
-            - INTERNAL_ERROR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INTERNAL_ERROR:
-                  value:
-                    code: INTERNAL_ERROR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InternalError'
         '503':
-          description: SERVICE_UNAVAILABLE
-          x-error-codes:
-            - SERVICE_UNAVAILABLE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                SERVICE_UNAVAILABLE:
-                  value:
-                    code: SERVICE_UNAVAILABLE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ServiceUnavailable'
       security:
         - Session: []
   /api/v1/reservations:
@@ -2018,49 +859,9 @@ paths:
                     message: Request could not be completed
                     request_id: example-request-1
         '401':
-          description: AUTHENTICATION_REQUIRED
-          x-error-codes:
-            - AUTHENTICATION_REQUIRED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                AUTHENTICATION_REQUIRED:
-                  value:
-                    code: AUTHENTICATION_REQUIRED
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/AuthenticationRequired'
         '403':
-          description: ORIGIN_NOT_ALLOWED, CSRF_INVALID
-          x-error-codes:
-            - ORIGIN_NOT_ALLOWED
-            - CSRF_INVALID
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                ORIGIN_NOT_ALLOWED:
-                  value:
-                    code: ORIGIN_NOT_ALLOWED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                CSRF_INVALID:
-                  value:
-                    code: CSRF_INVALID
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/OriginOrCsrfRefused'
         '409':
           description: >-
             IDEMPOTENCY_CONFLICT, IDEMPOTENCY_IN_PROGRESS, VEHICLE_UNAVAILABLE, ACTIVE_RENTAL_EXISTS,
@@ -2125,106 +926,15 @@ paths:
                     message: Request could not be completed
                     request_id: example-request-1
         '413':
-          description: BODY_TOO_LARGE
-          x-error-codes:
-            - BODY_TOO_LARGE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                BODY_TOO_LARGE:
-                  value:
-                    code: BODY_TOO_LARGE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/BodyTooLarge'
         '415':
-          description: UNSUPPORTED_MEDIA_TYPE
-          x-error-codes:
-            - UNSUPPORTED_MEDIA_TYPE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                UNSUPPORTED_MEDIA_TYPE:
-                  value:
-                    code: UNSUPPORTED_MEDIA_TYPE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/UnsupportedMediaType'
         '422':
-          description: VALIDATION_FAILED
-          x-error-codes:
-            - VALIDATION_FAILED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                VALIDATION_FAILED:
-                  value:
-                    code: VALIDATION_FAILED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                    details:
-                      violations:
-                        - location: body
-                          pointer: /email
-                          code: required
-                          message: Required value is missing
+          $ref: '#/components/responses/ValidationFailed'
         '500':
-          description: INTERNAL_ERROR
-          x-error-codes:
-            - INTERNAL_ERROR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INTERNAL_ERROR:
-                  value:
-                    code: INTERNAL_ERROR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InternalError'
         '503':
-          description: SERVICE_UNAVAILABLE
-          x-error-codes:
-            - SERVICE_UNAVAILABLE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                SERVICE_UNAVAILABLE:
-                  value:
-                    code: SERVICE_UNAVAILABLE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ServiceUnavailable'
       requestBody:
         required: true
         content:
@@ -2342,99 +1052,13 @@ paths:
                   state: cancelled
                   cancelled_at: '2026-09-12T07:15:30.123456Z'
         '400':
-          description: INVALID_HEADER, IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_KEY_INVALID
-          x-error-codes:
-            - INVALID_HEADER
-            - IDEMPOTENCY_KEY_REQUIRED
-            - IDEMPOTENCY_KEY_INVALID
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INVALID_HEADER:
-                  value:
-                    code: INVALID_HEADER
-                    message: Request could not be completed
-                    request_id: example-request-1
-                IDEMPOTENCY_KEY_REQUIRED:
-                  value:
-                    code: IDEMPOTENCY_KEY_REQUIRED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                IDEMPOTENCY_KEY_INVALID:
-                  value:
-                    code: IDEMPOTENCY_KEY_INVALID
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/IdempotencyKeyInvalid'
         '401':
-          description: AUTHENTICATION_REQUIRED
-          x-error-codes:
-            - AUTHENTICATION_REQUIRED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                AUTHENTICATION_REQUIRED:
-                  value:
-                    code: AUTHENTICATION_REQUIRED
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/AuthenticationRequired'
         '403':
-          description: ORIGIN_NOT_ALLOWED, CSRF_INVALID
-          x-error-codes:
-            - ORIGIN_NOT_ALLOWED
-            - CSRF_INVALID
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                ORIGIN_NOT_ALLOWED:
-                  value:
-                    code: ORIGIN_NOT_ALLOWED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                CSRF_INVALID:
-                  value:
-                    code: CSRF_INVALID
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/OriginOrCsrfRefused'
         '404':
-          description: RESOURCE_NOT_FOUND
-          x-error-codes:
-            - RESOURCE_NOT_FOUND
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                RESOURCE_NOT_FOUND:
-                  value:
-                    code: RESOURCE_NOT_FOUND
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ResourceNotFound'
         '409':
           description: >-
             IDEMPOTENCY_CONFLICT, IDEMPOTENCY_IN_PROGRESS, RENTAL_COMPLETED, INVALID_RENTAL_STATE,
@@ -2485,87 +1109,13 @@ paths:
                     message: Request could not be completed
                     request_id: example-request-1
         '413':
-          description: BODY_TOO_LARGE
-          x-error-codes:
-            - BODY_TOO_LARGE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                BODY_TOO_LARGE:
-                  value:
-                    code: BODY_TOO_LARGE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/BodyTooLarge'
         '422':
-          description: VALIDATION_FAILED
-          x-error-codes:
-            - VALIDATION_FAILED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                VALIDATION_FAILED:
-                  value:
-                    code: VALIDATION_FAILED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                    details:
-                      violations:
-                        - location: body
-                          pointer: /email
-                          code: required
-                          message: Required value is missing
+          $ref: '#/components/responses/ValidationFailed'
         '500':
-          description: INTERNAL_ERROR
-          x-error-codes:
-            - INTERNAL_ERROR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INTERNAL_ERROR:
-                  value:
-                    code: INTERNAL_ERROR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InternalError'
         '503':
-          description: SERVICE_UNAVAILABLE
-          x-error-codes:
-            - SERVICE_UNAVAILABLE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                SERVICE_UNAVAILABLE:
-                  value:
-                    code: SERVICE_UNAVAILABLE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ServiceUnavailable'
       security:
         - Session: []
   /api/v1/reservations/{id}/start:
@@ -2677,99 +1227,13 @@ paths:
                     paused_started_minutes: '0'
                     estimated_amount_tyiyn: '3000'
         '400':
-          description: INVALID_HEADER, IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_KEY_INVALID
-          x-error-codes:
-            - INVALID_HEADER
-            - IDEMPOTENCY_KEY_REQUIRED
-            - IDEMPOTENCY_KEY_INVALID
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INVALID_HEADER:
-                  value:
-                    code: INVALID_HEADER
-                    message: Request could not be completed
-                    request_id: example-request-1
-                IDEMPOTENCY_KEY_REQUIRED:
-                  value:
-                    code: IDEMPOTENCY_KEY_REQUIRED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                IDEMPOTENCY_KEY_INVALID:
-                  value:
-                    code: IDEMPOTENCY_KEY_INVALID
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/IdempotencyKeyInvalid'
         '401':
-          description: AUTHENTICATION_REQUIRED
-          x-error-codes:
-            - AUTHENTICATION_REQUIRED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                AUTHENTICATION_REQUIRED:
-                  value:
-                    code: AUTHENTICATION_REQUIRED
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/AuthenticationRequired'
         '403':
-          description: ORIGIN_NOT_ALLOWED, CSRF_INVALID
-          x-error-codes:
-            - ORIGIN_NOT_ALLOWED
-            - CSRF_INVALID
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                ORIGIN_NOT_ALLOWED:
-                  value:
-                    code: ORIGIN_NOT_ALLOWED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                CSRF_INVALID:
-                  value:
-                    code: CSRF_INVALID
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/OriginOrCsrfRefused'
         '404':
-          description: RESOURCE_NOT_FOUND
-          x-error-codes:
-            - RESOURCE_NOT_FOUND
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                RESOURCE_NOT_FOUND:
-                  value:
-                    code: RESOURCE_NOT_FOUND
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ResourceNotFound'
         '409':
           description: >-
             IDEMPOTENCY_CONFLICT, IDEMPOTENCY_IN_PROGRESS, RENTAL_COMPLETED, INVALID_RENTAL_STATE,
@@ -2830,87 +1294,13 @@ paths:
                         - insufficient_energy
                         - telemetry_stale
         '413':
-          description: BODY_TOO_LARGE
-          x-error-codes:
-            - BODY_TOO_LARGE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                BODY_TOO_LARGE:
-                  value:
-                    code: BODY_TOO_LARGE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/BodyTooLarge'
         '422':
-          description: VALIDATION_FAILED
-          x-error-codes:
-            - VALIDATION_FAILED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                VALIDATION_FAILED:
-                  value:
-                    code: VALIDATION_FAILED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                    details:
-                      violations:
-                        - location: body
-                          pointer: /email
-                          code: required
-                          message: Required value is missing
+          $ref: '#/components/responses/ValidationFailed'
         '500':
-          description: INTERNAL_ERROR
-          x-error-codes:
-            - INTERNAL_ERROR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INTERNAL_ERROR:
-                  value:
-                    code: INTERNAL_ERROR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InternalError'
         '503':
-          description: SERVICE_UNAVAILABLE
-          x-error-codes:
-            - SERVICE_UNAVAILABLE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                SERVICE_UNAVAILABLE:
-                  value:
-                    code: SERVICE_UNAVAILABLE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ServiceUnavailable'
       security:
         - Session: []
   /api/v1/rides/{id}/pause:
@@ -3022,222 +1412,23 @@ paths:
                     paused_started_minutes: '0'
                     estimated_amount_tyiyn: '3000'
         '400':
-          description: INVALID_HEADER, IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_KEY_INVALID
-          x-error-codes:
-            - INVALID_HEADER
-            - IDEMPOTENCY_KEY_REQUIRED
-            - IDEMPOTENCY_KEY_INVALID
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INVALID_HEADER:
-                  value:
-                    code: INVALID_HEADER
-                    message: Request could not be completed
-                    request_id: example-request-1
-                IDEMPOTENCY_KEY_REQUIRED:
-                  value:
-                    code: IDEMPOTENCY_KEY_REQUIRED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                IDEMPOTENCY_KEY_INVALID:
-                  value:
-                    code: IDEMPOTENCY_KEY_INVALID
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/IdempotencyKeyInvalid'
         '401':
-          description: AUTHENTICATION_REQUIRED
-          x-error-codes:
-            - AUTHENTICATION_REQUIRED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                AUTHENTICATION_REQUIRED:
-                  value:
-                    code: AUTHENTICATION_REQUIRED
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/AuthenticationRequired'
         '403':
-          description: ORIGIN_NOT_ALLOWED, CSRF_INVALID
-          x-error-codes:
-            - ORIGIN_NOT_ALLOWED
-            - CSRF_INVALID
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                ORIGIN_NOT_ALLOWED:
-                  value:
-                    code: ORIGIN_NOT_ALLOWED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                CSRF_INVALID:
-                  value:
-                    code: CSRF_INVALID
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/OriginOrCsrfRefused'
         '404':
-          description: RESOURCE_NOT_FOUND
-          x-error-codes:
-            - RESOURCE_NOT_FOUND
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                RESOURCE_NOT_FOUND:
-                  value:
-                    code: RESOURCE_NOT_FOUND
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ResourceNotFound'
         '409':
-          description: IDEMPOTENCY_CONFLICT, IDEMPOTENCY_IN_PROGRESS, RENTAL_COMPLETED, INVALID_RENTAL_STATE
-          x-error-codes:
-            - IDEMPOTENCY_CONFLICT
-            - IDEMPOTENCY_IN_PROGRESS
-            - RENTAL_COMPLETED
-            - INVALID_RENTAL_STATE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-            Retry-After:
-              $ref: '#/components/headers/RetryAfter'
-            Idempotency-Replayed:
-              $ref: '#/components/headers/IdempotencyReplayed'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                IDEMPOTENCY_CONFLICT:
-                  value:
-                    code: IDEMPOTENCY_CONFLICT
-                    message: Request could not be completed
-                    request_id: example-request-1
-                IDEMPOTENCY_IN_PROGRESS:
-                  value:
-                    code: IDEMPOTENCY_IN_PROGRESS
-                    message: Request could not be completed
-                    request_id: example-request-1
-                RENTAL_COMPLETED:
-                  value:
-                    code: RENTAL_COMPLETED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                INVALID_RENTAL_STATE:
-                  value:
-                    code: INVALID_RENTAL_STATE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/RideMoveConflict'
         '413':
-          description: BODY_TOO_LARGE
-          x-error-codes:
-            - BODY_TOO_LARGE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                BODY_TOO_LARGE:
-                  value:
-                    code: BODY_TOO_LARGE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/BodyTooLarge'
         '422':
-          description: VALIDATION_FAILED
-          x-error-codes:
-            - VALIDATION_FAILED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                VALIDATION_FAILED:
-                  value:
-                    code: VALIDATION_FAILED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                    details:
-                      violations:
-                        - location: body
-                          pointer: /email
-                          code: required
-                          message: Required value is missing
+          $ref: '#/components/responses/ValidationFailed'
         '500':
-          description: INTERNAL_ERROR
-          x-error-codes:
-            - INTERNAL_ERROR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INTERNAL_ERROR:
-                  value:
-                    code: INTERNAL_ERROR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InternalError'
         '503':
-          description: SERVICE_UNAVAILABLE
-          x-error-codes:
-            - SERVICE_UNAVAILABLE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                SERVICE_UNAVAILABLE:
-                  value:
-                    code: SERVICE_UNAVAILABLE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ServiceUnavailable'
       security:
         - Session: []
   /api/v1/rides/{id}/resume:
@@ -3349,222 +1540,23 @@ paths:
                     paused_started_minutes: '0'
                     estimated_amount_tyiyn: '3000'
         '400':
-          description: INVALID_HEADER, IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_KEY_INVALID
-          x-error-codes:
-            - INVALID_HEADER
-            - IDEMPOTENCY_KEY_REQUIRED
-            - IDEMPOTENCY_KEY_INVALID
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INVALID_HEADER:
-                  value:
-                    code: INVALID_HEADER
-                    message: Request could not be completed
-                    request_id: example-request-1
-                IDEMPOTENCY_KEY_REQUIRED:
-                  value:
-                    code: IDEMPOTENCY_KEY_REQUIRED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                IDEMPOTENCY_KEY_INVALID:
-                  value:
-                    code: IDEMPOTENCY_KEY_INVALID
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/IdempotencyKeyInvalid'
         '401':
-          description: AUTHENTICATION_REQUIRED
-          x-error-codes:
-            - AUTHENTICATION_REQUIRED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                AUTHENTICATION_REQUIRED:
-                  value:
-                    code: AUTHENTICATION_REQUIRED
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/AuthenticationRequired'
         '403':
-          description: ORIGIN_NOT_ALLOWED, CSRF_INVALID
-          x-error-codes:
-            - ORIGIN_NOT_ALLOWED
-            - CSRF_INVALID
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                ORIGIN_NOT_ALLOWED:
-                  value:
-                    code: ORIGIN_NOT_ALLOWED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                CSRF_INVALID:
-                  value:
-                    code: CSRF_INVALID
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/OriginOrCsrfRefused'
         '404':
-          description: RESOURCE_NOT_FOUND
-          x-error-codes:
-            - RESOURCE_NOT_FOUND
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                RESOURCE_NOT_FOUND:
-                  value:
-                    code: RESOURCE_NOT_FOUND
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ResourceNotFound'
         '409':
-          description: IDEMPOTENCY_CONFLICT, IDEMPOTENCY_IN_PROGRESS, RENTAL_COMPLETED, INVALID_RENTAL_STATE
-          x-error-codes:
-            - IDEMPOTENCY_CONFLICT
-            - IDEMPOTENCY_IN_PROGRESS
-            - RENTAL_COMPLETED
-            - INVALID_RENTAL_STATE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-            Retry-After:
-              $ref: '#/components/headers/RetryAfter'
-            Idempotency-Replayed:
-              $ref: '#/components/headers/IdempotencyReplayed'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                IDEMPOTENCY_CONFLICT:
-                  value:
-                    code: IDEMPOTENCY_CONFLICT
-                    message: Request could not be completed
-                    request_id: example-request-1
-                IDEMPOTENCY_IN_PROGRESS:
-                  value:
-                    code: IDEMPOTENCY_IN_PROGRESS
-                    message: Request could not be completed
-                    request_id: example-request-1
-                RENTAL_COMPLETED:
-                  value:
-                    code: RENTAL_COMPLETED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                INVALID_RENTAL_STATE:
-                  value:
-                    code: INVALID_RENTAL_STATE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/RideMoveConflict'
         '413':
-          description: BODY_TOO_LARGE
-          x-error-codes:
-            - BODY_TOO_LARGE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                BODY_TOO_LARGE:
-                  value:
-                    code: BODY_TOO_LARGE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/BodyTooLarge'
         '422':
-          description: VALIDATION_FAILED
-          x-error-codes:
-            - VALIDATION_FAILED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                VALIDATION_FAILED:
-                  value:
-                    code: VALIDATION_FAILED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                    details:
-                      violations:
-                        - location: body
-                          pointer: /email
-                          code: required
-                          message: Required value is missing
+          $ref: '#/components/responses/ValidationFailed'
         '500':
-          description: INTERNAL_ERROR
-          x-error-codes:
-            - INTERNAL_ERROR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INTERNAL_ERROR:
-                  value:
-                    code: INTERNAL_ERROR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InternalError'
         '503':
-          description: SERVICE_UNAVAILABLE
-          x-error-codes:
-            - SERVICE_UNAVAILABLE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                SERVICE_UNAVAILABLE:
-                  value:
-                    code: SERVICE_UNAVAILABLE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ServiceUnavailable'
       security:
         - Session: []
   /api/v1/rides/{id}/finish:
@@ -3698,99 +1690,13 @@ paths:
                     status: pending
                     updated_at: '2026-09-12T07:30:30.123456Z'
         '400':
-          description: INVALID_HEADER, IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_KEY_INVALID
-          x-error-codes:
-            - INVALID_HEADER
-            - IDEMPOTENCY_KEY_REQUIRED
-            - IDEMPOTENCY_KEY_INVALID
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INVALID_HEADER:
-                  value:
-                    code: INVALID_HEADER
-                    message: Request could not be completed
-                    request_id: example-request-1
-                IDEMPOTENCY_KEY_REQUIRED:
-                  value:
-                    code: IDEMPOTENCY_KEY_REQUIRED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                IDEMPOTENCY_KEY_INVALID:
-                  value:
-                    code: IDEMPOTENCY_KEY_INVALID
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/IdempotencyKeyInvalid'
         '401':
-          description: AUTHENTICATION_REQUIRED
-          x-error-codes:
-            - AUTHENTICATION_REQUIRED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                AUTHENTICATION_REQUIRED:
-                  value:
-                    code: AUTHENTICATION_REQUIRED
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/AuthenticationRequired'
         '403':
-          description: ORIGIN_NOT_ALLOWED, CSRF_INVALID
-          x-error-codes:
-            - ORIGIN_NOT_ALLOWED
-            - CSRF_INVALID
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                ORIGIN_NOT_ALLOWED:
-                  value:
-                    code: ORIGIN_NOT_ALLOWED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                CSRF_INVALID:
-                  value:
-                    code: CSRF_INVALID
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/OriginOrCsrfRefused'
         '404':
-          description: RESOURCE_NOT_FOUND
-          x-error-codes:
-            - RESOURCE_NOT_FOUND
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                RESOURCE_NOT_FOUND:
-                  value:
-                    code: RESOURCE_NOT_FOUND
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ResourceNotFound'
         '409':
           description: >-
             IDEMPOTENCY_CONFLICT, IDEMPOTENCY_IN_PROGRESS, INVALID_RENTAL_STATE, OUTSIDE_SERVICE_ZONE,
@@ -3841,87 +1747,13 @@ paths:
                     message: Request could not be completed
                     request_id: example-request-1
         '413':
-          description: BODY_TOO_LARGE
-          x-error-codes:
-            - BODY_TOO_LARGE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                BODY_TOO_LARGE:
-                  value:
-                    code: BODY_TOO_LARGE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/BodyTooLarge'
         '422':
-          description: VALIDATION_FAILED
-          x-error-codes:
-            - VALIDATION_FAILED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                VALIDATION_FAILED:
-                  value:
-                    code: VALIDATION_FAILED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                    details:
-                      violations:
-                        - location: body
-                          pointer: /email
-                          code: required
-                          message: Required value is missing
+          $ref: '#/components/responses/ValidationFailed'
         '500':
-          description: INTERNAL_ERROR
-          x-error-codes:
-            - INTERNAL_ERROR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INTERNAL_ERROR:
-                  value:
-                    code: INTERNAL_ERROR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InternalError'
         '503':
-          description: SERVICE_UNAVAILABLE
-          x-error-codes:
-            - SERVICE_UNAVAILABLE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                SERVICE_UNAVAILABLE:
-                  value:
-                    code: SERVICE_UNAVAILABLE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ServiceUnavailable'
       security:
         - Session: []
   /api/v1/me/invoices/{id}/pay:
@@ -4017,99 +1849,13 @@ paths:
                     failed_at: '2026-09-12T07:30:30.123456Z'
                     failure_code: declined
         '400':
-          description: INVALID_HEADER, IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_KEY_INVALID
-          x-error-codes:
-            - INVALID_HEADER
-            - IDEMPOTENCY_KEY_REQUIRED
-            - IDEMPOTENCY_KEY_INVALID
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INVALID_HEADER:
-                  value:
-                    code: INVALID_HEADER
-                    message: Request could not be completed
-                    request_id: example-request-1
-                IDEMPOTENCY_KEY_REQUIRED:
-                  value:
-                    code: IDEMPOTENCY_KEY_REQUIRED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                IDEMPOTENCY_KEY_INVALID:
-                  value:
-                    code: IDEMPOTENCY_KEY_INVALID
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/IdempotencyKeyInvalid'
         '401':
-          description: AUTHENTICATION_REQUIRED
-          x-error-codes:
-            - AUTHENTICATION_REQUIRED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                AUTHENTICATION_REQUIRED:
-                  value:
-                    code: AUTHENTICATION_REQUIRED
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/AuthenticationRequired'
         '403':
-          description: ORIGIN_NOT_ALLOWED, CSRF_INVALID
-          x-error-codes:
-            - ORIGIN_NOT_ALLOWED
-            - CSRF_INVALID
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                ORIGIN_NOT_ALLOWED:
-                  value:
-                    code: ORIGIN_NOT_ALLOWED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                CSRF_INVALID:
-                  value:
-                    code: CSRF_INVALID
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/OriginOrCsrfRefused'
         '404':
-          description: RESOURCE_NOT_FOUND
-          x-error-codes:
-            - RESOURCE_NOT_FOUND
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                RESOURCE_NOT_FOUND:
-                  value:
-                    code: RESOURCE_NOT_FOUND
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ResourceNotFound'
         '409':
           description: IDEMPOTENCY_CONFLICT, IDEMPOTENCY_IN_PROGRESS, PAYMENT_IN_PROGRESS
           x-error-codes:
@@ -4146,87 +1892,13 @@ paths:
                     message: Request could not be completed
                     request_id: example-request-1
         '413':
-          description: BODY_TOO_LARGE
-          x-error-codes:
-            - BODY_TOO_LARGE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                BODY_TOO_LARGE:
-                  value:
-                    code: BODY_TOO_LARGE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/BodyTooLarge'
         '422':
-          description: VALIDATION_FAILED
-          x-error-codes:
-            - VALIDATION_FAILED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                VALIDATION_FAILED:
-                  value:
-                    code: VALIDATION_FAILED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                    details:
-                      violations:
-                        - location: body
-                          pointer: /email
-                          code: required
-                          message: Required value is missing
+          $ref: '#/components/responses/ValidationFailed'
         '500':
-          description: INTERNAL_ERROR
-          x-error-codes:
-            - INTERNAL_ERROR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INTERNAL_ERROR:
-                  value:
-                    code: INTERNAL_ERROR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InternalError'
         '503':
-          description: SERVICE_UNAVAILABLE
-          x-error-codes:
-            - SERVICE_UNAVAILABLE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                SERVICE_UNAVAILABLE:
-                  value:
-                    code: SERVICE_UNAVAILABLE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ServiceUnavailable'
       security:
         - Session: []
   /api/v1/me/rides:
@@ -4286,131 +1958,17 @@ paths:
                       reason: user_finished
                 next_cursor: null
         '400':
-          description: INVALID_HEADER, INVALID_CURSOR
-          x-error-codes:
-            - INVALID_HEADER
-            - INVALID_CURSOR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INVALID_HEADER:
-                  value:
-                    code: INVALID_HEADER
-                    message: Request could not be completed
-                    request_id: example-request-1
-                INVALID_CURSOR:
-                  value:
-                    code: INVALID_CURSOR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InvalidCursor'
         '401':
-          description: AUTHENTICATION_REQUIRED
-          x-error-codes:
-            - AUTHENTICATION_REQUIRED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                AUTHENTICATION_REQUIRED:
-                  value:
-                    code: AUTHENTICATION_REQUIRED
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/AuthenticationRequired'
         '413':
-          description: BODY_TOO_LARGE
-          x-error-codes:
-            - BODY_TOO_LARGE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                BODY_TOO_LARGE:
-                  value:
-                    code: BODY_TOO_LARGE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/BodyTooLarge'
         '422':
-          description: VALIDATION_FAILED
-          x-error-codes:
-            - VALIDATION_FAILED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                VALIDATION_FAILED:
-                  value:
-                    code: VALIDATION_FAILED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                    details:
-                      violations:
-                        - location: body
-                          pointer: /email
-                          code: required
-                          message: Required value is missing
+          $ref: '#/components/responses/ValidationFailed'
         '500':
-          description: INTERNAL_ERROR
-          x-error-codes:
-            - INTERNAL_ERROR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INTERNAL_ERROR:
-                  value:
-                    code: INTERNAL_ERROR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InternalError'
         '503':
-          description: SERVICE_UNAVAILABLE
-          x-error-codes:
-            - SERVICE_UNAVAILABLE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                SERVICE_UNAVAILABLE:
-                  value:
-                    code: SERVICE_UNAVAILABLE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ServiceUnavailable'
       security:
         - Session: []
   /api/v1/me/invoices:
@@ -4482,131 +2040,17 @@ paths:
                       updated_at: '2026-09-12T07:30:30.123456Z'
                 next_cursor: null
         '400':
-          description: INVALID_HEADER, INVALID_CURSOR
-          x-error-codes:
-            - INVALID_HEADER
-            - INVALID_CURSOR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INVALID_HEADER:
-                  value:
-                    code: INVALID_HEADER
-                    message: Request could not be completed
-                    request_id: example-request-1
-                INVALID_CURSOR:
-                  value:
-                    code: INVALID_CURSOR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InvalidCursor'
         '401':
-          description: AUTHENTICATION_REQUIRED
-          x-error-codes:
-            - AUTHENTICATION_REQUIRED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                AUTHENTICATION_REQUIRED:
-                  value:
-                    code: AUTHENTICATION_REQUIRED
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/AuthenticationRequired'
         '413':
-          description: BODY_TOO_LARGE
-          x-error-codes:
-            - BODY_TOO_LARGE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                BODY_TOO_LARGE:
-                  value:
-                    code: BODY_TOO_LARGE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/BodyTooLarge'
         '422':
-          description: VALIDATION_FAILED
-          x-error-codes:
-            - VALIDATION_FAILED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                VALIDATION_FAILED:
-                  value:
-                    code: VALIDATION_FAILED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                    details:
-                      violations:
-                        - location: body
-                          pointer: /email
-                          code: required
-                          message: Required value is missing
+          $ref: '#/components/responses/ValidationFailed'
         '500':
-          description: INTERNAL_ERROR
-          x-error-codes:
-            - INTERNAL_ERROR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INTERNAL_ERROR:
-                  value:
-                    code: INTERNAL_ERROR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InternalError'
         '503':
-          description: SERVICE_UNAVAILABLE
-          x-error-codes:
-            - SERVICE_UNAVAILABLE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                SERVICE_UNAVAILABLE:
-                  value:
-                    code: SERVICE_UNAVAILABLE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ServiceUnavailable'
       security:
         - Session: []
   /api/v1/me/notifications:
@@ -4662,131 +2106,17 @@ paths:
                 next_cursor: null
                 server_time: '2026-09-12T07:30:30.123456Z'
         '400':
-          description: INVALID_HEADER, INVALID_CURSOR
-          x-error-codes:
-            - INVALID_HEADER
-            - INVALID_CURSOR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INVALID_HEADER:
-                  value:
-                    code: INVALID_HEADER
-                    message: Request could not be completed
-                    request_id: example-request-1
-                INVALID_CURSOR:
-                  value:
-                    code: INVALID_CURSOR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InvalidCursor'
         '401':
-          description: AUTHENTICATION_REQUIRED
-          x-error-codes:
-            - AUTHENTICATION_REQUIRED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                AUTHENTICATION_REQUIRED:
-                  value:
-                    code: AUTHENTICATION_REQUIRED
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/AuthenticationRequired'
         '413':
-          description: BODY_TOO_LARGE
-          x-error-codes:
-            - BODY_TOO_LARGE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                BODY_TOO_LARGE:
-                  value:
-                    code: BODY_TOO_LARGE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/BodyTooLarge'
         '422':
-          description: VALIDATION_FAILED
-          x-error-codes:
-            - VALIDATION_FAILED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                VALIDATION_FAILED:
-                  value:
-                    code: VALIDATION_FAILED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                    details:
-                      violations:
-                        - location: body
-                          pointer: /email
-                          code: required
-                          message: Required value is missing
+          $ref: '#/components/responses/ValidationFailed'
         '500':
-          description: INTERNAL_ERROR
-          x-error-codes:
-            - INTERNAL_ERROR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INTERNAL_ERROR:
-                  value:
-                    code: INTERNAL_ERROR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InternalError'
         '503':
-          description: SERVICE_UNAVAILABLE
-          x-error-codes:
-            - SERVICE_UNAVAILABLE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                SERVICE_UNAVAILABLE:
-                  value:
-                    code: SERVICE_UNAVAILABLE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ServiceUnavailable'
       security:
         - Session: []
   /api/v1/me/invoices/{id}:
@@ -4845,144 +2175,19 @@ paths:
                   status: pending
                   updated_at: '2026-09-12T07:30:30.123456Z'
         '400':
-          description: INVALID_HEADER
-          x-error-codes:
-            - INVALID_HEADER
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INVALID_HEADER:
-                  value:
-                    code: INVALID_HEADER
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InvalidHeader'
         '401':
-          description: AUTHENTICATION_REQUIRED
-          x-error-codes:
-            - AUTHENTICATION_REQUIRED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                AUTHENTICATION_REQUIRED:
-                  value:
-                    code: AUTHENTICATION_REQUIRED
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/AuthenticationRequired'
         '404':
-          description: RESOURCE_NOT_FOUND
-          x-error-codes:
-            - RESOURCE_NOT_FOUND
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                RESOURCE_NOT_FOUND:
-                  value:
-                    code: RESOURCE_NOT_FOUND
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ResourceNotFound'
         '413':
-          description: BODY_TOO_LARGE
-          x-error-codes:
-            - BODY_TOO_LARGE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                BODY_TOO_LARGE:
-                  value:
-                    code: BODY_TOO_LARGE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/BodyTooLarge'
         '422':
-          description: VALIDATION_FAILED
-          x-error-codes:
-            - VALIDATION_FAILED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                VALIDATION_FAILED:
-                  value:
-                    code: VALIDATION_FAILED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                    details:
-                      violations:
-                        - location: body
-                          pointer: /email
-                          code: required
-                          message: Required value is missing
+          $ref: '#/components/responses/ValidationFailed'
         '500':
-          description: INTERNAL_ERROR
-          x-error-codes:
-            - INTERNAL_ERROR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INTERNAL_ERROR:
-                  value:
-                    code: INTERNAL_ERROR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InternalError'
         '503':
-          description: SERVICE_UNAVAILABLE
-          x-error-codes:
-            - SERVICE_UNAVAILABLE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                SERVICE_UNAVAILABLE:
-                  value:
-                    code: SERVICE_UNAVAILABLE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ServiceUnavailable'
       security:
         - Session: []
   /api/v1/me/notifications/{id}/read:
@@ -5046,169 +2251,21 @@ paths:
                   expires_at: '2026-09-12T07:30:30.123456Z'
                   read_at: '2026-09-12T07:29:00.123456Z'
         '400':
-          description: INVALID_HEADER
-          x-error-codes:
-            - INVALID_HEADER
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INVALID_HEADER:
-                  value:
-                    code: INVALID_HEADER
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InvalidHeader'
         '401':
-          description: AUTHENTICATION_REQUIRED
-          x-error-codes:
-            - AUTHENTICATION_REQUIRED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                AUTHENTICATION_REQUIRED:
-                  value:
-                    code: AUTHENTICATION_REQUIRED
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/AuthenticationRequired'
         '403':
-          description: ORIGIN_NOT_ALLOWED, CSRF_INVALID
-          x-error-codes:
-            - ORIGIN_NOT_ALLOWED
-            - CSRF_INVALID
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                ORIGIN_NOT_ALLOWED:
-                  value:
-                    code: ORIGIN_NOT_ALLOWED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                CSRF_INVALID:
-                  value:
-                    code: CSRF_INVALID
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/OriginOrCsrfRefused'
         '404':
-          description: RESOURCE_NOT_FOUND
-          x-error-codes:
-            - RESOURCE_NOT_FOUND
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                RESOURCE_NOT_FOUND:
-                  value:
-                    code: RESOURCE_NOT_FOUND
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ResourceNotFound'
         '413':
-          description: BODY_TOO_LARGE
-          x-error-codes:
-            - BODY_TOO_LARGE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                BODY_TOO_LARGE:
-                  value:
-                    code: BODY_TOO_LARGE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/BodyTooLarge'
         '422':
-          description: VALIDATION_FAILED
-          x-error-codes:
-            - VALIDATION_FAILED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                VALIDATION_FAILED:
-                  value:
-                    code: VALIDATION_FAILED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                    details:
-                      violations:
-                        - location: body
-                          pointer: /email
-                          code: required
-                          message: Required value is missing
+          $ref: '#/components/responses/ValidationFailed'
         '500':
-          description: INTERNAL_ERROR
-          x-error-codes:
-            - INTERNAL_ERROR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INTERNAL_ERROR:
-                  value:
-                    code: INTERNAL_ERROR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InternalError'
         '503':
-          description: SERVICE_UNAVAILABLE
-          x-error-codes:
-            - SERVICE_UNAVAILABLE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                SERVICE_UNAVAILABLE:
-                  value:
-                    code: SERVICE_UNAVAILABLE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ServiceUnavailable'
       security:
         - Session: []
   /api/v1/events:
@@ -5284,106 +2341,15 @@ paths:
                     : keepalive
 
         '400':
-          description: INVALID_HEADER
-          x-error-codes:
-            - INVALID_HEADER
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INVALID_HEADER:
-                  value:
-                    code: INVALID_HEADER
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InvalidHeader'
         '413':
-          description: BODY_TOO_LARGE
-          x-error-codes:
-            - BODY_TOO_LARGE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                BODY_TOO_LARGE:
-                  value:
-                    code: BODY_TOO_LARGE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/BodyTooLarge'
         '422':
-          description: VALIDATION_FAILED
-          x-error-codes:
-            - VALIDATION_FAILED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                VALIDATION_FAILED:
-                  value:
-                    code: VALIDATION_FAILED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                    details:
-                      violations:
-                        - location: body
-                          pointer: /email
-                          code: required
-                          message: Required value is missing
+          $ref: '#/components/responses/ValidationFailed'
         '500':
-          description: INTERNAL_ERROR
-          x-error-codes:
-            - INTERNAL_ERROR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INTERNAL_ERROR:
-                  value:
-                    code: INTERNAL_ERROR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InternalError'
         '503':
-          description: SERVICE_UNAVAILABLE
-          x-error-codes:
-            - SERVICE_UNAVAILABLE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                SERVICE_UNAVAILABLE:
-                  value:
-                    code: SERVICE_UNAVAILABLE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ServiceUnavailable'
       security: []
       x-event-schemas:
         ready: '#/components/schemas/EventReady'
@@ -5461,125 +2427,17 @@ paths:
                     : keepalive
 
         '400':
-          description: INVALID_HEADER
-          x-error-codes:
-            - INVALID_HEADER
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INVALID_HEADER:
-                  value:
-                    code: INVALID_HEADER
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InvalidHeader'
         '401':
-          description: AUTHENTICATION_REQUIRED
-          x-error-codes:
-            - AUTHENTICATION_REQUIRED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                AUTHENTICATION_REQUIRED:
-                  value:
-                    code: AUTHENTICATION_REQUIRED
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/AuthenticationRequired'
         '413':
-          description: BODY_TOO_LARGE
-          x-error-codes:
-            - BODY_TOO_LARGE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                BODY_TOO_LARGE:
-                  value:
-                    code: BODY_TOO_LARGE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/BodyTooLarge'
         '422':
-          description: VALIDATION_FAILED
-          x-error-codes:
-            - VALIDATION_FAILED
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                VALIDATION_FAILED:
-                  value:
-                    code: VALIDATION_FAILED
-                    message: Request could not be completed
-                    request_id: example-request-1
-                    details:
-                      violations:
-                        - location: body
-                          pointer: /email
-                          code: required
-                          message: Required value is missing
+          $ref: '#/components/responses/ValidationFailed'
         '500':
-          description: INTERNAL_ERROR
-          x-error-codes:
-            - INTERNAL_ERROR
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                INTERNAL_ERROR:
-                  value:
-                    code: INTERNAL_ERROR
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/InternalError'
         '503':
-          description: SERVICE_UNAVAILABLE
-          x-error-codes:
-            - SERVICE_UNAVAILABLE
-          headers:
-            X-Request-ID:
-              $ref: '#/components/headers/RequestId'
-            Cache-Control:
-              $ref: '#/components/headers/CacheControl'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-              examples:
-                SERVICE_UNAVAILABLE:
-                  value:
-                    code: SERVICE_UNAVAILABLE
-                    message: Request could not be completed
-                    request_id: example-request-1
+          $ref: '#/components/responses/ServiceUnavailable'
       security:
         - Session: []
       x-event-schemas:
@@ -5624,6 +2482,353 @@ components:
         X-CSRF-Token.
       schema:
         type: string
+  responses:
+    InvalidHeader:
+      description: INVALID_HEADER
+      x-error-codes:
+        - INVALID_HEADER
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          examples:
+            INVALID_HEADER:
+              value:
+                code: INVALID_HEADER
+                message: Request could not be completed
+                request_id: example-request-1
+    BodyTooLarge:
+      description: BODY_TOO_LARGE
+      x-error-codes:
+        - BODY_TOO_LARGE
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          examples:
+            BODY_TOO_LARGE:
+              value:
+                code: BODY_TOO_LARGE
+                message: Request could not be completed
+                request_id: example-request-1
+    ValidationFailed:
+      description: VALIDATION_FAILED
+      x-error-codes:
+        - VALIDATION_FAILED
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          examples:
+            VALIDATION_FAILED:
+              value:
+                code: VALIDATION_FAILED
+                message: Request could not be completed
+                request_id: example-request-1
+                details:
+                  violations:
+                    - location: body
+                      pointer: /email
+                      code: required
+                      message: Required value is missing
+    InternalError:
+      description: INTERNAL_ERROR
+      x-error-codes:
+        - INTERNAL_ERROR
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          examples:
+            INTERNAL_ERROR:
+              value:
+                code: INTERNAL_ERROR
+                message: Request could not be completed
+                request_id: example-request-1
+    MalformedJson:
+      description: INVALID_HEADER, MALFORMED_JSON
+      x-error-codes:
+        - INVALID_HEADER
+        - MALFORMED_JSON
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          examples:
+            INVALID_HEADER:
+              value:
+                code: INVALID_HEADER
+                message: Request could not be completed
+                request_id: example-request-1
+            MALFORMED_JSON:
+              value:
+                code: MALFORMED_JSON
+                message: Request could not be completed
+                request_id: example-request-1
+    OriginNotAllowed:
+      description: ORIGIN_NOT_ALLOWED
+      x-error-codes:
+        - ORIGIN_NOT_ALLOWED
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          examples:
+            ORIGIN_NOT_ALLOWED:
+              value:
+                code: ORIGIN_NOT_ALLOWED
+                message: Request could not be completed
+                request_id: example-request-1
+    UnsupportedMediaType:
+      description: UNSUPPORTED_MEDIA_TYPE
+      x-error-codes:
+        - UNSUPPORTED_MEDIA_TYPE
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          examples:
+            UNSUPPORTED_MEDIA_TYPE:
+              value:
+                code: UNSUPPORTED_MEDIA_TYPE
+                message: Request could not be completed
+                request_id: example-request-1
+    RateLimited:
+      description: RATE_LIMITED
+      x-error-codes:
+        - RATE_LIMITED
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Retry-After:
+          $ref: '#/components/headers/RetryAfterWait'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          examples:
+            RATE_LIMITED:
+              value:
+                code: RATE_LIMITED
+                message: Request could not be completed
+                request_id: example-request-1
+    ServiceUnavailable:
+      description: SERVICE_UNAVAILABLE
+      x-error-codes:
+        - SERVICE_UNAVAILABLE
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          examples:
+            SERVICE_UNAVAILABLE:
+              value:
+                code: SERVICE_UNAVAILABLE
+                message: Request could not be completed
+                request_id: example-request-1
+    OriginOrCsrfRefused:
+      description: ORIGIN_NOT_ALLOWED, CSRF_INVALID
+      x-error-codes:
+        - ORIGIN_NOT_ALLOWED
+        - CSRF_INVALID
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          examples:
+            ORIGIN_NOT_ALLOWED:
+              value:
+                code: ORIGIN_NOT_ALLOWED
+                message: Request could not be completed
+                request_id: example-request-1
+            CSRF_INVALID:
+              value:
+                code: CSRF_INVALID
+                message: Request could not be completed
+                request_id: example-request-1
+    AuthenticationRequired:
+      description: AUTHENTICATION_REQUIRED
+      x-error-codes:
+        - AUTHENTICATION_REQUIRED
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          examples:
+            AUTHENTICATION_REQUIRED:
+              value:
+                code: AUTHENTICATION_REQUIRED
+                message: Request could not be completed
+                request_id: example-request-1
+    ResourceNotFound:
+      description: RESOURCE_NOT_FOUND
+      x-error-codes:
+        - RESOURCE_NOT_FOUND
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          examples:
+            RESOURCE_NOT_FOUND:
+              value:
+                code: RESOURCE_NOT_FOUND
+                message: Request could not be completed
+                request_id: example-request-1
+    IdempotencyKeyInvalid:
+      description: INVALID_HEADER, IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_KEY_INVALID
+      x-error-codes:
+        - INVALID_HEADER
+        - IDEMPOTENCY_KEY_REQUIRED
+        - IDEMPOTENCY_KEY_INVALID
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          examples:
+            INVALID_HEADER:
+              value:
+                code: INVALID_HEADER
+                message: Request could not be completed
+                request_id: example-request-1
+            IDEMPOTENCY_KEY_REQUIRED:
+              value:
+                code: IDEMPOTENCY_KEY_REQUIRED
+                message: Request could not be completed
+                request_id: example-request-1
+            IDEMPOTENCY_KEY_INVALID:
+              value:
+                code: IDEMPOTENCY_KEY_INVALID
+                message: Request could not be completed
+                request_id: example-request-1
+    RideMoveConflict:
+      description: IDEMPOTENCY_CONFLICT, IDEMPOTENCY_IN_PROGRESS, RENTAL_COMPLETED, INVALID_RENTAL_STATE
+      x-error-codes:
+        - IDEMPOTENCY_CONFLICT
+        - IDEMPOTENCY_IN_PROGRESS
+        - RENTAL_COMPLETED
+        - INVALID_RENTAL_STATE
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+        Idempotency-Replayed:
+          $ref: '#/components/headers/IdempotencyReplayed'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          examples:
+            IDEMPOTENCY_CONFLICT:
+              value:
+                code: IDEMPOTENCY_CONFLICT
+                message: Request could not be completed
+                request_id: example-request-1
+            IDEMPOTENCY_IN_PROGRESS:
+              value:
+                code: IDEMPOTENCY_IN_PROGRESS
+                message: Request could not be completed
+                request_id: example-request-1
+            RENTAL_COMPLETED:
+              value:
+                code: RENTAL_COMPLETED
+                message: Request could not be completed
+                request_id: example-request-1
+            INVALID_RENTAL_STATE:
+              value:
+                code: INVALID_RENTAL_STATE
+                message: Request could not be completed
+                request_id: example-request-1
+    InvalidCursor:
+      description: INVALID_HEADER, INVALID_CURSOR
+      x-error-codes:
+        - INVALID_HEADER
+        - INVALID_CURSOR
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/RequestId'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControl'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          examples:
+            INVALID_HEADER:
+              value:
+                code: INVALID_HEADER
+                message: Request could not be completed
+                request_id: example-request-1
+            INVALID_CURSOR:
+              value:
+                code: INVALID_CURSOR
+                message: Request could not be completed
+                request_id: example-request-1
+
   schemas:
     ApiError:
       $ref: ./components/errors.yaml#/components/schemas/ApiError

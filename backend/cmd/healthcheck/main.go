@@ -1,56 +1,51 @@
-// Command healthcheck probes readiness from inside the container for the Docker health check.
+// Command healthcheck answers one health check of a container from inside it, for the service that
+// runs it: the readiness of a process that serves an interface, or the mark a process with nothing to
+// serve leaves behind. The probe is named by the argument the service passes, and its exit status is
+// what Docker reads.
 package main
 
 import (
-	"net"
-	"net/http"
+	"fmt"
+	"maps"
 	"os"
-	"time"
-
-	"github.com/Alisher24/CarSharing/backend/internal/platform/config"
-	"github.com/Alisher24/CarSharing/backend/internal/platform/httpapi"
+	"slices"
+	"strings"
 )
 
-const (
-	// readyScheme is plain HTTP because the probe runs inside the container, on the loopback
-	// address, beside the API it checks rather than through the proxy that terminates TLS.
-	readyScheme = "http://"
-
-	// readyHost is the container's own loopback address. The API listens on every interface, so a
-	// container that published another one still reaches it here.
-	readyHost = "127.0.0.1"
-
-	// readyPort is the port the probe looks on when HTTP_ADDR names no port at all: the port the
-	// listener defaults to, so a deployment that moves the default moves the probe with it.
-	readyPort = config.DefaultHTTPPort
-
-	probeTimeout = 3 * time.Second
-)
+// probes are the health checks this command answers, by the name the service passes it. A service adds
+// a probe by adding a row here and naming it in its own health check. A probe reports the container
+// unhealthy by returning why, so every probe says as much about a failure as the check can.
+var probes = map[string]func() error{
+	"ready":     readyProbe,
+	"heartbeat": heartbeatProbe,
+}
 
 func main() {
-	os.Exit(probe(readyURL()))
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }
 
-// readyURL is the readiness URL of the API in this container. The port comes from the same setting
-// the API listens on, so a deployment that moves the listener does not leave the health check
-// probing the port it used to be on, and the path comes from the operation the API serves.
-func readyURL() string {
-	_, port, err := net.SplitHostPort(config.HTTPAddrFromEnvironment())
-	if err != nil || port == "" {
-		port = readyPort
+// run answers the probe the service asked for.
+func run() error {
+	probe, known := probes[probeArgument()]
+	if !known {
+		return fmt.Errorf("usage: healthcheck <%s>", joinNames())
 	}
-	return readyScheme + net.JoinHostPort(readyHost, port) + httpapi.ReadyPath
+	return probe()
 }
 
-func probe(url string) int {
-	client := http.Client{Timeout: probeTimeout}
-	resp, err := client.Get(url)
-	if err != nil {
-		return 1
+// probeArgument is the probe the service asked for, which is absent when the command is run by hand.
+func probeArgument() string {
+	if len(os.Args) < 2 {
+		return ""
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return 1
-	}
-	return 0
+	return os.Args[1]
+}
+
+// joinNames spells the probes as the usage line states them, so the line cannot offer a probe this
+// command does not answer.
+func joinNames() string {
+	return strings.Join(slices.Sorted(maps.Keys(probes)), "|")
 }

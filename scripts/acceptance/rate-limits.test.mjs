@@ -44,7 +44,7 @@ const COMPLETED_WINDOW_MINUTES = 16;
 const REGISTRATION_RETRY_AFTER_LIMIT_SECONDS = 3_600;
 const LOWERED_REGISTRATION_LIMIT = 2;
 
-before(waitForReady);
+before(() => waitForReady());
 beforeEach(resetRateLimits);
 
 /**

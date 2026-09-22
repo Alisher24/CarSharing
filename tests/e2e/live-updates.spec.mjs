@@ -6,15 +6,10 @@
 // the check measures is the delivered signal rather than a poll that would have found the change
 // anyway. The second check leaves the shipped interval alone.
 import { expect, test } from '@playwright/test';
-import {
-  expireReservationOf,
-  publishedStatusOf,
-  RESERVED_VEHICLE_MODEL,
-  restoreScenario,
-  vehicleIdOf,
-} from './scenario.mjs';
+import { until } from '../../scripts/acceptance/reservations.mjs';
+import { makeExpiryDue, publishedStatusOf, RESERVED_VEHICLE_MODEL, restoreScenario, vehicleIdOf } from './scenario.mjs';
 
-/** The bound a committed change must reach a connected client within. */
+/** The bound a change must reach a connected client within, measured from the moment it is visible. */
 const DELIVERY_BOUND_MS = 2000;
 
 /** The address that switches the periodic reconciliation off, which only a test asks for. */
@@ -37,7 +32,7 @@ test.beforeEach(() => {
   restoreScenario();
 });
 
-test('a change reaches a second client within two seconds of the commit', async ({ browser }) => {
+test('a change reaches a second client within two seconds of becoming visible', async ({ browser }) => {
   const vehicleId = vehicleIdOf(RESERVED_VEHICLE_MODEL);
 
   // Two browser contexts rather than two tabs: tabs of one profile share a cookie, a connection
@@ -58,12 +53,17 @@ test('a change reaches a second client within two seconds of the commit', async 
     }
     await Promise.all([expectNoNotice(other), expectNoNotice(watching)]);
 
-    const committedAt = expireReservationOf(vehicleId);
-    expect(publishedStatusOf(vehicleId)).not.toBe('reserved');
+    makeExpiryDue(vehicleId);
+
+    // The deadline pass commits the transition on its own moment, so what the delivery is measured
+    // from is the moment the change became visible in the database: the pass runs every second, and
+    // waiting for it is not part of what this check measures.
+    await until(() => publishedStatusOf(vehicleId) !== 'reserved', 'the reservation never expired');
+    const visibleAt = Date.now();
 
     await expect(statusOf(watching, RESERVED_VEHICLE_MODEL)).not.toHaveAttribute('data-status', 'reserved');
-    const arrivedIn = Date.now() - committedAt;
-    expect(arrivedIn, `the change reached the second client ${arrivedIn} ms after the commit`).toBeLessThan(
+    const arrivedIn = Date.now() - visibleAt;
+    expect(arrivedIn, `the change reached the second client ${arrivedIn} ms after it became visible`).toBeLessThan(
       DELIVERY_BOUND_MS,
     );
   } finally {
@@ -102,7 +102,7 @@ test('a client whose stream is broken says so and keeps repairing itself', async
     await expect(statusOf(page, RESERVED_VEHICLE_MODEL)).toHaveAttribute('data-status', 'reserved');
     await expect(page.locator('.stream-notice')).toHaveText(new RegExp(DELAYED_NOTICE));
 
-    expireReservationOf(vehicleId);
+    makeExpiryDue(vehicleId);
 
     // The signal never arrives, so what shows the change is the reconciliation the shipped
     // application runs while it is open.

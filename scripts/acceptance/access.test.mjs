@@ -39,7 +39,7 @@ const INVALID_CURSOR_CODE = 'INVALID_CURSOR';
 /** How many rows of the account under attack are compared before and after a foreign request. */
 const OWNED_TABLES = ['rentals', 'invoices', 'invoice_payments', 'notifications'];
 
-before(waitForReady);
+before(() => waitForReady());
 
 // The suite needs a live ride to aim foreign commands at, so what one check left holding is given
 // back before the next starts and the prepared demonstration is put back at the end.

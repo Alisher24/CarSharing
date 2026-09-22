@@ -2,15 +2,26 @@
 
 ### Issue tracker
 
-Issues are tracked in this repository's GitHub Issues. See `docs/agents/issue-tracker.md`.
+Issues and specifications are GitHub Issues on `Alisher24/CarSharing`, worked through the `gh` CLI:
+`gh issue create|view|list|comment|edit|close`. Pull requests are not a request surface, and issues and
+pull requests share one number space, so an ambiguous `#42` is resolved with `gh pr view 42` before
+falling back to `gh issue view 42`. A map is one issue labelled `wayfinder:map` whose child issues are
+its tickets: `Part of #<map>` at the top of a child is what links it when sub-issues are unavailable, a
+`wayfinder:<research|prototype|grilling|task>` label says what the child is, and GitHub issue
+dependencies — or `Blocked by: #<n>` — say what it waits for.
 
 ### Triage labels
 
-Use the five canonical triage labels. See `docs/agents/triage-labels.md`.
+Five canonical roles, spelled as the tracker labels are: `needs-triage` (a maintainer has to evaluate
+the issue), `needs-info` (waiting for more information), `ready-for-agent` (fully specified and ready
+for an agent), `ready-for-human` (requires human implementation) and `wontfix` (will not be actioned).
 
-### Domain docs
+### Domain context
 
-This is a single-context repository. See `docs/agents/domain.md`.
+This is a single-context repository: one domain, one vocabulary, no per-package context documents. The
+vocabulary is the code's own names and the package documents beside them. A term or a decision resolved
+while working is written into the local delivery package — `docs/` at the repository root, which is not
+in Git and is handed over beside a clone rather than inside one.
 
 ### Commit messages
 

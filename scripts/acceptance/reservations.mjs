@@ -131,9 +131,7 @@ export async function endSuiteReservations() {
 }
 
 /** Puts the prepared demonstration back, which a reservation of a person's would otherwise refuse. */
-export function restoreScenario() {
-  return compose('--profile', 'demo', 'run', '--rm', 'demo-scenario');
-}
+export { restoreScenario } from './fleet.mjs';
 
 /**
  * One vehicle the public catalog publishes as free to take, or several of them. A vehicle whose only

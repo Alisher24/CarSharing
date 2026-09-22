@@ -23,7 +23,9 @@ import (
 var usage = "usage: democontrol <" + strings.Join(democontrol.Commands(), "|") + "> [flags]"
 
 func main() {
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
+	// Both the log and the answer of a command go to stdout, as they do in every other process here:
+	// a collector that reads what a demonstration did reads one stream, not two.
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	if err := run(); err != nil {
 		slog.Error(err.Error())
 		os.Exit(1)

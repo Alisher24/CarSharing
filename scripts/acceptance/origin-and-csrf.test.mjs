@@ -38,7 +38,7 @@ const MUTATIONS = [
   { name: 'sign-out', path: SIGN_OUT_PATH, buildRequest: () => ({ method: 'POST' }) },
 ];
 
-before(waitForReady);
+before(() => waitForReady());
 
 // Every suite shares one address, so each test starts with the rate limits untouched by the last.
 beforeEach(resetRateLimits);

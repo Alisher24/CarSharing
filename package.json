@@ -10,6 +10,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "format:staged": "node scripts/format-staged.mjs",
+    "test": "node --test \"scripts/*.test.mjs\"",
     "e2e": "playwright test --config tests/e2e/playwright.config.mjs",
     "e2e:install": "playwright install chromium"
   },

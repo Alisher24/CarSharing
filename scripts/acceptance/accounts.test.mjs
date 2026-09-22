@@ -51,7 +51,7 @@ const ACCEPTED_PASSWORDS = new Map([
   ['is not ASCII', NON_ASCII_PASSWORD],
 ]);
 
-before(waitForReady);
+before(() => waitForReady());
 
 // Every suite shares one address, so each test starts with the rate limits untouched by the last.
 beforeEach(resetRateLimits);

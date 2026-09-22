@@ -46,7 +46,7 @@ const OUTAGE_PATIENCE_MS = 20_000;
  */
 const LAGGING_SIGNALS = 200;
 
-before(waitForReady);
+before(() => waitForReady());
 
 // The suite reserves vehicles and writes outbox tasks of its own, so it puts the prepared
 // demonstration back when it is done.

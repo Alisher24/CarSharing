@@ -15,7 +15,6 @@
   },
   "dependencies": {
     "@protomaps/basemaps": "5.7.2",
-    "carsharing-workspace": "file:..",
     "maplibre-gl": "6.10.0",
     "pmtiles": "4.5.0",
     "react": "19.3.0",
