@@ -54,20 +54,20 @@ type group struct {
 	members [membersPerPowertrain]member
 }
 
-// groups is the whole demonstration fleet. Every group carries the reserves the rules turn on: one
-// vehicle at or just below the start threshold, and, where the powertrain has more than one
-// source, reserves spread across them so that they must not be added together.
-var groups = []group{
+// groups are the whole demonstration fleet, one group per powertrain. Every group carries the reserves
+// the rules turn on: one vehicle at or just below the start threshold, and, where the powertrain has
+// more than one source, reserves spread across them so that they must not be added together.
+var groups = [...]group{
 	{
 		powertrain:  fleet.PowertrainElectric,
 		modelPrefix: "Демо Электро",
 		capacities:  map[fleet.SourceKind]fleet.Amount{fleet.SourceBattery: 60_000 * wattHour},
 		routes: [membersPerPowertrain]simulation.RouteID{
-			"electric-1",
-			"electric-2",
-			"electric-3",
-			"electric-4",
-			"electric-5",
+			simulation.ElectricRoute1,
+			simulation.ElectricRoute2,
+			simulation.ElectricRoute3,
+			simulation.ElectricRoute4,
+			simulation.ElectricRoute5,
 		},
 		members: [membersPerPowertrain]member{
 			{charge: map[fleet.SourceKind]int{fleet.SourceBattery: 8200}},
@@ -84,11 +84,11 @@ var groups = []group{
 		modelPrefix: "Демо Бензин",
 		capacities:  map[fleet.SourceKind]fleet.Amount{fleet.SourceGasoline: 50 * litre},
 		routes: [membersPerPowertrain]simulation.RouteID{
-			"gasoline-1",
-			"gasoline-2",
-			"gasoline-3",
-			"gasoline-4",
-			"gasoline-5",
+			simulation.GasolineRoute1,
+			simulation.GasolineRoute2,
+			simulation.GasolineRoute3,
+			simulation.GasolineRoute4,
+			simulation.GasolineRoute5,
 		},
 		members: [membersPerPowertrain]member{
 			{charge: map[fleet.SourceKind]int{fleet.SourceGasoline: 9100}},
@@ -106,10 +106,10 @@ var groups = []group{
 			// The one vehicle whose circuit leaves the demonstration area, so that an ending beyond
 			// the boundary can be shown on it.
 			simulation.ScenarioRouteID,
-			"diesel-2",
-			"diesel-3",
-			"diesel-4",
-			"diesel-5",
+			simulation.DieselRoute2,
+			simulation.DieselRoute3,
+			simulation.DieselRoute4,
+			simulation.DieselRoute5,
 		},
 		members: [membersPerPowertrain]member{
 			{charge: map[fleet.SourceKind]int{fleet.SourceDiesel: 8800}},
@@ -127,11 +127,11 @@ var groups = []group{
 			fleet.SourceGasoline: 45 * litre,
 		},
 		routes: [membersPerPowertrain]simulation.RouteID{
-			"hybrid-1",
-			"hybrid-2",
-			"hybrid-3",
-			"hybrid-4",
-			"hybrid-5",
+			simulation.HybridRoute1,
+			simulation.HybridRoute2,
+			simulation.HybridRoute3,
+			simulation.HybridRoute4,
+			simulation.HybridRoute5,
 		},
 		members: [membersPerPowertrain]member{
 			// An empty battery beside a sufficient tank: the tank alone makes the vehicle fit.
@@ -157,11 +157,11 @@ var groups = []group{
 			fleet.SourceLPG:      60 * litre,
 		},
 		routes: [membersPerPowertrain]simulation.RouteID{
-			"gas-1",
-			"gas-2",
-			"gas-3",
-			"gas-4",
-			"gas-5",
+			simulation.GasRoute1,
+			simulation.GasRoute2,
+			simulation.GasRoute3,
+			simulation.GasRoute4,
+			simulation.GasRoute5,
 		},
 		members: [membersPerPowertrain]member{
 			{charge: map[fleet.SourceKind]int{fleet.SourceGasoline: 7200, fleet.SourceLPG: 6400}},
@@ -268,9 +268,10 @@ func spotAlong(route simulation.Route, groupIndex, positionInGroup int) fleet.Po
 	return route.PositionAt(simulation.Path(int64(lap) * int64(steps) / int64(spots)))
 }
 
-// route is the circuit the member this group places at an index drives. A group naming a circuit this
-// build does not declare is a defect of the declaration rather than a condition to carry on from, and
-// finding it here is what keeps it from reaching a client as a vehicle standing nowhere.
+// route is the circuit the member this group places at an index drives. The identifiers are declared
+// constants, so a group can no longer name a circuit by a misspelt word; what is left for this check
+// to catch is an identifier this build declares and draws no ring for, which the compiler cannot see
+// and which would otherwise surface here as an empty circuit rather than as the mistake it is.
 func (g group) route(positionInGroup int) simulation.Route {
 	route, declared := simulation.RouteOf(g.routes[positionInGroup])
 	if !declared {

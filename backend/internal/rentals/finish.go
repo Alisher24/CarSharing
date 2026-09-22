@@ -30,7 +30,7 @@ type FinishCommand struct {
 // one ride produce one completed rental and one invoice.
 func (s *Service) Finish(ctx context.Context, command FinishCommand) (Answered, error) {
 	return s.answer(ctx, idempotency.ForAccount(command.Caller), command.Attempt,
-		rideParticipants(s.pool, RideCommand{Caller: command.Caller, RentalID: command.RentalID}),
+		rideParticipants(s.pool, RentalCommand{Caller: command.Caller, RentalID: command.RentalID}),
 		func(ctx context.Context, tx pgx.Tx, moment time.Time) (Outcome, error) {
 			return s.finishWithin(ctx, tx, moment, command)
 		})

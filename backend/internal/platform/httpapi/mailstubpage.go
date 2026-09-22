@@ -244,7 +244,7 @@ func (p *inboxPages) letterList(request pageRequest) inboxAnswer {
 	}
 	read, err := p.served.pageOf(request.ctx, after, limit)
 	if err != nil {
-		slog.ErrorContext(request.ctx, "the mail box could not be read", "error", err)
+		slog.ErrorContext(request.ctx, logBoxUnreadable, "error", err)
 		return refusalAnswer(http.StatusServiceUnavailable, inboxUnavailable)
 	}
 	return inboxAnswer{
@@ -264,7 +264,7 @@ func (p *inboxPages) oneLetter(request pageRequest) inboxAnswer {
 		return refusalAnswer(http.StatusNotFound, inboxNoSuchLetter)
 	}
 	if err != nil {
-		slog.ErrorContext(request.ctx, "one letter could not be read", "error", err)
+		slog.ErrorContext(request.ctx, logLetterUnreadable, "error", err)
 		return refusalAnswer(http.StatusServiceUnavailable, inboxUnavailable)
 	}
 	return inboxAnswer{

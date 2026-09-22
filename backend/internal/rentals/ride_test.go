@@ -13,18 +13,18 @@ import (
 // interval.
 func TestRideTransitionRule(t *testing.T) {
 	for _, command := range []struct {
-		kind      RideKind
+		action    RentalAction
 		appliesTo stage.Stage
 		reaches   stage.Stage
 	}{
-		{StartRide, stage.Reserved, stage.Active},
-		{PauseRide, stage.Active, stage.Paused},
-		{ResumeRide, stage.Paused, stage.Active},
+		{StartRental, stage.Reserved, stage.Active},
+		{PauseRental, stage.Active, stage.Paused},
+		{ResumeRental, stage.Paused, stage.Active},
 	} {
-		transition := rideTransitions[command.kind]
+		transition := rideTransitions[command.action]
 		if transition.from != command.appliesTo || transition.to != command.reaches {
 			t.Fatalf("%s moves %s to %s, want %s to %s",
-				command.kind, transition.from, transition.to, command.appliesTo, command.reaches)
+				command.action, transition.from, transition.to, command.appliesTo, command.reaches)
 		}
 
 		for _, other := range []stage.Stage{
@@ -39,13 +39,13 @@ func TestRideTransitionRule(t *testing.T) {
 			want := refusalForStage(other, command.appliesTo)
 			switch {
 			case want == nil && refusal != nil:
-				t.Errorf("%s of a %s rental refused with %s", command.kind, other, refusal.Kind)
+				t.Errorf("%s of a %s rental refused with %s", command.action, other, refusal.Kind)
 			case want == nil:
 			case refusal == nil:
-				t.Fatalf("%s of a %s rental was allowed", command.kind, other)
+				t.Fatalf("%s of a %s rental was allowed", command.action, other)
 			case refusal.Kind != want.Kind:
 				t.Errorf("%s of a %s rental refused with %s, want %s",
-					command.kind, other, refusal.Kind, want.Kind)
+					command.action, other, refusal.Kind, want.Kind)
 			}
 		}
 	}

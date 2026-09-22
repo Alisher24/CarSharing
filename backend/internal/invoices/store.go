@@ -125,7 +125,7 @@ func (s *Store) insert(ctx context.Context, id string, draft Draft) error {
 		paused.billedMinutes,
 		paused.rateTyiynPerMinute,
 		int64(draft.TotalTyiyn),
-		issuedVersion,
+		database.InitialVersion,
 		draft.RentalID,
 	)
 	if err != nil {
@@ -137,7 +137,8 @@ func (s *Store) insert(ctx context.Context, id string, draft Draft) error {
 		// nothing.
 		return ErrInvoiceNotFound
 	}
-	_, err = querier.Exec(ctx, insertPaymentStatement, id, status, issuedVersion, draft.IssuedAt, paidAt)
+	_, err = querier.Exec(ctx, insertPaymentStatement, id, status, database.InitialVersion,
+		draft.IssuedAt, paidAt)
 	return err
 }
 
@@ -204,10 +205,6 @@ SELECT EXISTS (
       AND invoice.total_amount_tyiyn > 0
       AND payment.status <> 'paid'
 )`
-
-// issuedVersion is the version an invoice and its payment are written at. The invoice never moves past
-// it РІР‚вЂќ an invoice is immutable РІР‚вЂќ and the payment moves when its state changes.
-const issuedVersion int64 = 1
 
 // insertInvoiceStatement writes one invoice for one ride. The currency and the billing policy are
 // selected from the rental rather than handed in by the caller, so an invoice cannot be issued under a
@@ -298,13 +295,14 @@ func (s *Store) Settle(
 	if err := outcome.Validate(); err != nil {
 		return Invoice{}, err
 	}
+	columns := outcomeColumns(outcome)
 	written, err := database.QuerierFrom(ctx, s.pool).Exec(ctx, settleStatement,
 		invoiceID,
 		outcome.Status,
 		outcome.Moment,
-		paidMomentOf(outcome),
-		failedMomentOf(outcome),
-		failureCodeOf(outcome),
+		columns.paidAt,
+		columns.failedAt,
+		columns.failureCode,
 		from,
 	)
 	if err != nil {
@@ -316,31 +314,28 @@ func (s *Store) Settle(
 	return s.read(ctx, invoiceByIDSelection, invoiceID)
 }
 
-// paidMomentOf, failedMomentOf and failureCodeOf state what one outcome writes into the three columns
-// that belong to a state: a state that does not carry a value writes none, so the row cannot end up
-// holding a moment or a reason that its own status does not explain.
-func paidMomentOf(outcome SettleOutcome) *time.Time {
-	if outcome.Status == PaidPayment {
-		moment := outcome.Moment
-		return &moment
-	}
-	return nil
+// paymentColumns is what one outcome writes into the three columns of a state: the moment a
+// settlement is stated by, the moment a refusal is, and the reason a refusal carries. What the state
+// does not carry is absent, so a row cannot end up holding a moment or a reason its own status does
+// not explain.
+type paymentColumns struct {
+	paidAt      *time.Time
+	failedAt    *time.Time
+	failureCode *FailureCode
 }
 
-func failedMomentOf(outcome SettleOutcome) *time.Time {
-	if outcome.Status == FailedPayment {
+func outcomeColumns(outcome SettleOutcome) paymentColumns {
+	switch outcome.Status {
+	case PaidPayment:
 		moment := outcome.Moment
-		return &moment
-	}
-	return nil
-}
-
-func failureCodeOf(outcome SettleOutcome) *FailureCode {
-	if outcome.Status == FailedPayment {
+		return paymentColumns{paidAt: &moment}
+	case FailedPayment:
+		moment := outcome.Moment
 		code := outcome.FailureCode
-		return &code
+		return paymentColumns{failedAt: &moment, failureCode: &code}
+	default:
+		return paymentColumns{}
 	}
-	return nil
 }
 
 // read reads at most one invoice, so that a selection matching several rows is reported as a failure

@@ -1,6 +1,9 @@
-// Package democontrol is the client of the internal demonstration surface. It carries one set-to-value
-// command to the API and reports what the API answered, so a demonstration is driven from a terminal
-// through the closed API rather than by writing the tables the API owns.
+// Package democontrol is the demonstration's own vocabulary and the client of the surface that applies
+// it. The vocabulary declares every set-to-value command once — the name the contract publishes, the
+// fields a request carries, the terminal's flags and their hints — so the terminal, its usage line and
+// the internal surface all read one declaration. The client carries one such command to the API and
+// reports what the API answered, so a demonstration is driven from a terminal through the closed API
+// rather than by writing the tables the API owns.
 package democontrol
 
 import (

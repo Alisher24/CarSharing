@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
+	"github.com/Alisher24/CarSharing/backend/internal/rentals"
 )
 
 // The operations that answer one command. A reservation is made and given back, and a ride is started,
@@ -35,7 +36,7 @@ var (
 	}
 
 	startRideOperation = commandOperation{
-		name:    "start",
+		name:    string(rentals.StartRental),
 		path:    startRentalPath,
 		refused: http.StatusConflict,
 		answers: map[int]answerShape{
@@ -47,7 +48,7 @@ var (
 	}
 
 	pauseRideOperation = commandOperation{
-		name:    "pause",
+		name:    string(rentals.PauseRental),
 		path:    pauseRentalPath,
 		refused: http.StatusConflict,
 		answers: map[int]answerShape{
@@ -59,7 +60,7 @@ var (
 	}
 
 	resumeRideOperation = commandOperation{
-		name:    "resume",
+		name:    string(rentals.ResumeRental),
 		path:    resumeRentalPath,
 		refused: http.StatusConflict,
 		answers: map[int]answerShape{

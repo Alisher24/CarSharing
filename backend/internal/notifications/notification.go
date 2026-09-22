@@ -5,6 +5,7 @@ import (
 
 	"github.com/Alisher24/CarSharing/backend/internal/completion"
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/google/uuid"
 )
 
@@ -20,13 +21,10 @@ const (
 	RentalCompleted Kind = "rental_completed"
 )
 
-// initialVersion is the version a notification is created at. The record itself is the first
-// representation of the change it announces, and every stored change of that representation — the
-// reservation ending, the first read — reaches the next one.
-const initialVersion int64 = 1
-
 // Notification is one stored notification of one account: what it tells about, when it was written,
-// whether it is still current and how many times its published representation has changed.
+// whether it is still current and how many times its published representation has changed. Its first
+// representation is the one every stored row is created at, and every change of it — the reservation
+// ending, the first read — reaches the next one.
 type Notification struct {
 	ID        string
 	UserID    uuid.UUID
@@ -82,7 +80,7 @@ func Created(about About, at time.Time) (Notification, error) {
 		Kind:      about.Kind,
 		CreatedAt: at,
 		Active:    true,
-		Version:   initialVersion,
+		Version:   database.InitialVersion,
 	}, nil
 }
 

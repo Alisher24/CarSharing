@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/Alisher24/CarSharing/backend/internal/events"
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
@@ -14,20 +13,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// CancelCommand gives one reservation back.
-type CancelCommand struct {
-	Caller   uuid.UUID
-	RentalID string
-	Attempt  Attempt
-}
-
-// Cancel gives a reservation back before its deadline, or reports why it cannot.
+// cancelReservation gives a reservation back before its deadline, or reports why it cannot.
 //
 // The deadline decides the answer, and it is compared with the authoritative moment the transaction
 // fixed after its waits rather than with the moment the request arrived. A cancellation that arrives
 // after the deadline records the expiry first and answers that the reservation has run out: a domain
 // refusal never undoes a transition that had already become due.
-func (s *Service) Cancel(ctx context.Context, command CancelCommand) (Answered, error) {
+func (s *Service) cancelReservation(ctx context.Context, command RentalCommand) (Answered, error) {
 	return s.answer(ctx, idempotency.ForAccount(command.Caller), command.Attempt,
 		cancelParticipants(s.pool, command),
 		func(ctx context.Context, tx pgx.Tx, moment time.Time) (Outcome, error) {
@@ -37,7 +29,7 @@ func (s *Service) Cancel(ctx context.Context, command CancelCommand) (Answered, 
 
 // cancelParticipants is the rows a cancellation touches: the caller, the rental it names together
 // with the vehicle that rental holds, and whichever rental currently holds either of them.
-func cancelParticipants(pool *pgxpool.Pool, command CancelCommand) func(context.Context) (participants, error) {
+func cancelParticipants(pool *pgxpool.Pool, command RentalCommand) func(context.Context) (participants, error) {
 	return func(ctx context.Context) (participants, error) {
 		planned := participants{users: []uuid.UUID{command.Caller}}
 		target, err := rentalByIDFor(ctx, pool, command.Caller, command.RentalID)
@@ -73,7 +65,7 @@ func (s *Service) cancellationWithin(
 	ctx context.Context,
 	tx pgx.Tx,
 	moment time.Time,
-	command CancelCommand,
+	command RentalCommand,
 ) (Outcome, error) {
 	target, err := rentalByIDFor(ctx, s.pool, command.Caller, command.RentalID)
 	if errors.Is(err, ErrRentalNotFound) {
@@ -122,7 +114,7 @@ func (s *Service) cancelWithin(
 	if err = deactivateWarning(ctx, s.warnings, cancelled); err != nil {
 		return Outcome{}, err
 	}
-	if err = announceEnd(ctx, s.pool, s.vehicles, tx, target, cancelled); err != nil {
+	if err = announceRentalChange(ctx, s.pool, s.vehicles, tx, cancelled); err != nil {
 		return Outcome{}, err
 	}
 	vehicle, err := s.vehicles.VehicleAt(ctx, target.VehicleID, moment)
@@ -169,27 +161,5 @@ func endReservation(
 	if err = deactivateWarning(ctx, warnings, ended); err != nil {
 		return false, err
 	}
-	return true, announceEnd(ctx, pool, vehicles, tx, due, ended)
-}
-
-// announceEnd raises the version of the vehicle a rental has released and records the signals of
-// both changes, so the fleet a visitor reads and the account that held the rental hear about the
-// release in the same transaction that made it.
-func announceEnd(
-	ctx context.Context,
-	pool *pgxpool.Pool,
-	vehicles *fleet.Store,
-	tx pgx.Tx,
-	held Rental,
-	released Rental,
-) error {
-	version, err := vehicles.PublishChange(ctx, tx, held.VehicleID, fleet.VehicleChange{})
-	if err != nil {
-		return err
-	}
-	return events.Record(ctx, pool,
-		events.Signal{Kind: events.RentalChanged, ResourceID: released.ID,
-			Version: released.Version, Recipient: released.UserID},
-		events.Signal{Kind: events.VehicleChanged, ResourceID: held.VehicleID, Version: version},
-	)
+	return true, announceRentalChange(ctx, pool, vehicles, tx, ended)
 }

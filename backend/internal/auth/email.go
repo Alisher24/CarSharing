@@ -11,10 +11,10 @@ import (
 // domain refuses an over-long address that never passed through the HTTP boundary.
 const maxEmailLength = 254
 
-// ErrEmailInvalid reports an address that is not a usable email once canonicalized. The caller
-// turns it into the contract's validation failure; it never distinguishes which rule was broken,
-// because the client is told the field is wrong rather than how to shape a better guess.
-var ErrEmailInvalid = errors.New("email is not a valid address")
+// ErrEmailInvalid reports an address that is not a usable email once canonicalized. Its text is the
+// one a registration is answered with. It never distinguishes which rule was broken, because the
+// client is told the field is wrong rather than how to shape a better guess.
+var ErrEmailInvalid = errors.New("Email is not a valid address")
 
 // Email is an address in canonical form: surrounding whitespace removed and the whole address
 // lowercased. Only ParseEmail produces one, so a value of this type is always safe to compare and

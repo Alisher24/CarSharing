@@ -12,11 +12,11 @@ func (l Line) Validate() error {
 	case l.Mode != billing.Driving && l.Mode != billing.Paused:
 		return errors.New("a line must describe one of the two modes")
 	case l.Duration < 0:
-		return errors.New("a duration cannot be negative")
+		return billing.RefusalNegativeDuration
 	case l.Minutes < 0:
-		return errors.New("minutes begun cannot be negative")
+		return billing.RefusalNegativeMinutes
 	case l.Rate < 0:
-		return errors.New("a rate cannot be negative")
+		return billing.RefusalNegativeRate
 	case l.AmountTyiyn < 0:
 		return errors.New("an amount cannot be negative")
 	}

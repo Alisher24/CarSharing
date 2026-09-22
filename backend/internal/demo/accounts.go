@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"slices"
 
 	"github.com/Alisher24/CarSharing/backend/internal/auth"
 )
@@ -12,11 +13,18 @@ import (
 // can never collide with one a person registers.
 const accountDomain = "demo.carsharing.test"
 
-// ManualCheckAccounts are the two accounts a person signs in as to try the application by hand.
-// They own no prepared rental, so whoever signs in as one starts with nothing rented.
-var ManualCheckAccounts = []string{
+// manualCheckAccounts are the two accounts a person signs in as to try the application by hand. They
+// own no prepared rental, so whoever signs in as one starts with nothing rented.
+var manualCheckAccounts = [...]string{
 	"demo-one@" + accountDomain,
 	"demo-two@" + accountDomain,
+}
+
+// ManualCheckAccounts answers the accounts a person checks the application with, as a copy: the
+// declaration itself is never handed out, so nothing outside this package can add an account to the
+// list the seed installs.
+func ManualCheckAccounts() []string {
+	return slices.Clone(manualCheckAccounts[:])
 }
 
 // scenarioAccountAddress names the service account a prepared rental belongs to. One account per
@@ -65,7 +73,7 @@ func accountsFor(vehicles []Vehicle, hasher *auth.PasswordHasher, manualPassword
 		}
 		accounts = append(accounts, hashed)
 	}
-	for _, address := range ManualCheckAccounts {
+	for _, address := range manualCheckAccounts {
 		hashed, err := hashedAccount(address, manualPassword, hasher)
 		if err != nil {
 			return nil, err

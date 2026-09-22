@@ -20,11 +20,11 @@ const maxRepresentable = math.MaxInt64
 // cannot be negative, so a total below the first summand is one that wrapped.
 func SumMicroseconds(left, right int64) (int64, error) {
 	if left < 0 || right < 0 {
-		return 0, Refusal{Reason: "a duration cannot be negative"}
+		return 0, RefusalNegativeDuration
 	}
 	total := left + right
 	if total < left {
-		return 0, Refusal{Reason: "the duration of a mode does not fit the signed 64-bit range"}
+		return 0, RefusalModeDurationBeyondRange
 	}
 	return total, nil
 }

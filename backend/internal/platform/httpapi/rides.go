@@ -45,7 +45,8 @@ func (h rideHandlers) StartRental(
 	if err != nil {
 		return nil, err
 	}
-	answered, err := h.reservations.StartRide(ctx, rentals.StartRideCommand{
+	answered, err := h.reservations.Apply(ctx, rentals.RentalCommand{
+		Action:   rentals.StartRental,
 		Caller:   caller,
 		RentalID: string(request.Id),
 		Attempt:  attempt,
@@ -72,7 +73,8 @@ func (h rideHandlers) PauseRental(
 	if err != nil {
 		return nil, err
 	}
-	answered, err := h.reservations.PauseRide(ctx, rentals.PauseRideCommand{
+	answered, err := h.reservations.Apply(ctx, rentals.RentalCommand{
+		Action:   rentals.PauseRental,
 		Caller:   caller,
 		RentalID: string(request.Id),
 		Attempt:  attempt,
@@ -99,7 +101,8 @@ func (h rideHandlers) ResumeRental(
 	if err != nil {
 		return nil, err
 	}
-	answered, err := h.reservations.ResumeRide(ctx, rentals.ResumeRideCommand{
+	answered, err := h.reservations.Apply(ctx, rentals.RentalCommand{
+		Action:   rentals.ResumeRental,
 		Caller:   caller,
 		RentalID: string(request.Id),
 		Attempt:  attempt,

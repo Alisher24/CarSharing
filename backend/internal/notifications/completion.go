@@ -56,7 +56,7 @@ func (c *Completer) Record(
 		return err
 	}
 	written, err := database.QuerierFrom(ctx, c.pool).Exec(ctx, insertCompletionStatement,
-		id.String(), owner, rentalID, RentalCompleted, at, initialVersion, about.InvoiceID,
+		id.String(), owner, rentalID, RentalCompleted, at, database.InitialVersion, about.InvoiceID,
 		about.Reason, fleet.SourceNames(about.Exhausted), about.EndedAt)
 	if err != nil {
 		return err
@@ -70,6 +70,6 @@ func (c *Completer) Record(
 		ID:       id.String(),
 		UserID:   owner,
 		RentalID: rentalID,
-		Version:  initialVersion,
+		Version:  database.InitialVersion,
 	})
 }

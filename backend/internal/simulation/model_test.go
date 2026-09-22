@@ -51,7 +51,7 @@ func vehicle(powertrain fleet.PowertrainType, reserves map[fleet.SourceKind]flee
 		panic("the check names a powertrain the fleet does not carry")
 	}
 	state := simulation.State{
-		RouteID:     "gas-1",
+		RouteID:     simulation.GasRoute1,
 		Parameters:  simulation.ParametersOf(capacity),
 		ProcessedAt: epoch,
 	}

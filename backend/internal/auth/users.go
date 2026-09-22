@@ -13,8 +13,9 @@ import (
 
 // Errors the store reports about an account rather than about the database.
 var (
-	// ErrEmailTaken reports that the canonical email already identifies an account.
-	ErrEmailTaken = errors.New("email is already registered")
+	// ErrEmailTaken reports that the canonical email already identifies an account. Its text is the
+	// one a registration is answered with, so the refusal is published rather than restated.
+	ErrEmailTaken = errors.New("Email is already registered")
 
 	// ErrUserNotFound reports that no account carries the requested identity. Callers that answer
 	// a sign-in must not let it reach the client on its own: an unknown email and a wrong password

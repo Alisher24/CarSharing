@@ -2,12 +2,15 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	internalapi "github.com/Alisher24/CarSharing/backend/internal/contracts/internalapi"
 	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
+	"github.com/Alisher24/CarSharing/backend/internal/democontrol"
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
 	"github.com/Alisher24/CarSharing/backend/internal/invoices"
@@ -46,80 +49,85 @@ func (h internalHandlers) ApplyDemoAction(
 }
 
 // demoCommandOf reads one contract action as the command the rentals module applies. Which fields the
-// command carries follows from the discriminator, so a shape that names a source carries no position
-// and one that names a ride carries no vehicle.
+// command carries follows from the action's own declaration: a shape that names a source carries no
+// position and one that names a ride carries no vehicle. The declaration is the demonstration
+// vocabulary's, so a new action is a row there rather than a case here.
 func demoCommandOf(action internalapi.DemoAction) (rentals.DemoCommand, error) {
-	discriminator, err := action.Discriminator()
+	body, err := json.Marshal(action)
 	if err != nil {
 		return rentals.DemoCommand{}, err
 	}
-	switch discriminator {
-	case string(internalapi.SetTelemetryStateActionSetTelemetryState):
-		set, err := action.AsSetTelemetryState()
-		if err != nil {
-			return rentals.DemoCommand{}, err
-		}
-		return rentals.DemoCommand{
-			ActionID:  set.ActionId,
-			Kind:      rentals.SetTelemetryState,
-			VehicleID: set.VehicleId,
-			Online:    set.TelemetryState == internalapi.Online,
-		}, nil
-	case string(internalapi.SetPositionActionSetPosition):
-		set, err := action.AsSetPosition()
-		if err != nil {
-			return rentals.DemoCommand{}, err
-		}
-		return rentals.DemoCommand{
-			ActionID:  set.ActionId,
-			Kind:      rentals.SetPosition,
-			VehicleID: set.VehicleId,
-			Position: fleet.Position{
-				Longitude: float64(set.Position.Coordinates[0]),
-				Latitude:  float64(set.Position.Coordinates[1]),
-			},
-		}, nil
-	case string(internalapi.SetEnergyRemainingActionSetEnergyRemaining):
-		set, err := action.AsSetEnergyRemaining()
-		if err != nil {
-			return rentals.DemoCommand{}, err
-		}
-		remaining, err := fleet.ParseAmount(set.Remaining)
-		if err != nil {
-			return rentals.DemoCommand{}, fmt.Errorf("the reserve of a demonstration refill: %w", err)
-		}
-		return rentals.DemoCommand{
-			ActionID:  set.ActionId,
-			Kind:      rentals.SetEnergyRemaining,
-			VehicleID: set.VehicleId,
-			Source:    fleet.SourceKind(set.SourceKind),
-			Remaining: remaining,
-		}, nil
-	case string(internalapi.MarkServicedActionMarkServiced):
-		set, err := action.AsMarkServiced()
-		if err != nil {
-			return rentals.DemoCommand{}, err
-		}
-		return rentals.DemoCommand{
-			ActionID:  set.ActionId,
-			Kind:      rentals.MarkServiced,
-			VehicleID: set.VehicleId,
-		}, nil
-	case string(internalapi.SetNextPaymentOutcomeActionSetNextPaymentOutcome):
-		set, err := action.AsSetNextPaymentOutcome()
-		if err != nil {
-			return rentals.DemoCommand{}, err
-		}
-		return rentals.DemoCommand{
-			ActionID: set.ActionId,
-			Kind:     rentals.SetNextPaymentOutcome,
-			RentalID: set.RentalId,
-			Outcome:  invoices.DemoOutcome(set.Outcome),
-		}, nil
-	default:
-		return rentals.DemoCommand{}, fmt.Errorf(
-			"the demonstration action %q is not one this build applies", discriminator)
+	stated, err := democontrol.Read(body)
+	if err != nil {
+		return rentals.DemoCommand{}, err
 	}
+	return demoCommand(stated)
+}
+
+// demoCommand builds the command the module applies out of what one request stated. Every field is
+// read by the row that knows it, so an action stating fields this surface already reads is a row of the
+// vocabulary rather than another branch.
+func demoCommand(stated democontrol.Stated) (rentals.DemoCommand, error) {
+	command := rentals.DemoCommand{
+		ActionID: stated.ActionID,
+		Kind:     rentals.DemoActionKind(stated.Action),
+	}
+	for field, values := range stated.Values {
+		read, known := demoFields[field]
+		if !known {
+			return rentals.DemoCommand{}, fmt.Errorf(
+				"the demonstration field %q is not one this build reads", field)
+		}
+		if err := read(&command, values); err != nil {
+			return rentals.DemoCommand{}, err
+		}
+	}
+	return command, nil
+}
+
+// demoFields is what each field of a demonstration request states about the command the module applies:
+// one row per field of the vocabulary rather than per action.
+var demoFields = map[democontrol.Field]func(*rentals.DemoCommand, []string) error{
+	democontrol.VehicleIDField: func(command *rentals.DemoCommand, stated []string) error {
+		command.VehicleID = stated[0]
+		return nil
+	},
+	democontrol.TelemetryStateField: func(command *rentals.DemoCommand, stated []string) error {
+		command.Online = stated[0] == string(internalapi.Online)
+		return nil
+	},
+	democontrol.PositionField: func(command *rentals.DemoCommand, stated []string) error {
+		longitude, err := strconv.ParseFloat(stated[0], 64)
+		if err != nil {
+			return fmt.Errorf("the longitude of a demonstration position: %w", err)
+		}
+		latitude, err := strconv.ParseFloat(stated[1], 64)
+		if err != nil {
+			return fmt.Errorf("the latitude of a demonstration position: %w", err)
+		}
+		command.Position = fleet.Position{Longitude: longitude, Latitude: latitude}
+		return nil
+	},
+	democontrol.SourceKindField: func(command *rentals.DemoCommand, stated []string) error {
+		command.Source = fleet.SourceKind(stated[0])
+		return nil
+	},
+	democontrol.RemainingField: func(command *rentals.DemoCommand, stated []string) error {
+		remaining, err := fleet.ParseAmount(stated[0])
+		if err != nil {
+			return fmt.Errorf("the reserve of a demonstration refill: %w", err)
+		}
+		command.Remaining = remaining
+		return nil
+	},
+	democontrol.RentalIDField: func(command *rentals.DemoCommand, stated []string) error {
+		command.RentalID = stated[0]
+		return nil
+	},
+	democontrol.OutcomeField: func(command *rentals.DemoCommand, stated []string) error {
+		command.Outcome = invoices.DemoOutcome(stated[0])
+		return nil
+	},
 }
 
 // demoActionRender spells what a demonstration command decided: that it was applied, or the refusal it

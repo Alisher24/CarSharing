@@ -7,6 +7,7 @@ import (
 	"errors"
 
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -48,33 +49,24 @@ var ErrNoTariffInForce = errors.New("no price list is in force")
 const inForce = currentTariffs + `
 LIMIT 1`
 
+// scanTariff reads one row of the price list columns both selections state, in the order they state
+// them.
+func scanTariff(row pgx.Row, found *Tariff) error {
+	return row.Scan(
+		&found.ID,
+		&found.Currency,
+		&found.BillingPolicy,
+		&found.DrivingRateTyiynPerStartedMinute,
+		&found.PausedRateTyiynPerStartedMinute,
+		&found.Version,
+	)
+}
+
 // InForce reads the price list currently charged. It reads at most one row, so that an installation
 // holding no price list is reported as such rather than answered with a price nobody set.
 func (s *Store) InForce(ctx context.Context) (Tariff, error) {
-	rows, err := database.QuerierFrom(ctx, s.pool).Query(ctx, inForce)
-	if err != nil {
-		return Tariff{}, err
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		if err = rows.Err(); err != nil {
-			return Tariff{}, err
-		}
-		return Tariff{}, ErrNoTariffInForce
-	}
-	var tariff Tariff
-	if err = rows.Scan(
-		&tariff.ID,
-		&tariff.Currency,
-		&tariff.BillingPolicy,
-		&tariff.DrivingRateTyiynPerStartedMinute,
-		&tariff.PausedRateTyiynPerStartedMinute,
-		&tariff.Version,
-	); err != nil {
-		return Tariff{}, err
-	}
-	return tariff, rows.Err()
+	return database.ReadOne(ctx, database.QuerierFrom(ctx, s.pool),
+		scanTariff, ErrNoTariffInForce, inForce)
 }
 
 // Current reads every price list in force, in a stable order.
@@ -88,15 +80,7 @@ func (s *Store) Current(ctx context.Context) ([]Tariff, error) {
 	found := []Tariff{}
 	for rows.Next() {
 		var tariff Tariff
-		err = rows.Scan(
-			&tariff.ID,
-			&tariff.Currency,
-			&tariff.BillingPolicy,
-			&tariff.DrivingRateTyiynPerStartedMinute,
-			&tariff.PausedRateTyiynPerStartedMinute,
-			&tariff.Version,
-		)
-		if err != nil {
+		if err = scanTariff(rows, &tariff); err != nil {
 			return nil, err
 		}
 		found = append(found, tariff)

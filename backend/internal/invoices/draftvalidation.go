@@ -42,7 +42,7 @@ func (d Draft) Validate() error {
 			return err
 		}
 		if line.line.AmountTyiyn > math.MaxInt64-total {
-			return errors.New("the total amount does not fit the signed 64-bit range")
+			return billing.RefusalTotalAmountBeyondRange
 		}
 		total += line.line.AmountTyiyn
 	}
