@@ -1,20 +1,23 @@
 import type { GeoJSONSource, Map } from 'maplibre-gl';
-import type { Zone } from '../../shared/api/catalog';
-import { geometryBounds } from './geometryBounds';
+import type { Zone } from '../../shared/api/catalog.ts';
+import { geometryBounds } from './geometryBounds.ts';
 
 /** What the published boundaries are drawn from and in, so a redraw replaces them rather than adds. */
 const ZONE_SOURCE = 'service-zones';
 const ZONE_FILL_LAYER = 'service-zones-fill';
 const ZONE_OUTLINE_LAYER = 'service-zones-outline';
 
+/** The custom property the interface declares its accent colour in, which a boundary is drawn in. */
+const ACCENT_PROPERTY = '--color-accent';
+
 /**
  * How a boundary is drawn: a faint fill under a dashed edge, so a vehicle standing near it stays
- * readable through it. The colour is stated once because the fill and the edge are the same boundary
- * seen twice, and a second literal is how the two come to be different greens.
+ * readable through it. The colour is the accent the stylesheet declares rather than a second copy of
+ * it here: the legend draws its own dashed edge in the same token, and a literal is how the two come
+ * to be different greens.
  */
-const ZONE_COLOUR = '#518b72';
-const ZONE_FILL = { 'fill-color': ZONE_COLOUR, 'fill-opacity': 0.07 };
-const ZONE_OUTLINE = { 'line-color': ZONE_COLOUR, 'line-width': 2, 'line-dasharray': [6, 5] };
+const ZONE_FILL = { 'fill-color': accentColour(), 'fill-opacity': 0.07 };
+const ZONE_OUTLINE = { 'line-color': accentColour(), 'line-width': 2, 'line-dasharray': [6, 5] };
 
 /**
  * putServiceZones draws the operator boundaries the service published, exactly as it published them.
@@ -38,6 +41,15 @@ export function putServiceZones(map: Map, zones: readonly Zone[]): void {
 /** The box the published boundaries span, or nothing when the service published none. */
 export function serviceZoneBounds(zones: readonly Zone[]): ReturnType<typeof geometryBounds> {
   return geometryBounds(zones.map((zone) => zone.geometry));
+}
+
+/**
+ * The value one custom property is declared with. The map's paint takes a colour, not a property, so
+ * the stylesheet's own value is read rather than restated here; the theme is parsed before the
+ * application is drawn, so the declaration is there to be read.
+ */
+function accentColour(): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(ACCENT_PROPERTY).trim();
 }
 
 /** The boundaries as one document, which is how a single source carries them all. */

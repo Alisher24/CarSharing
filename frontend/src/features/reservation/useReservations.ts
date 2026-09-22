@@ -1,11 +1,13 @@
 import { useCallback, useMemo, useState } from 'react';
-import { csrfTokenOf, sessionOf, type Account } from '../account/useAccount.ts';
 import { cancelReservation, reserveVehicle } from '../../shared/api/current.ts';
-import { loadedValue } from '../../shared/api/Resource.ts';
-import { currentRental, rateTextOf, sameRates, type RateText } from './reservationCopy.ts';
-import { useCommandSender, type CommandAnswer } from './commandSender.ts';
-import type { UnfinishedCommand } from './unfinishedCommand.ts';
-import type { CommandPhase } from './commandPhase.ts';
+import { identityOf } from '../../shared/account/identity.ts';
+import type { Account } from '../../shared/account/session.ts';
+import { useCommandSender, type CommandAnswer } from '../../shared/command/commandSender.ts';
+import type { CommandPhase } from '../../shared/command/commandPhase.ts';
+import type { UnfinishedCommand } from '../../shared/command/unfinishedCommand.ts';
+import { loadedValue } from '../../shared/read/Resource.ts';
+import { currentRental } from '../../shared/ride/serverClock.ts';
+import { rateTextOf, sameRates, type RateText } from '../../shared/ride/fares.ts';
 import type { CurrentRental } from './useCurrentRental.ts';
 
 /** What the interface can do about the account's reservation, and where its last command stands. */
@@ -40,15 +42,16 @@ export type Reservations = {
  * them. It answers with the phase and the stored command the sender holds, and adds what only a
  * reservation has: the conditions a person agreed to, which the command that follows is compared
  * with.
+ *
+ * The two controls it offers are declared once, so a render that changes nothing else does not hand
+ * a new control to every button below it; what the sender itself states is read from the sender.
  */
 export function useReservations(account: Account, current: CurrentRental): Reservations {
+  const { session, csrfToken } = identityOf(account);
   const [confirmedRates, setConfirmedRates] = useState<RateText | undefined>(undefined);
 
-  const owner = sessionOf(account);
-  const csrfToken = csrfTokenOf(account);
-  const refresh = current.retry;
-
-  const commands = useCommandSender({ owner, csrfToken, refresh, send: reservationCommand });
+  const commands = useCommandSender({ owner: session, csrfToken, refresh: current.retry, send: reservationCommand });
+  const start = commands.start;
 
   const book = useCallback(
     (vehicleId: string, shownRates: RateText) => {
@@ -56,12 +59,12 @@ export function useReservations(account: Account, current: CurrentRental): Reser
       // with it: a catalogue that moved between the two is said out loud rather than shown as if
       // nothing had happened.
       setConfirmedRates(shownRates);
-      void commands.start('reserve', { vehicleId });
+      void start('reserve', { vehicleId });
     },
-    [commands],
+    [start],
   );
 
-  const cancel = useCallback((rentalId: string) => void commands.start('cancel', { rentalId }), [commands]);
+  const cancel = useCallback((rentalId: string) => void start('cancel', { rentalId }), [start]);
 
   // The conditions the reservation was made under are the ones it stores, so they are compared
   // against what a person agreed to rather than against the catalogue as it stands now.
@@ -72,18 +75,15 @@ export function useReservations(account: Account, current: CurrentRental): Reser
     return !sameRates(confirmedRates, rateTextOf(rental.tariff_snapshot));
   }, [confirmedRates, current.resource]);
 
-  return useMemo(
-    () => ({
-      phase: commands.phase,
-      repeatable: commands.repeatable,
-      ratesChanged,
-      book,
-      cancel,
-      repeat: commands.repeat,
-      settle: commands.settle,
-    }),
-    [commands, ratesChanged, book, cancel],
-  );
+  return {
+    phase: commands.phase,
+    repeatable: commands.repeatable,
+    ratesChanged,
+    book,
+    cancel,
+    repeat: commands.repeat,
+    settle: commands.settle,
+  };
 }
 
 /** One reservation command, which names the vehicle to book or the reservation to give back. */

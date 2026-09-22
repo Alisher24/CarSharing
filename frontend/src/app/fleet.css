@@ -22,7 +22,7 @@
 }
 
 .header-action {
-  padding: 10px 18px;
+  padding: var(--padding-pill-header);
   color: var(--color-on-ink);
   cursor: pointer;
   background: var(--color-ink);
@@ -34,18 +34,10 @@
   background: var(--color-ink-hover);
 }
 
-.connection-indicator {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-sm);
-  margin-left: auto;
-  font-size: var(--font-size-detail);
-  color: var(--color-ink-muted);
-}
-
-/* The change stream says what it is doing beside the reader's own link to the service: a stream
-   that is retried is a delay in updates, which is not the same fact as no service at all. It sits
-   at the far end of the header and carries the gap that pushes both facts there. */
+/* The reader's own link to the service and the state of the change stream are two facts of one kind,
+   written beside each other at the far end of the header: they share one rule, and only what each
+   says and the class a check reaches it by differ. */
+.connection-indicator,
 .stream-notice {
   display: inline-flex;
   align-items: center;
@@ -55,30 +47,26 @@
   color: var(--color-ink-muted);
 }
 
+.connection-indicator-dot,
 .stream-notice-dot {
-  width: 8px;
-  height: 8px;
+  width: var(--dot-size-small);
+  height: var(--dot-size-small);
   background: var(--color-accent-soft);
   border-radius: 50%;
 }
 
+/* A strip that is not connecting is a fault rather than a wait, whichever of the two it is: a stream
+   that is retried is a delay in updates, which is not the same fact as no service at all. The word
+   and the dot are painted from one declaration, so a strip cannot say "delayed" in green. */
+.connection-indicator-stale,
+.connection-indicator-failed,
 .stream-notice[data-stream='delayed'] {
   color: var(--color-danger);
 }
 
-.stream-notice[data-stream='delayed'] .stream-notice-dot {
-  background: var(--color-danger);
-}
-
-.connection-indicator-dot {
-  width: 8px;
-  height: 8px;
-  background: var(--color-accent-soft);
-  border-radius: 50%;
-}
-
 .connection-indicator-stale .connection-indicator-dot,
-.connection-indicator-failed .connection-indicator-dot {
+.connection-indicator-failed .connection-indicator-dot,
+.stream-notice[data-stream='delayed'] .stream-notice-dot {
   background: var(--color-danger);
 }
 
@@ -119,7 +107,7 @@
   gap: var(--space-sm);
   align-items: center;
   justify-content: flex-end;
-  padding: 8px 12px;
+  padding: var(--padding-notice);
   color: var(--color-danger);
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
@@ -127,7 +115,7 @@
 }
 
 .fleet-retry {
-  padding: 5px 12px;
+  padding: var(--padding-retry);
   font-size: var(--font-size-detail);
   cursor: pointer;
   background: var(--color-surface-raised);
@@ -146,7 +134,7 @@
   display: inline-flex;
   gap: var(--space-sm);
   align-items: center;
-  padding: 9px 16px;
+  padding: var(--padding-pill-wide);
   font-weight: 650;
   cursor: pointer;
   background: var(--color-surface-highlight);
@@ -172,6 +160,19 @@
   color: var(--color-ink-label);
 }
 
+/* A pill a person has chosen looks the same wherever it is offered: a filter chip, a view tab, an
+   account tab and a cabinet tab are one control, so the rule that says one is chosen is stated once
+   for all four. What differs is the state each is chosen by and the size each is drawn at, which is
+   the only part of the four that stays with the control itself. */
+.filter-chip[aria-pressed='true'],
+.view-tab[aria-pressed='true'],
+.account-tab[aria-pressed='true'],
+.cabinet-tab[aria-current='page'] {
+  color: var(--color-on-chosen);
+  background: var(--color-chosen);
+  border-color: var(--color-chosen);
+}
+
 .filter-chips {
   display: flex;
   flex-wrap: wrap;
@@ -179,18 +180,12 @@
 }
 
 .filter-chip {
-  padding: 7px 14px;
+  padding: var(--padding-pill-compact);
   font-size: var(--font-size-detail);
   cursor: pointer;
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-pill);
-}
-
-.filter-chip[aria-pressed='true'] {
-  color: var(--color-on-ink);
-  background: var(--color-ink);
-  border-color: var(--color-ink);
 }
 
 .view-switch {
@@ -200,17 +195,11 @@
 }
 
 .view-tab {
-  padding: 8px 18px;
+  padding: var(--padding-pill);
   cursor: pointer;
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-pill);
-}
-
-.view-tab[aria-pressed='true'] {
-  color: var(--color-on-ink);
-  background: var(--color-ink);
-  border-color: var(--color-ink);
 }
 
 .fleet-layout {
@@ -261,7 +250,7 @@
   right: var(--space-md);
   bottom: var(--space-md);
   z-index: var(--layer-over-map);
-  padding: 6px 12px;
+  padding: var(--padding-caption);
   font-size: var(--font-size-micro);
   color: var(--color-ink-muted);
   background: var(--color-surface-veil);
@@ -280,7 +269,7 @@
 }
 
 .map-action {
-  padding: 9px 16px;
+  padding: var(--padding-pill-wide);
   cursor: pointer;
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
@@ -348,7 +337,7 @@
   cursor: pointer;
   border: 2px solid var(--color-surface-raised);
   border-radius: 50%;
-  box-shadow: 0 1px 4px #213b2759;
+  box-shadow: var(--shadow-marker);
 }
 
 .map-vehicle-marker:hover {
@@ -369,7 +358,7 @@
   left: var(--space-md);
   z-index: var(--layer-over-map);
   max-width: 60%;
-  padding: 8px 12px;
+  padding: var(--padding-notice);
   margin: 0;
   font-size: var(--font-size-detail);
   color: var(--color-danger);
@@ -423,20 +412,35 @@
   font-size: var(--font-size-detail);
 }
 
-.fleet-row-status[data-status='available'] {
-  color: var(--status-available);
+/* One public state is one colour, painted wherever that state is shown: the row of the list, the
+   card of the vehicle and the reason it cannot be taken. The state is the attribute the contract
+   publishes, and the colour is the custom property declared for it beside the other tokens, so the
+   three cannot drift from the legend and the markers drawn from the same property. */
+.fleet-row-status[data-status],
+.vehicle-card-status[data-status],
+.vehicle-card-reason {
+  color: var(--status);
 }
 
-.fleet-row-status[data-status='reserved'] {
-  color: var(--status-reserved);
+.fleet-row-status[data-status='available'],
+.vehicle-card-status[data-status='available'] {
+  --status: var(--status-available);
 }
 
-.fleet-row-status[data-status='in_trip'] {
-  color: var(--status-in-trip);
+.fleet-row-status[data-status='reserved'],
+.vehicle-card-status[data-status='reserved'] {
+  --status: var(--status-reserved);
 }
 
-.fleet-row-status[data-status='unavailable'] {
-  color: var(--status-unavailable);
+.fleet-row-status[data-status='in_trip'],
+.vehicle-card-status[data-status='in_trip'] {
+  --status: var(--status-in-trip);
+}
+
+.fleet-row-status[data-status='unavailable'],
+.vehicle-card-status[data-status='unavailable'],
+.vehicle-card-reason {
+  --status: var(--status-unavailable);
 }
 
 .fleet-empty {
@@ -457,7 +461,7 @@
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  box-shadow: 0 18px 48px #213b271f;
+  box-shadow: var(--shadow-card);
 }
 
 .vehicle-card-header {
@@ -480,7 +484,7 @@
 }
 
 .vehicle-card-close {
-  padding: 4px 10px;
+  padding: var(--padding-close);
   cursor: pointer;
   background: none;
   border: 1px solid var(--color-border);
@@ -499,22 +503,6 @@
 .vehicle-card-status {
   margin: var(--space-md) 0 0;
   font-weight: 650;
-}
-
-.vehicle-card-status[data-status='available'] {
-  color: var(--status-available);
-}
-
-.vehicle-card-status[data-status='reserved'] {
-  color: var(--status-reserved);
-}
-
-.vehicle-card-status[data-status='in_trip'] {
-  color: var(--status-in-trip);
-}
-
-.vehicle-card-status[data-status='unavailable'] {
-  color: var(--status-unavailable);
 }
 
 .vehicle-card-telemetry {
@@ -543,10 +531,6 @@
   margin: 0;
   font-size: var(--font-size-detail);
   list-style: none;
-}
-
-.vehicle-card-reason {
-  color: var(--status-unavailable);
 }
 
 .vehicle-card-later {
@@ -603,10 +587,6 @@
 .reservation-panel-time {
   margin: 0;
   font-variant-numeric: tabular-nums;
-}
-
-.reservation-panel-time[data-expired='true'] {
-  color: var(--color-danger);
 }
 
 .tariff-rates {

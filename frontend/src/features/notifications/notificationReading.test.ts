@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { afterSuccess, type Resource } from '../../shared/api/Resource.ts';
-import { collection, warningNotification } from './fixtures.ts';
+import { afterSuccess, type Resource } from '../../shared/read/Resource.ts';
+import { collection, warningNotification } from '../../shared/account/fixtures.ts';
 import { shownCollection, updatesCollection, type NotificationReading } from './notificationReading.ts';
 
 const OWNER = 'account-a';

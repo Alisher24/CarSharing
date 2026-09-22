@@ -1,10 +1,10 @@
 import type { CurrentSnapshot } from '../../shared/api/current.ts';
-import { loadedValue, type Resource } from '../../shared/api/Resource.ts';
-import { currentWarning, type CurrentWarning } from '../notifications/currentWarning.ts';
-import type { Notifications } from '../notifications/useNotifications.ts';
-import type { Deadline } from './countdown.ts';
+import { loadedValue, type Resource } from '../../shared/read/Resource.ts';
+import type { Deadline } from '../../shared/ride/countdown.ts';
+import { useCountdown } from '../../shared/ride/useCountdown.ts';
+import { currentWarning, type CurrentWarning } from '../../shared/account/currentWarning.ts';
+import type { Notifications } from '../../shared/account/notifications.ts';
 import { READ_ACTION, READ_FAILED, READ_PENDING, WARNING_HEADING, warningText } from './reservationCopy.ts';
-import { useCountdown } from './useCountdown.ts';
 
 /** The identifier the heading is named by, so the section is announced with its own words. */
 const WARNING_TITLE_ID = 'reservation-warning-heading';

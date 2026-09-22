@@ -1,14 +1,15 @@
 import { LngLatBounds, Map as MapLibreMap } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
-import type { Vehicle, Zone } from '../../shared/api/catalog';
-import { ResourceNotice, type AbsenceCopy } from '../fleet/ResourceNotice';
-import type { Found } from '../fleet/useCatalog';
-import { BASEMAP_CAPTION, BASEMAP_CENTRE, basemapStyle } from './basemap';
-import { onArchiveFailure } from './basemapProtocol';
-import { MapLegend } from './MapLegend';
-import { syncVehicleMarkers, type VehicleMarker } from './vehicleMarkers';
-import { putServiceZones, serviceZoneBounds } from './zoneLayer';
+import type { Vehicle, Zone } from '../../shared/api/catalog.ts';
+import { type AbsenceCopy } from '../../shared/components/absence.ts';
+import { ResourceNotice } from '../../shared/components/ResourceNotice.tsx';
+import type { Found } from '../../shared/read/presence.ts';
+import { BASEMAP_CAPTION, BASEMAP_CENTRE, basemapStyle } from './basemap.ts';
+import { onArchiveFailure } from './basemapProtocol.ts';
+import { MapLegend } from './MapLegend.tsx';
+import { syncVehicleMarkers, type VehicleMarker } from './vehicleMarkers.ts';
+import { putServiceZones, serviceZoneBounds } from './zoneLayer.ts';
 
 /** How closely the map follows a vehicle a person has selected. */
 const SELECTED_VEHICLE_ZOOM = 16;

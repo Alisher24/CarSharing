@@ -1,5 +1,5 @@
-import { answersOf } from '../events/documentAnswers.ts';
-import type { AnswerHandlers, DocumentKind } from '../events/readCycle.ts';
+import { answersOf } from '../../shared/read/documentAnswers.ts';
+import type { AnswerHandlers, DocumentKind } from '../../shared/read/readCycle.ts';
 import {
   emptyReading,
   mergedReading,

@@ -1,18 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import type { CurrentSnapshot } from '../../shared/api/current.ts';
-import type { Countdown } from './countdown.ts';
-import {
-  currentRental,
-  limitAllowsBooking,
-  limitText,
-  pricedRates,
-  rateTextOf,
-  refusalText,
-  sameRates,
-  warningText,
-  BOOK_ACTION,
-} from './reservationCopy.ts';
+import { BOOK_ACTION } from '../../shared/copy.ts';
+import type { Countdown } from '../../shared/ride/countdown.ts';
+import { currentRental } from '../../shared/ride/serverClock.ts';
+import { limitAllowsBooking, limitText, warningText } from './reservationCopy.ts';
 
 /** One answer of the private read, with the allowance it publishes. */
 function snapshot(available: boolean, resetsAt = '2026-09-13T18:00:00.000000Z'): CurrentSnapshot {
@@ -49,64 +41,6 @@ describe('the rental a current answer holds', () => {
   test('is the one the answer names, and nothing when the answer names none', () => {
     assert.equal(currentRental(snapshot(true)), undefined);
     assert.equal(currentRental(undefined), undefined);
-  });
-});
-
-describe('the conditions a reservation was made under', () => {
-  test('are written as prices, and a rate that cannot be read is left out', () => {
-    const rates = rateTextOf({
-      id: '01994342-6ba7-7000-8000-000300000001',
-      currency: 'KGS',
-      billing_policy: 'per_mode_started_minute_v1',
-      driving_rate_tyiyn_per_started_minute: '1234',
-      paused_rate_tyiyn_per_started_minute: '321',
-      version: '1',
-    });
-
-    assert.equal(rates.driving, '12,34 сома');
-    assert.equal(rates.paused, '3,21 сома');
-    assert.equal(sameRates(rates, { driving: '12,34 сома', paused: '3,21 сома' }), true);
-    assert.equal(sameRates(rates, { driving: '15,00 сома', paused: '3,21 сома' }), false);
-  });
-});
-
-describe('the rates a view may show as a price', () => {
-  test('are both of them, and none when either cannot be read', () => {
-    assert.deepEqual(pricedRates({ driving: '12,34 сома', paused: '3,21 сома' }), {
-      driving: '12,34 сома',
-      paused: '3,21 сома',
-    });
-    assert.equal(pricedRates({ driving: '12,34 сома', paused: null }), undefined);
-    assert.equal(pricedRates({ driving: null, paused: '3,21 сома' }), undefined);
-    assert.equal(pricedRates({ driving: null, paused: null }), undefined);
-  });
-
-  // A price the interface cannot read is a rate with no amount to show, and a screen that showed the
-  // unit alone would state what a minute costs while naming no price. The amount stands in for a
-  // demonstration setting a rate no published tariff can hold.
-  test('are none when the amount the service published is not a whole price', () => {
-    const rates = rateTextOf({
-      id: '01994342-6ba7-7000-8000-000300000002',
-      currency: 'KGS',
-      billing_policy: 'per_mode_started_minute_v1',
-      driving_rate_tyiyn_per_started_minute: '1234.5',
-      paused_rate_tyiyn_per_started_minute: '321',
-      version: '1',
-    });
-
-    assert.equal(rates.driving, null);
-    assert.equal(pricedRates(rates), undefined);
-  });
-});
-
-describe('the wording of a refusal', () => {
-  test('is chosen by the contract code', () => {
-    assert.match(refusalText('DAILY_LIMIT_REACHED'), /использована/);
-    assert.match(refusalText('VEHICLE_UNAVAILABLE'), /недоступен/);
-  });
-
-  test('names a refusal the table does not know as an unexplained one', () => {
-    assert.match(refusalText('INTERNAL_ERROR'), /не выполнил команду/);
   });
 });
 

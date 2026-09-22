@@ -6,13 +6,8 @@ import type {
   RentalCommandResult,
   ReserveResult,
 } from './generated/types.gen';
-import {
-  answerOf,
-  commandHeaders,
-  sameOriginRequest,
-  type CommandCredentials,
-  type CommandResult,
-} from './commands.ts';
+import { answerOf, commandHeaders, type CommandCredentials, type CommandResult } from './commands.ts';
+import { sameOriginRequest } from './request.ts';
 
 export type {
   ActiveRental,

@@ -1,6 +1,6 @@
-import { getHealth, type ReadyStatus } from '../../shared/api/health';
-import type { Resource } from '../../shared/api/Resource';
-import { useResource } from '../../shared/api/useResource';
+import { getHealth, type ReadyStatus } from '../../shared/api/health.ts';
+import type { Resource } from '../../shared/read/Resource.ts';
+import { useResource } from '../../shared/read/useResource.ts';
 
 /**
  * How often the browser checks that it can still reach the service. This is the reader's own link,

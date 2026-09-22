@@ -1,5 +1,5 @@
-import type { Vehicle } from '../../shared/api/catalog';
-import { POWERTRAIN_LABELS, statusText } from './fleetCopy';
+import type { Vehicle } from '../../shared/api/catalog.ts';
+import { POWERTRAIN_LABELS, statusText } from '../../shared/vehicle/spell.ts';
 
 type VehicleListProps = {
   vehicles: readonly Vehicle[];

@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
-import { loadedValue } from '../../shared/api/Resource.ts';
-import { found } from '../fleet/useCatalog.ts';
-import { ResourceNotice, type AbsenceCopy } from '../fleet/ResourceNotice.tsx';
+import type { AbsenceCopy } from '../../shared/components/absence.ts';
+import { ResourceNotice } from '../../shared/components/ResourceNotice.tsx';
+import { loadedValue } from '../../shared/read/Resource.ts';
+import { found } from '../../shared/read/presence.ts';
 import { READ_MORE_ACTION } from './cabinetCopy.ts';
 import type { FeedRecord } from './feedPages.ts';
 import type { Feed } from './useFeed.ts';

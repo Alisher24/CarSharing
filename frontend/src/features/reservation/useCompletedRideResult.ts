@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { fetchInvoice, type InvoiceView } from '../../shared/api/invoices.ts';
-import { loadedValue } from '../../shared/api/Resource.ts';
-import { useResource } from '../../shared/api/useResource.ts';
-import { RECONCILE_MILLISECONDS } from '../events/reconciliation.ts';
-import type { Notifications } from '../notifications/useNotifications.ts';
+import type { Payment } from '../../shared/api/current.ts';
+import { loadedValue } from '../../shared/read/Resource.ts';
+import { RECONCILE_MILLISECONDS } from '../../shared/read/reconciliation.ts';
+import { useResource } from '../../shared/read/useResource.ts';
+import { useReadAfterPayment } from '../../shared/command/useReadAfterPayment.ts';
+import type { Payment as PaymentCommand } from '../../shared/command/usePayment.ts';
+import type { Notifications } from '../../shared/account/notifications.ts';
 import {
   completedNotification,
   completedResult,
@@ -11,7 +14,6 @@ import {
   shownResult,
   type CompletedRideResult,
 } from './completedResult.ts';
-import { useReadAfterPayment, type Payment } from './usePayment.ts';
 import type { RideCommands } from './useRideCommands.ts';
 
 /** Everything the result of a completed ride is read from, all of which the panel already holds. */
@@ -23,8 +25,11 @@ export type CompletedRideResultOptions = {
   notifications: Notifications;
 
   /** Where the payment this tab sent last stands, which is what one more read follows. */
-  paid: Payment;
+  paid: PaymentCommand;
 };
+
+/** One read of the invoice that a completion names, which is what its state is taken from. */
+type Invoiced = { invoiceId: string | undefined; payment: Payment | undefined };
 
 /**
  * useCompletedRideResult produces what the panel shows while the account has no current rental: the
@@ -37,6 +42,10 @@ export type CompletedRideResultOptions = {
  * moves without this tab doing anything — and once more for a payment this tab sent, whose answer the
  * service has stored by the time it arrives. A state it has settled changes only when a person pays
  * again, which is a command rather than something to poll for.
+ *
+ * Whether there is anything left to wait for is stated by the payment the invoice publishes, which is
+ * known only once it has been read. That reading is what decides the interval, so the two are the
+ * same value rather than one render apart.
  */
 export function useCompletedRideResult(options: CompletedRideResultOptions): CompletedRideResult | undefined {
   const { ride, notifications, paid } = options;
@@ -48,27 +57,42 @@ export function useCompletedRideResult(options: CompletedRideResultOptions): Com
  * usePublishedResult reads what the service holds about the last ride that ended: the newest
  * notification of that kind, and the invoice that notification names.
  */
-function usePublishedResult(notifications: Notifications, paid: Payment): CompletedRideResult | undefined {
+function usePublishedResult(notifications: Notifications, paid: PaymentCommand): CompletedRideResult | undefined {
   const notification = completedNotification(notifications.reading?.collection);
   const invoiceId = notification?.invoice_id;
 
-  // Whether the invoice is worth reading again is stated by the payment it publishes, which is known
-  // only once it has been read: the interval is therefore turned off by the answer that settles the
-  // payment rather than by the request that asks for it, and that answer arrives one render later.
-  const [waiting, setWaiting] = useState(true);
-  const load = useCallback((signal: AbortSignal) => readInvoice(invoiceId, signal), [invoiceId]);
-  const { resource, retry } = useResource<InvoiceView | undefined>(load, undefined, intervalOf(invoiceId, waiting));
+  const [invoiced, setInvoiced] = useState<Invoiced>(() => invoicedFor(invoiceId));
+  // A read belongs to the invoice it was made about: another invoice is another state of payment, and
+  // the answer to the previous one cannot say anything about it.
+  const current = invoiced.invoiceId === invoiceId ? invoiced : invoicedFor(invoiceId);
 
-  const published = completedResult(notification, loadedValue(resource));
+  const load = useCallback(
+    (signal: AbortSignal) => readInvoice(invoiceId, signal).then((view) => keep(setInvoiced, invoiceId, view)),
+    [invoiceId],
+  );
+  const handle = useResource<InvoiceView | undefined>(load, undefined, intervalOf(invoiceId, current.payment));
 
-  const moving = invoiceWorthReading(published?.charge?.payment);
-  useEffect(() => {
-    setWaiting(moving);
-  }, [moving]);
-
-  useReadAfterPayment(paid, retry);
+  const published = completedResult(notification, loadedValue(handle.resource));
+  useReadAfterPayment(paid, handle.retry);
 
   return published;
+}
+
+/** What is known about an invoice nothing has been read into yet: nothing at all. */
+function invoicedFor(invoiceId: string | undefined): Invoiced {
+  return { invoiceId, payment: undefined };
+}
+
+/** Keeps the answer of one read, which is what the interval of the next one is computed from. */
+function keep(
+  setInvoiced: (update: (held: Invoiced) => Invoiced) => void,
+  invoiceId: string | undefined,
+  view: InvoiceView | undefined,
+): InvoiceView | undefined {
+  const payment = view?.payment;
+  setInvoiced((held) => (held.invoiceId === invoiceId && held.payment === payment ? held : { invoiceId, payment }));
+
+  return view;
 }
 
 /**
@@ -76,9 +100,9 @@ function usePublishedResult(notifications: Notifications, paid: Payment): Comple
  * wait for. The interval is the one reconciliation runs on: an invoice is another resource that the
  * service moves on its own, and a second interval would be a second answer to how often to look.
  */
-function intervalOf(invoiceId: string | undefined, waiting: boolean): number | undefined {
+function intervalOf(invoiceId: string | undefined, payment: Payment | undefined): number | undefined {
   if (invoiceId === undefined) return undefined;
-  if (!waiting) return undefined;
+  if (!invoiceWorthReading(payment)) return undefined;
 
   return RECONCILE_MILLISECONDS;
 }

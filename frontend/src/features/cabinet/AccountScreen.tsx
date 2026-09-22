@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
 import { INVOICES_ADDRESS, RIDES_ADDRESS, sectionOf, type CabinetSection } from '../../app/addresses.ts';
-import type { SessionSnapshot } from '../../shared/api/session.ts';
-import type { Account, Submission } from '../account/useAccount.ts';
-import { CABINET_HEADING, INVOICES_TAB, LEAVE_ACTION, RIDES_TAB, SIGN_IN_TO_READ } from './cabinetCopy.ts';
+import type { Account } from '../../shared/account/session.ts';
+import type { Submission } from '../../shared/account/session.ts';
+import { CABINET_HEADING } from '../../shared/copy.ts';
+import { INVOICES_TAB, LEAVE_ACTION, RIDES_TAB, SIGN_IN_TO_READ } from './cabinetCopy.ts';
 
 // One section holds the cabinet, so the heading it is labelled by is declared once.
 const CABINET_TITLE_ID = 'cabinet-title';
@@ -36,35 +37,34 @@ export function AccountScreen({ account, submission, onLeave, children }: Accoun
         {CABINET_HEADING}
       </h2>
 
-      {account.state === 'signed-in' ? (
-        <SignedIn snapshot={account.snapshot} submission={submission} section={section} onLeave={onLeave}>
-          {children}
-        </SignedIn>
-      ) : (
-        <p className="cabinet-invitation">{SIGN_IN_TO_READ}</p>
-      )}
+      <CabinetBody account={account} submission={submission} section={section} onLeave={onLeave}>
+        {children}
+      </CabinetBody>
     </section>
   );
 }
 
-function SignedIn({
-  snapshot,
+/** What the cabinet holds for one account: the two feeds, or what the address is for without one. */
+function CabinetBody({
+  account,
   submission,
   section,
   onLeave,
   children,
 }: {
-  snapshot: SessionSnapshot;
+  account: Account;
   submission: Submission;
   section: CabinetSection | undefined;
   onLeave: () => Promise<void>;
   children: ReactNode;
 }) {
+  if (account.state !== 'signed-in') return <p className="cabinet-invitation">{SIGN_IN_TO_READ}</p>;
+
   return (
     <>
       <div className="cabinet-account">
         <span className="cabinet-email" data-testid="account-email">
-          {snapshot.user.email}
+          {account.snapshot.user.email}
         </span>
         <button
           className="header-action"

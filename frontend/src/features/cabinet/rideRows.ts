@@ -1,7 +1,8 @@
 import type { Completion } from '../../shared/api/current.ts';
 import type { RideSummary } from '../../shared/api/history.ts';
 import { datedServiceMoment } from '../../shared/locale.ts';
-import { UNREADABLE_VALUE } from '../reservation/rideCopy.ts';
+import { UNREADABLE_VALUE } from '../../shared/ride/fares.ts';
+import { COMPLETION_REASON } from '../../shared/ride/spell.ts';
 
 /**
  * What one row of the ride feed states: the vehicle the ride was taken on, the moments it ran
@@ -24,7 +25,9 @@ export type RideRow = {
 /** What is written before each value of a row. The vehicle needs none: it heads the row. */
 export const RIDE_STARTED_AT = 'Начало';
 export const RIDE_COMPLETED_AT = 'Окончание';
-export const RIDE_REASON = 'Причина';
+
+/** What is written before why the ride ended, which is the word the panel of an ending uses too. */
+export const RIDE_REASON = COMPLETION_REASON;
 
 /**
  * Why a ride ended, in one word. The feed has room for the reason and not for the story: an ending

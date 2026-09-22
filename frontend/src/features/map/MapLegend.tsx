@@ -1,7 +1,7 @@
-import type { Zone } from '../../shared/api/catalog';
-import { FILTERABLE_STATUSES } from '../fleet/filters';
-import { STATUS_LABELS } from '../fleet/fleetCopy';
-import { statusColourProperty } from './markerStyle';
+import type { Zone } from '../../shared/api/catalog.ts';
+import { FILTERABLE_STATUSES } from '../../shared/vehicle/filters.ts';
+import { STATUS_LABELS } from '../../shared/vehicle/spell.ts';
+import { statusColourProperty } from './markerStyle.ts';
 
 /** What the legend calls a boundary the service has not published. */
 const UNNAMED_ZONE = 'Зона обслуживания';
@@ -23,7 +23,7 @@ export function MapLegend({ zones }: { zones: readonly Zone[] }) {
               style={{ background: `var(${statusColourProperty(status)})` }}
               aria-hidden="true"
             />
-            {STATUS_LABELS[status]}
+            {STATUS_LABELS[status]}{' '}
           </li>
         ))}
         {zoneNames(zones).map((name) => (

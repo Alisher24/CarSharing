@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
-import { csrfTokenOf, sessionOf, type Account } from '../account/useAccount.ts';
-import type { CurrentRental } from './useCurrentRental.ts';
+import { useCallback, useState } from 'react';
+import { identityOf } from '../../shared/account/identity.ts';
+import type { Account } from '../../shared/account/session.ts';
 import type { FinishResult } from '../../shared/api/current.ts';
 import { finishRide, pauseRide, resumeRide, startRide } from '../../shared/api/rides.ts';
-import { useCommandSender, type CommandAnswer } from './commandSender.ts';
-import type { UnfinishedCommand } from './unfinishedCommand.ts';
-import type { CommandPhase } from './commandPhase.ts';
+import { useCommandSender, type CommandAnswer } from '../../shared/command/commandSender.ts';
+import type { CommandPhase } from '../../shared/command/commandPhase.ts';
+import type { UnfinishedCommand } from '../../shared/command/unfinishedCommand.ts';
+import type { CurrentRental } from './useCurrentRental.ts';
 
 /** What the interface can do about the ride in force, and where its last command stands. */
 export type RideCommands = {
@@ -42,31 +43,37 @@ export type RideCommands = {
   settle: () => void;
 };
 
+/** What this tab was told about an ending, kept under the account that rode. */
+type AnsweredFinish = { owner: string | undefined; finished: FinishResult | undefined };
+
 /**
  * useRideCommands sends the commands that move a rental through its ride. It is the sender the
  * reservation uses, told a different set of commands: the same key is kept before the request, the
  * same key is presented by a repeat, and the current rental is read again after every answer.
  *
+ * What this tab was told about an ending belongs to the account that rode, and it is keyed by the
+ * account rather than cleared by an effect: the next account starts with nothing of the previous one
+ * on screen, from the first render it is shown in.
+ *
  * Closing the tab changes nothing here. The ride lives in the database, and a client that comes back
  * reads it rather than sending a command about it.
  */
 export function useRideCommands(account: Account, current: CurrentRental): RideCommands {
-  const owner = sessionOf(account);
-  const [finished, setFinished] = useState<FinishResult | undefined>(undefined);
+  const { session, csrfToken } = identityOf(account);
+  const [answered, setAnswered] = useState<AnsweredFinish>(() => ({ owner: session, finished: undefined }));
 
-  // What this tab was told about an ending belongs to the account that rode: the next one starts
-  // with nothing of the previous one on screen.
-  useEffect(() => setFinished(undefined), [owner]);
+  const finished = answered.owner === session ? answered.finished : undefined;
+  const keep = useCallback((result: FinishResult) => setAnswered({ owner: session, finished: result }), [session]);
 
   const send = useCallback(
     (command: UnfinishedCommand, credentials: { csrfToken: string; key: string }) =>
-      rideCommand(command, credentials, setFinished),
-    [],
+      rideCommand(command, credentials, keep),
+    [keep],
   );
 
   const { phase, repeatable, start, repeat, settle } = useCommandSender({
-    owner,
-    csrfToken: csrfTokenOf(account),
+    owner: session,
+    csrfToken,
     refresh: current.retry,
     send,
   });

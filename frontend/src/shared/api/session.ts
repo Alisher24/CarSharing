@@ -1,5 +1,6 @@
 import { getMe, login, logout, register } from './generated/sdk.gen';
 import type { ApiError, SessionSnapshot } from './generated/types.gen';
+import { originHeader, sameOriginRequest } from './request.ts';
 
 export type { SessionSnapshot } from './generated/types.gen';
 
@@ -18,15 +19,6 @@ export type SessionResult =
 export type Credentials = { email: string; password: string };
 
 type SessionResponse = { data?: SessionSnapshot; error?: ApiError; response?: Response };
-
-// The session cookie is HttpOnly, so nothing here reads or writes it: the browser attaches it and
-// the server replaces it. The snapshot is held in memory by the caller and never in storage.
-const sameOriginRequest = { credentials: 'same-origin', cache: 'no-store' } as const;
-
-// The contract declares Origin as a required header, so the generated types ask for it. A browser
-// sets Origin itself and refuses to let a script override it, so this value satisfies the type
-// while the value the server actually checks is the one the browser attached.
-const originHeader = () => ({ Origin: window.location.origin });
 
 export async function registerAccount(credentials: Credentials): Promise<SessionResult> {
   return toSessionResult(() => register({ body: credentials, headers: originHeader(), ...sameOriginRequest }));

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { changedResources, type Signal } from '../events/changes.ts';
-import { createReadCoordinator, type ReadCoordinator } from '../events/coordinator.ts';
-import { collection, warningNotification } from './fixtures.ts';
+import { changedResources, type Signal } from '../../shared/read/changes.ts';
+import { createReadCoordinator, type ReadCoordinator } from '../../shared/read/coordinator.ts';
+import { collection, warningNotification } from '../../shared/account/fixtures.ts';
 import { notificationAnswers, type NotificationSession } from './notificationAnswers.ts';
 import type { NotificationReading } from './notificationReading.ts';
 

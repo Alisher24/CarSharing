@@ -1,4 +1,4 @@
-import type { VehicleStatus } from '../fleet/filters';
+import type { VehicleStatus } from '../../shared/vehicle/spell.ts';
 
 /**
  * The custom property a public state is drawn in. The colours themselves live in the stylesheet,

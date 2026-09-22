@@ -1,16 +1,18 @@
 import { useState } from 'react';
-import type { Tariff, Vehicle } from '../../shared/api/catalog';
-import type { RateText } from '../reservation/reservationCopy';
+import type { Tariff, Vehicle } from '../../shared/api/catalog.ts';
+import { type AbsenceCopy } from '../../shared/components/absence.ts';
+import { ResourceNotice } from '../../shared/components/ResourceNotice.tsx';
 import {
   BOOK_ACTION,
   CONFIRM_ACTION,
   CONFIRM_HEADING,
   FREE_PERIOD,
   FREE_RESERVATION_WARNING,
-  KEEP_ACTION,
-  rateTextOf,
-} from '../reservation/reservationCopy';
-import { TariffRates } from '../reservation/TariffRates';
+  KEEP_BOOKING_ACTION,
+} from '../../shared/copy.ts';
+import type { Found } from '../../shared/read/presence.ts';
+import { rateTextOf, TARIFF_MISSING, type RateText } from '../../shared/ride/fares.ts';
+import { TariffRates } from '../../shared/ride/TariffRates.tsx';
 import {
   POWERTRAIN_LABELS,
   sourceText,
@@ -18,9 +20,7 @@ import {
   telemetryText,
   UNAVAILABLE_REASON_LABELS,
   unavailableReasons,
-} from './fleetCopy';
-import { ResourceNotice, type AbsenceCopy } from './ResourceNotice';
-import type { Found } from './useCatalog';
+} from '../../shared/vehicle/spell.ts';
 
 /** What the card says when the vehicle has dropped out of the current result. */
 const OUTSIDE_FILTERS = 'Автомобиль больше не соответствует фильтрам';
@@ -34,8 +34,8 @@ const NOT_FREE = 'Забронировать можно только свобо�
  */
 const TARIFF_ABSENCE: AbsenceCopy = {
   loading: 'Загружаем тариф…',
-  none: 'Тариф временно недоступен',
-  unreachable: 'Тариф временно недоступен',
+  none: TARIFF_MISSING,
+  unreachable: TARIFF_MISSING,
 };
 
 /**
@@ -189,7 +189,7 @@ function Booking({
             {CONFIRM_ACTION}
           </button>
           <button className="action-button" type="button" onClick={onKeep}>
-            {KEEP_ACTION}
+            {KEEP_BOOKING_ACTION}
           </button>
         </div>
         {booking.notice !== undefined && <p className="vehicle-card-notice">{booking.notice}</p>}

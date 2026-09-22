@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import type { LiveRental } from '../../shared/api/current.ts';
-import type { ServerClock } from './countdown.ts';
-import { commandText, type CommandPhase } from './commandPhase.ts';
-import { GO_TO_VEHICLE, rateTextOf, vehicleName } from './reservationCopy.ts';
+import { commandText, type CommandPhase } from '../../shared/command/commandPhase.ts';
+import type { CommandAction } from '../../shared/command/unfinishedCommand.ts';
+import type { ServerClock } from '../../shared/ride/serverClock.ts';
 import {
-  amountText,
   DRIVING_TOTAL,
   ESTIMATED_AMOUNT,
   FINISH_ACTION,
@@ -15,8 +14,10 @@ import {
   PAUSE_ACTION,
   PAUSED_TOTAL,
   RESUME_ACTION,
-  UNREADABLE_VALUE,
-} from './rideCopy.ts';
+  vehicleName,
+} from '../../shared/ride/spell.ts';
+import { amountText, rateTextOf, UNREADABLE_VALUE } from '../../shared/ride/fares.ts';
+import { GO_TO_VEHICLE } from './reservationCopy.ts';
 import {
   drivingDuration,
   durationText,
@@ -25,11 +26,10 @@ import {
   pausedDuration,
   rideModeOf,
   rideModeText,
-} from './ridePace.ts';
-import { TariffRates } from './TariffRates.tsx';
-import { useClockTick } from './useClockTick.ts';
+} from '../../shared/ride/pace.ts';
+import { TariffRates } from '../../shared/ride/TariffRates.tsx';
+import { useClockTick } from '../../shared/ride/useClockTick.ts';
 import type { RideCommands } from './useRideCommands.ts';
-import type { CommandAction } from './unfinishedCommand.ts';
 
 type RideViewProps = {
   rental: LiveRental;
@@ -72,7 +72,7 @@ export function RideView({ rental, ride, clock, onShowVehicle }: RideViewProps) 
         <dt>{PAUSED_TOTAL}</dt>
         <dd>{elapsedText(pausedDuration(rental.progress))}</dd>
         <dt>{ESTIMATED_AMOUNT}</dt>
-        <dd>{amountText(rental.progress)}</dd>
+        <dd>{amountText(rental.progress.estimated_amount_tyiyn)}</dd>
       </dl>
 
       <TariffRates rates={rateTextOf(rental.tariff_snapshot)} />
@@ -81,25 +81,7 @@ export function RideView({ rental, ride, clock, onShowVehicle }: RideViewProps) 
         <button className="action-button" type="button" onClick={() => onShowVehicle(rental.vehicle.id)}>
           {GO_TO_VEHICLE}
         </button>
-        {mode === 'driving' ? (
-          <button
-            className="action-button"
-            type="button"
-            disabled={running(ride.phase, 'pause')}
-            onClick={() => ride.hold(rental.id)}
-          >
-            {PAUSE_ACTION}
-          </button>
-        ) : (
-          <button
-            className="action-button"
-            type="button"
-            disabled={running(ride.phase, 'resume')}
-            onClick={() => ride.carryOn(rental.id)}
-          >
-            {RESUME_ACTION}
-          </button>
-        )}
+        <ModeControl rental={rental} ride={ride} mode={mode} />
         <button
           className="action-button"
           type="button"
@@ -132,6 +114,37 @@ export function RideView({ rental, ride, clock, onShowVehicle }: RideViewProps) 
 
       {notice !== undefined && <p className="reservation-panel-notice">{notice}</p>}
     </div>
+  );
+}
+
+/**
+ * The one control a riding mode offers: a moving ride is held, and a held one is carried on. Which of
+ * the two it is follows from the mode the server published, so the control never offers to hold a
+ * ride that is already held.
+ */
+function ModeControl({ rental, ride, mode }: { rental: LiveRental; ride: RideCommands; mode: 'driving' | 'paused' }) {
+  if (mode === 'driving') {
+    return (
+      <button
+        className="action-button"
+        type="button"
+        disabled={running(ride.phase, 'pause')}
+        onClick={() => ride.hold(rental.id)}
+      >
+        {PAUSE_ACTION}
+      </button>
+    );
+  }
+
+  return (
+    <button
+      className="action-button"
+      type="button"
+      disabled={running(ride.phase, 'resume')}
+      onClick={() => ride.carryOn(rental.id)}
+    >
+      {RESUME_ACTION}
+    </button>
   );
 }
 

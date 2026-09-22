@@ -1,8 +1,9 @@
 import { Link } from 'react-router';
 import { invoiceAddress } from '../../app/addresses.ts';
-import type { Account } from '../account/useAccount.ts';
-import type { PrivateFeed } from '../events/usePrivateEvents.ts';
-import { OPEN_INVOICE, RIDES_ABSENCE } from './cabinetCopy.ts';
+import type { Account } from '../../shared/account/session.ts';
+import type { CycleFeed } from '../../shared/read/useReadCycle.ts';
+import { OPEN_INVOICE } from '../../shared/copy.ts';
+import { RIDES_ABSENCE } from './cabinetCopy.ts';
 import { FeedList } from './FeedList.tsx';
 import { FeedValue } from './FeedValue.tsx';
 import { RIDE_COMPLETED_AT, RIDE_REASON, RIDE_STARTED_AT, rideRow, type RideRow } from './rideRows.ts';
@@ -14,7 +15,7 @@ import { useRideFeed } from './useRideFeed.ts';
  * collections are ordered by different moments and stitching them together on this screen would make
  * them disagree on the second page.
  */
-export function RideFeed({ account, events }: { account: Account; events: PrivateFeed }) {
+export function RideFeed({ account, events }: { account: Account; events: CycleFeed }) {
   const feed = useRideFeed(account, events);
 
   return <FeedList feed={feed} copy={RIDES_ABSENCE} row={(ride) => <RideRowView row={rideRow(ride)} />} />;

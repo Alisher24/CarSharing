@@ -1,10 +1,9 @@
 import type { InvoiceLine, InvoiceView } from '../../shared/api/current.ts';
 import { INTERFACE_LOCALE, datedServiceMoment } from '../../shared/locale.ts';
-import { somText } from '../fleet/money.ts';
-import { paymentText } from '../reservation/paymentCopy.ts';
-import { rideModeText } from '../reservation/ridePace.ts';
-import { RATE_UNIT } from '../reservation/reservationCopy.ts';
-import { UNREADABLE_VALUE } from '../reservation/rideCopy.ts';
+import { somText } from '../../shared/money.ts';
+import { paymentText } from '../../shared/ride/paymentCopy.ts';
+import { rideModeText } from '../../shared/ride/pace.ts';
+import { RATE_UNIT, UNREADABLE_VALUE } from '../../shared/ride/fares.ts';
 
 /**
  * What a person reads about an invoice: one row of the feed, and the lines of the card that opens
@@ -34,10 +33,10 @@ export type InvoiceLineRow = {
   amount: string;
 };
 
-/** What is written before each value of a row or of a line. */
+/** What is written before the moment an invoice was issued. */
 export const INVOICE_ISSUED_AT = 'Выставлен';
-export const INVOICE_TOTAL = 'Итог';
-export const INVOICE_PAYMENT = 'Оплата';
+
+/** What is written before each other value of an invoice, which is the same word as in a ride. */
 export const LINE_MINUTES = 'Начатых минут';
 export const LINE_RATE = 'Ставка';
 export const LINE_AMOUNT = 'Сумма';
