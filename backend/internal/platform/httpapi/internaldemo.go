@@ -7,7 +7,9 @@ import (
 	"net/http"
 
 	internalapi "github.com/Alisher24/CarSharing/backend/internal/contracts/internalapi"
+	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
+	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
 	"github.com/Alisher24/CarSharing/backend/internal/invoices"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/timestamp"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals"
@@ -28,7 +30,7 @@ func (h internalHandlers) ApplyDemoAction(
 	if err != nil {
 		return nil, err
 	}
-	attempt, err := internalAttemptOf(command.ActionID, demoActionPath, request.Body,
+	attempt, err := commandAttempt(idempotency.Key(command.ActionID), demoActionPath, request.Body,
 		demoActionRender(command.ActionID))
 	if err != nil {
 		return nil, err
@@ -142,44 +144,41 @@ func demoActionRender(actionID string) rentals.Render {
 // decided.
 func demoAnswer(ctx context.Context, answered rentals.Answered, failure error) (any, error) {
 	if failure != nil {
-		return internalFailureAnswer(demoActionAnswers, ctx, failure)
+		reportUncarried(ctx, failure, commandFailureOf(failure))
+		return spellFailure(demoActionOperation, ctx, commandFailureOf(failure))
 	}
-	return spellInternal(demoActionAnswers, answered)
+	return answerOf(demoActionOperation, answered)
 }
 
-// demoActionAnswers is every status the demonstration operation declares, each spelled as the
+// demoActionOperation declares every status the demonstration operation declares, each spelled as the
 // operation's own response type.
-var demoActionAnswers = internalAnswers{
-	http.StatusOK: internalShape(func(body internalapi.DemoResult, replayed bool) any {
-		return internalapi.ApplyDemoAction200JSONResponse{
-			Body: body,
-			Headers: internalapi.ApplyDemoAction200ResponseHeaders{
-				IdempotencyReplayed: replayedHeader(replayed),
-			},
-		}
-	}),
-	http.StatusConflict: internalShape(func(body internalapi.ApiError, replayed bool) any {
-		return internalapi.ApplyDemoAction409JSONResponse{
-			Body: body,
-			Headers: internalapi.ApplyDemoAction409ResponseHeaders{
-				IdempotencyReplayed: replayedHeader(replayed),
-				RetryAfter:          retryAfterOfInternal(body),
-			},
-		}
-	}),
-	http.StatusNotFound: internalShape(func(body internalapi.ApiError, _ bool) any {
-		return internalapi.ApplyDemoAction404JSONResponse{Body: body}
-	}),
-	http.StatusServiceUnavailable: internalShape(func(body internalapi.ApiError, _ bool) any {
-		return internalapi.ApplyDemoAction503JSONResponse{Body: body}
-	}),
-}
-
-// retryAfterOfInternal asks for a wait when a demonstration command met another attempt at the same
-// key. Every other refusal of this surface is a decision rather than a race, and carries no wait.
-func retryAfterOfInternal(body internalapi.ApiError) *int {
-	if body.Code != internalapi.IDEMPOTENCYINPROGRESS {
-		return nil
-	}
-	return retryAfterCommandBusy()
+var demoActionOperation = commandOperation{
+	name:    "demonstration action",
+	path:    demoActionPath,
+	refused: http.StatusConflict,
+	answers: map[int]answerShape{
+		http.StatusOK: shapeOf(func(body internalapi.DemoResult, headers answerHeaders) any {
+			return internalapi.ApplyDemoAction200JSONResponse{
+				Body: body,
+				Headers: internalapi.ApplyDemoAction200ResponseHeaders{
+					IdempotencyReplayed: replayedHeader(headers.replayed),
+				},
+			}
+		}),
+		http.StatusConflict: shapeOf(func(body internalapi.ApiError, headers answerHeaders) any {
+			return internalapi.ApplyDemoAction409JSONResponse{
+				Body: body,
+				Headers: internalapi.ApplyDemoAction409ResponseHeaders{
+					IdempotencyReplayed: replayedHeader(headers.replayed),
+					RetryAfter:          headers.retry(servedapi.ErrorCode(body.Code)),
+				},
+			}
+		}),
+		http.StatusNotFound: shapeOf(func(body internalapi.ApiError, headers answerHeaders) any {
+			return internalapi.ApplyDemoAction404JSONResponse{Body: body}
+		}),
+		http.StatusServiceUnavailable: shapeOf(func(body internalapi.ApiError, headers answerHeaders) any {
+			return internalapi.ApplyDemoAction503JSONResponse{Body: body}
+		}),
+	},
 }

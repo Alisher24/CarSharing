@@ -39,3 +39,9 @@ func newCatalogHandlers(catalog Catalog) (catalogHandlers, error) {
 		prices:       prices{reader: catalog.Tariffs},
 	}, nil
 }
+
+func registerCatalogHandlers(served *server, dependencies Dependencies) error {
+	var err error
+	served.catalogHandlers, err = newCatalogHandlers(dependencies.Catalog)
+	return err
+}

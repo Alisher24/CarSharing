@@ -26,7 +26,8 @@ type EventStream interface {
 // the same stream over a different audience: what a connection may hear, and — for the private one —
 // the session it must keep proving, are the whole difference between them.
 type streams struct {
-	hub EventStream
+	hub    EventStream
+	timing events.StreamTiming
 
 	// sessions proves the session of a private stream. A router that serves no streams has none, and
 	// reaches that field only after the session boundary has already refused the request.
@@ -34,11 +35,14 @@ type streams struct {
 }
 
 // newStreams builds the streaming operations, or names the dependency that is missing.
-func newStreams(hub EventStream, sessionManager *sessions.Manager) (streams, error) {
+func newStreams(hub EventStream, sessionManager *sessions.Manager, timing events.StreamTiming) (streams, error) {
 	if hub == nil {
 		return streams{}, fmt.Errorf("%w: event streams", ErrIncompleteApplication)
 	}
-	return streams{hub: hub, sessions: sessionManager}, nil
+	if err := timing.Validate(); err != nil {
+		return streams{}, fmt.Errorf("%w: stream timing: %w", ErrIncompleteApplication, err)
+	}
+	return streams{hub: hub, sessions: sessionManager, timing: timing}, nil
 }
 
 // unservedStreams answers the streaming operations on a router that holds no signals: the isolated
@@ -118,6 +122,7 @@ func (s streams) open(ctx context.Context, options events.StreamOptions) (io.Rea
 		return nil, err
 	}
 	options.EstablishedAt = establishedAt
+	options.Timing = s.timing
 
 	reader, writer := io.Pipe()
 	go func() {
@@ -156,4 +161,10 @@ func endReason(ended error) string {
 		return "closed"
 	}
 	return ended.Error()
+}
+
+func registerStreams(served *server, dependencies Dependencies) error {
+	var err error
+	served.streams, err = newStreams(dependencies.Events, dependencies.Sessions, dependencies.StreamTiming)
+	return err
 }

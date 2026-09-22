@@ -49,7 +49,7 @@ func (h rideCollectionHandlers) GetRides(
 			Body: apiErrorBody(ctx, codeAuthenticationRequired, messageAuthenticationRequired),
 		}, nil
 	}
-	limit := pageLimitOf(request.Params.Limit, rentals.RidePageSize)
+	limit := pageLimitOf(request.Params.Limit, cursor.PageSize)
 
 	after, err := h.positionOf(request.Params.Cursor, caller, limit)
 	if err != nil {
@@ -77,12 +77,8 @@ func (h rideCollectionHandlers) GetRides(
 // the history.
 func (h rideCollectionHandlers) positionOf(
 	presented *servedapi.Cursor, owner uuid.UUID, limit int,
-) (*rentals.RidePosition, error) {
-	read, err := pagePositionOf(h.cursors, presented, accountPageScope(getRidesOperation, owner, limit))
-	if err != nil || read == nil {
-		return nil, err
-	}
-	return &rentals.RidePosition{CompletedAt: read.CreatedAt, ID: read.ID}, nil
+) (*cursor.Position, error) {
+	return pagePositionOf(h.cursors, presented, accountPageScope(getRidesOperation, owner, limit))
 }
 
 // collectionBody renders one page of the history, with the cursor that reads the page after it. A
@@ -103,13 +99,16 @@ func (h rideCollectionHandlers) collectionBody(
 	if page.Next == nil {
 		return body, nil
 	}
-	issued, err := h.cursors.Issue(cursor.Position{
-		CreatedAt: page.Next.CompletedAt,
-		ID:        page.Next.ID,
-	}, accountPageScope(getRidesOperation, owner, limit))
+	issued, err := h.cursors.Issue(*page.Next, accountPageScope(getRidesOperation, owner, limit))
 	if err != nil {
 		return servedapi.RideCollection{}, err
 	}
 	body.NextCursor = &issued
 	return body, nil
+}
+
+func registerRideCollectionHandlers(served *server, dependencies Dependencies) error {
+	var err error
+	served.rideCollectionHandlers, err = newRideCollectionHandlers(dependencies.Reservations, dependencies.Cursors)
+	return err
 }

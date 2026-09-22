@@ -157,7 +157,7 @@ func TestOnlyTheAnswersThatAskForAWaitCarryOne(t *testing.T) {
 		{code: servedapi.DAILYLIMITREACHED},
 		{code: servedapi.RESOURCENOTFOUND},
 	} {
-		retryAfter := retryAfterOf(servedapi.ApiError{Code: asked.code})
+		retryAfter := retryAfterOf(asked.code)
 		if (retryAfter != nil) != asked.waits {
 			t.Errorf("the %s answer asks for a wait: %v, want %v",
 				asked.code, retryAfter != nil, asked.waits)

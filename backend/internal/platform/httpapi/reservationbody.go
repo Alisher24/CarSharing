@@ -62,37 +62,6 @@ func cancelRender(ctx context.Context, outcome rentals.Outcome) (rentals.Respons
 	})
 }
 
-// refusalContract names the code, status and message of a refusal. Every kind is one the contract
-// declares for the operation that can produce it.
-func refusalContract(refusal rentals.Refusal) (servedapi.ErrorCode, int, string, error) {
-	switch refusal.Kind {
-	case rentals.VehicleUnavailable:
-		return servedapi.VEHICLEUNAVAILABLE, http.StatusConflict, messageVehicleUnavailable, nil
-	case rentals.ActiveRentalExists:
-		return servedapi.ACTIVERENTALEXISTS, http.StatusConflict, messageActiveRentalExists, nil
-	case rentals.DailyLimitReached:
-		return servedapi.DAILYLIMITREACHED, http.StatusConflict, messageDailyLimitReached, nil
-	case rentals.ReservationExpired:
-		return servedapi.RESERVATIONEXPIRED, http.StatusConflict, messageReservationExpired, nil
-	case rentals.RentalCompleted:
-		return servedapi.RENTALCOMPLETED, http.StatusConflict, messageRentalCompleted, nil
-	case rentals.InvalidRentalState:
-		return servedapi.INVALIDRENTALSTATE, http.StatusConflict, messageInvalidRentalState, nil
-	case rentals.OutsideServiceZone:
-		return servedapi.OUTSIDESERVICEZONE, http.StatusConflict, messageOutsideServiceZone, nil
-	case rentals.TelemetryStale:
-		return servedapi.TELEMETRYSTALE, http.StatusConflict, messageTelemetryStale, nil
-	case rentals.OutstandingInvoice:
-		return servedapi.OUTSTANDINGINVOICE, http.StatusConflict, messageOutstandingInvoice, nil
-	case rentals.PaymentInProgress:
-		return servedapi.PAYMENTINPROGRESS, http.StatusConflict, messagePaymentInProgress, nil
-	case rentals.RentalNotFound, rentals.InvoiceNotFound:
-		return codeResourceNotFound, http.StatusNotFound, messageResourceNotFound, nil
-	default:
-		return "", 0, "", fmt.Errorf("the rentals module refused with an unknown kind %q", refusal.Kind)
-	}
-}
-
 // refusalDetails renders what displaying a refusal needs: why a vehicle cannot be used, or when the
 // day's allowance returns. A refusal the contract does not describe in detail carries none.
 func refusalDetails(refusal rentals.Refusal) (*servedapi.ApiError_Details, error) {

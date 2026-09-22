@@ -15,7 +15,7 @@ import (
 // asks for the page rather than assembling one from the store.
 type Notifications interface {
 	Collection(
-		ctx context.Context, caller uuid.UUID, after *notifications.Position, limit int,
+		ctx context.Context, caller uuid.UUID, after *cursor.Position, limit int,
 	) (notifications.Collection, error)
 
 	MarkRead(ctx context.Context, owner uuid.UUID, id string) (notifications.Result, error)
@@ -38,4 +38,10 @@ func newNotificationHandlers(
 		return notificationHandlers{}, fmt.Errorf("%w: cursor signer", ErrIncompleteApplication)
 	}
 	return notificationHandlers{notifications: notifications, cursors: cursors}, nil
+}
+
+func registerNotificationHandlers(served *server, dependencies Dependencies) error {
+	var err error
+	served.notificationHandlers, err = newNotificationHandlers(dependencies.Notifications, dependencies.Cursors)
+	return err
 }

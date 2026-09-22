@@ -16,13 +16,6 @@ const (
 	// rather than a correctness one, because a window that has passed is replaced by the next
 	// attempt whatever the row holds.
 	RetentionPeriod = time.Hour
-
-	// RetentionBatchSize is how many rows one sweep removes, so a table that has accumulated for a
-	// long time is emptied over several sweeps instead of in one long transaction.
-	RetentionBatchSize = 1000
-
-	// RetentionInterval is how often a worker sweeps the table.
-	RetentionInterval = 10 * time.Second
 )
 
 // deleteExpiredStatement removes the oldest counters whose window began before the retention period.
@@ -38,16 +31,8 @@ WHERE (scope, subject) IN (
     LIMIT $2
 )`
 
-// Reaper removes counters that no attempt has returned to within the retention period. It is one of
-// the recurring jobs of the worker process, which is the only place that decides a counter is old
-// enough to drop.
-type Reaper struct{ pool *pgxpool.Pool }
-
-func NewReaper(pool *pgxpool.Pool) *Reaper { return &Reaper{pool: pool} }
-
-// Delete runs one sweep and reports how many counters it removed.
-func (r *Reaper) Delete(ctx context.Context) (int64, error) {
-	removed, err := r.pool.Exec(ctx, deleteExpiredStatement, RetentionPeriod, RetentionBatchSize)
+func DeleteExpired(ctx context.Context, pool *pgxpool.Pool, batchSize int) (int64, error) {
+	removed, err := pool.Exec(ctx, deleteExpiredStatement, RetentionPeriod, batchSize)
 	if err != nil {
 		return 0, err
 	}

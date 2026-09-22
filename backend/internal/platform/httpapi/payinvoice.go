@@ -78,3 +78,9 @@ func payRender(ctx context.Context) rentals.Render {
 		return encoded(http.StatusOK, body)
 	}
 }
+
+func registerPayHandlers(served *server, dependencies Dependencies) error {
+	var err error
+	served.payHandlers, err = newPayHandlers(dependencies.Reservations)
+	return err
+}

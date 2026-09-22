@@ -8,6 +8,7 @@ const COMPOSE = readFileSync(new URL('../compose.yaml', import.meta.url), 'utf8'
 const LIFECYCLE = readFileSync(new URL('../backend/internal/platform/lifecycle/shutdown.go', import.meta.url), 'utf8');
 const API_COMMAND = readFileSync(new URL('../backend/cmd/api/main.go', import.meta.url), 'utf8');
 const MAILSTUB_COMMAND = readFileSync(new URL('../backend/cmd/mailstub/main.go', import.meta.url), 'utf8');
+const HTTP_SERVER = readFileSync(new URL('../backend/internal/platform/httpserver/serve.go', import.meta.url), 'utf8');
 
 function statedSeconds(declaration, pattern, what) {
   const stated = declaration.match(pattern);
@@ -32,8 +33,9 @@ describe('a process stops inside the container grace period', () => {
       ['api', API_COMMAND],
       ['mailstub', MAILSTUB_COMMAND],
     ]) {
-      assert.match(source, /lifecycle\.ShutdownTimeout/, `${command} does not use the shared shutdown budget`);
+      assert.match(source, /httpserver\.Serve\(/, `${command} does not use the shared listener lifecycle`);
       assert.doesNotMatch(source, /shutdownTimeout\s*=/, `${command} declares another shutdown budget`);
     }
+    assert.match(HTTP_SERVER, /lifecycle\.ShutdownTimeout/, 'HTTP listeners do not use the shared shutdown budget');
   });
 });

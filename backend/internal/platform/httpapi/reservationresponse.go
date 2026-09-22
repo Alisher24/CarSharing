@@ -41,11 +41,14 @@ func cancelFailure(ctx context.Context, failure commandFailure) servedapi.Cancel
 // with the same interval: a command whose twin is still running, and a payment whose attempt the
 // service has not finished making. A stored refusal that carries a moment of its own — an exhausted
 // allowance above all — never borrows this header for it.
-func retryAfterOf(body servedapi.ApiError) *int {
-	switch body.Code {
-	case servedapi.IDEMPOTENCYINPROGRESS, servedapi.PAYMENTINPROGRESS:
-		return retryAfterCommandBusy()
-	default:
+func retryAfterOf(code servedapi.ErrorCode) *int {
+	if !commandWaits[code] {
 		return nil
 	}
+	return retryAfterCommandBusy()
+}
+
+var commandWaits = map[servedapi.ErrorCode]bool{
+	servedapi.IDEMPOTENCYINPROGRESS: true,
+	servedapi.PAYMENTINPROGRESS:     true,
 }

@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/Alisher24/CarSharing/backend/internal/mailstub"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/cursor"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/httpheader"
 )
 
 // What every page of the inbox states about itself: it is HTML nobody stores, it is not sniffed into
@@ -15,7 +17,7 @@ func TestEveryPageOfTheInboxStatesWhatItIs(t *testing.T) {
 	handler := mailstubInboxRouter(t, newFakeMailBox(), []byte(cursorKey))
 	for _, path := range []string{inboxPath, "/nowhere"} {
 		answer := mailstubCall(t, handler, http.MethodGet, path, "", "", nil)
-		if contentType := answer.Header().Get(contentTypeHeader); contentType != htmlMediaType {
+		if contentType := answer.Header().Get(httpheader.ContentType); contentType != htmlMediaType {
 			t.Errorf("%s answers Content-Type %q", path, contentType)
 		}
 		if cache := answer.Header().Get(cacheControlHeader); cache != noStoreCacheControl {
@@ -27,7 +29,7 @@ func TestEveryPageOfTheInboxStatesWhatItIs(t *testing.T) {
 		if policy := answer.Header().Get(contentSecurityHeader); policy != contentSecurityPolicy {
 			t.Errorf("%s answers Content-Security-Policy %q", path, policy)
 		}
-		if requestID := answer.Header().Get(requestIDHeader); requestID == "" {
+		if requestID := answer.Header().Get(httpheader.RequestID); requestID == "" {
 			t.Errorf("%s answers no request identifier", path)
 		}
 		// The policy admits the page's own stylesheet and no external source, so the stylesheet is
@@ -62,7 +64,9 @@ func TestTheInboxPageListsTheLettersItHolds(t *testing.T) {
 		}
 	}
 	// The order is the collection's: the letter delivered last is the one at the top.
-	if newest, older := strings.Index(page, accepted[1].Subject), strings.Index(page, accepted[0].Subject); newest > older {
+	newest := strings.Index(page, accepted[1].Subject)
+	older := strings.Index(page, accepted[0].Subject)
+	if newest > older {
 		t.Errorf("the list shows the older letter first")
 	}
 	// The machine-readable view of the same box is one click away, and so is the list itself.
@@ -246,14 +250,14 @@ func TestAnUnreadableCursorIsRefusedAsAPage(t *testing.T) {
 func TestTheInboxPageContinuesThroughTheCursorsOfTheCollection(t *testing.T) {
 	box := newFakeMailBox()
 	handler := mailstubInboxRouter(t, box, []byte(cursorKey))
-	accepted := lettersAccepted(t, box, mailstub.PageSize+2)
+	accepted := lettersAccepted(t, box, cursor.PageSize+2)
 
 	first := mailstubCall(t, handler, http.MethodGet, inboxPath, "", "", nil)
 	if first.Code != http.StatusOK {
 		t.Fatalf("the first page answered %d %s", first.Code, first.Body.String())
 	}
 	page := first.Body.String()
-	if rows := strings.Count(page, `class="inbox-moment"`); rows != mailstub.PageSize {
+	if rows := strings.Count(page, `class="inbox-moment"`); rows != cursor.PageSize {
 		t.Fatalf("the first page lists %d letters", rows)
 	}
 	newest, oldest := accepted[len(accepted)-1], accepted[0]
@@ -293,7 +297,7 @@ func TestTheInboxPageContinuesThroughTheCursorsOfTheCollection(t *testing.T) {
 func TestAReloadedPageStaysWhereTheReaderWas(t *testing.T) {
 	box := newFakeMailBox()
 	handler := mailstubInboxRouter(t, box, []byte(cursorKey))
-	lettersAccepted(t, box, mailstub.PageSize+2)
+	lettersAccepted(t, box, cursor.PageSize+2)
 	next := nextPageLink(t, mailstubCall(t, handler, http.MethodGet, inboxPath, "", "", nil).Body.String())
 
 	answer := mailstubCall(t, handler, http.MethodGet, next, "", "", nil)
@@ -343,7 +347,7 @@ func TestTheContractOfTheInboxStillAnswersItsOwnJSON(t *testing.T) {
 	if letter.Code != http.StatusOK {
 		t.Fatalf("one letter answered %d %s", letter.Code, letter.Body.String())
 	}
-	if strings.Contains(letter.Header().Get(contentTypeHeader), "html") {
+	if strings.Contains(letter.Header().Get(httpheader.ContentType), "html") {
 		t.Errorf("the letter is answered as a page")
 	}
 	absent := mailstubCall(t, handler, http.MethodGet, mailstubMessagesPath+"/"+storedLetterID(9), "", "", nil)

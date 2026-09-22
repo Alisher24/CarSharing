@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 
-const EVENT_STREAM = readFileSync(new URL('../backend/internal/events/stream.go', import.meta.url), 'utf8');
+const EVENT_STREAM = readFileSync(new URL('../backend/internal/events/streamtiming.go', import.meta.url), 'utf8');
 const NGINX = readFileSync(new URL('../infra/nginx.conf', import.meta.url), 'utf8');
 
 function statedSeconds(declaration, pattern, what) {
@@ -18,7 +18,7 @@ describe('a streaming connection stays visible to the proxy', () => {
     const keepalive = statedSeconds(
       EVENT_STREAM,
       /keepaliveInterval\s*=\s*(\d+)\s*\*\s*time\.Second/,
-      'keepaliveInterval in events/stream.go',
+      'keepaliveInterval in events/streamtiming.go',
     );
     const proxyRead = statedSeconds(NGINX, /proxy_read_timeout\s+(\d+)s?;/, 'proxy_read_timeout in nginx.conf');
 

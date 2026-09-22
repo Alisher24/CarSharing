@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/Alisher24/CarSharing/backend/internal/platform/httpheader"
 )
 
 // The credential the delivery client is assembled with, and the letter every check below sends.
@@ -47,7 +49,7 @@ func TestADeliveryNamesTheInvoiceItIsAbout(t *testing.T) {
 	if key := seen.Header.Get(DeliveryKeyHeader); key != "invoice:"+invoiced+":issued" {
 		t.Errorf("the delivery carries the key %q", key)
 	}
-	if requestID := seen.Header.Get(RequestIDHeader); requestID == "" {
+	if requestID := seen.Header.Get(httpheader.RequestID); requestID == "" {
 		t.Error("the delivery carries no request identifier")
 	}
 	if token != "Bearer "+clientToken {
@@ -159,10 +161,10 @@ func TestADeliveryThatNeverArrivesFails(t *testing.T) {
 
 // A client that was given no address or no credential is refused where it is assembled.
 func TestAnIncompleteClientIsRefused(t *testing.T) {
-	if _, err := NewClient("", clientToken); err == nil {
+	if _, err := NewClient("", clientToken, http.DefaultTransport); err == nil {
 		t.Error("a client without an address was accepted")
 	}
-	if _, err := NewClient("http://127.0.0.1:1", ""); err == nil {
+	if _, err := NewClient("http://127.0.0.1:1", "", http.DefaultTransport); err == nil {
 		t.Error("a client without a credential was accepted")
 	}
 }
@@ -170,7 +172,7 @@ func TestAnIncompleteClientIsRefused(t *testing.T) {
 // mustClient assembles the client one check delivers with.
 func mustClient(t *testing.T, baseURL string) *Client {
 	t.Helper()
-	client, err := NewClient(baseURL, clientToken)
+	client, err := NewClient(baseURL, clientToken, http.DefaultTransport)
 	if err != nil {
 		t.Fatalf("the client was refused: %v", err)
 	}

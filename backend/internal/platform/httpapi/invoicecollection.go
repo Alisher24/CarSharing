@@ -30,7 +30,7 @@ func (h invoiceHandlers) GetInvoices(
 			Body: apiErrorBody(ctx, codeAuthenticationRequired, messageAuthenticationRequired),
 		}, nil
 	}
-	limit := pageLimitOf(request.Params.Limit, invoices.PageSize)
+	limit := pageLimitOf(request.Params.Limit, cursor.PageSize)
 
 	after, err := h.positionOf(request.Params.Cursor, caller, limit)
 	if err != nil {
@@ -54,12 +54,8 @@ func (h invoiceHandlers) GetInvoices(
 // the collection.
 func (h invoiceHandlers) positionOf(
 	presented *servedapi.Cursor, owner uuid.UUID, limit int,
-) (*invoices.Position, error) {
-	read, err := pagePositionOf(h.cursors, presented, accountPageScope(getInvoicesOperation, owner, limit))
-	if err != nil || read == nil {
-		return nil, err
-	}
-	return &invoices.Position{IssuedAt: read.CreatedAt, ID: read.ID}, nil
+) (*cursor.Position, error) {
+	return pagePositionOf(h.cursors, presented, accountPageScope(getInvoicesOperation, owner, limit))
 }
 
 // collectionBody renders one page of the collection, with the cursor that reads the page after it. A
@@ -80,10 +76,7 @@ func (h invoiceHandlers) collectionBody(
 	if page.Next == nil {
 		return body, nil
 	}
-	issued, err := h.cursors.Issue(cursor.Position{
-		CreatedAt: page.Next.IssuedAt,
-		ID:        page.Next.ID,
-	}, accountPageScope(getInvoicesOperation, owner, limit))
+	issued, err := h.cursors.Issue(*page.Next, accountPageScope(getInvoicesOperation, owner, limit))
 	if err != nil {
 		return servedapi.InvoiceCollection{}, err
 	}

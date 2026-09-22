@@ -7,8 +7,11 @@ package ratelimit
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -132,17 +135,9 @@ func (c *Counter) Release(ctx context.Context, scope Scope, subject string) erro
 	if _, configured := c.limits[scope]; !configured {
 		return nil
 	}
-	_, err := c.pool.Exec(ctx, `
-		UPDATE rate_limit_counters SET attempts = attempts - 1
-		WHERE scope = $1 AND subject = $2 AND attempts > 0`,
-		string(scope), subject)
-	if err != nil {
-		return err
-	}
-	_, err = c.pool.Exec(ctx, `
-		DELETE FROM rate_limit_counters WHERE scope = $1 AND subject = $2 AND attempts <= 0`,
-		string(scope), subject)
-	return err
+	return database.InTransactionWithHandle(ctx, c.pool, func(ctx context.Context, tx pgx.Tx) error {
+		return releaseCounter(ctx, tx, scope, subject)
+	})
 }
 
 // MinimumRetryAfter is the shortest wait a caller is ever told to wait. A rounded-down zero would
@@ -156,4 +151,29 @@ func remaining(windowStartedAt time.Time, window time.Duration) time.Duration {
 		return MinimumRetryAfter
 	}
 	return wait.Round(time.Second)
+}
+
+func releaseCounter(ctx context.Context, tx pgx.Tx, scope Scope, subject string) error {
+	// Even a zero counter represents an in-flight claim and must exclude competing claims.
+	var storedAttempts int
+	err := tx.QueryRow(ctx, `
+		SELECT attempts FROM rate_limit_counters WHERE scope = $1 AND subject = $2 FOR UPDATE`,
+		string(scope), subject).Scan(&storedAttempts)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `
+		UPDATE rate_limit_counters SET attempts = attempts - 1
+		WHERE scope = $1 AND subject = $2 AND attempts > 0`,
+		string(scope), subject)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `
+		DELETE FROM rate_limit_counters WHERE scope = $1 AND subject = $2 AND attempts <= 0`,
+		string(scope), subject)
+	return err
 }

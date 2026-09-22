@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/Alisher24/CarSharing/backend/internal/platform/httpheader"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 )
@@ -13,7 +14,7 @@ import (
 // for an unroutable path still reports an identifier a client can quote.
 func withRequestIdentity(w http.ResponseWriter, r *http.Request) *http.Request {
 	r = r.WithContext(context.WithValue(r.Context(), middleware.RequestIDKey, uuid.NewString()))
-	w.Header().Set(requestIDHeader, requestID(r))
+	w.Header().Set(httpheader.RequestID, requestID(r))
 	w.Header().Set(cacheControlHeader, noStoreCacheControl)
 	return r
 }

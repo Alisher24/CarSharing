@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"strconv"
 
@@ -77,7 +78,7 @@ func clientFor(mail bool) (*democontrol.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return democontrol.NewClient(capability.APIURL, capability.Token)
+	return democontrol.NewClient(capability.APIURL, capability.Token, http.DefaultTransport)
 }
 
 // capabilityOf reads what a command is called with: the demonstration capability of the API, or the

@@ -123,3 +123,9 @@ func rideAnswer(
 	reportUncarried(ctx, failure, reported)
 	return spellFailure(operation, ctx, reported)
 }
+
+func registerRideHandlers(served *server, dependencies Dependencies) error {
+	var err error
+	served.rideHandlers, err = newRideHandlers(dependencies.Reservations)
+	return err
+}

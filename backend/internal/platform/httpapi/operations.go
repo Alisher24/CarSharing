@@ -16,9 +16,9 @@ var (
 		path:    reservePath,
 		refused: http.StatusConflict,
 		answers: map[int]answerShape{
-			http.StatusCreated:            shapeOf(declaredBody[servedapi.ReserveResult](), reserveCreated),
-			http.StatusConflict:           shapeOf(declaredBody[servedapi.ApiError](), reserveConflict),
-			http.StatusServiceUnavailable: shapeOf(declaredBody[servedapi.ApiError](), reserveUnavailable),
+			http.StatusCreated:            shapeOf(reserveCreated),
+			http.StatusConflict:           shapeOf(reserveConflict),
+			http.StatusServiceUnavailable: shapeOf(reserveUnavailable),
 		},
 	}
 
@@ -27,10 +27,10 @@ var (
 		path:    reservePath + "/{id}" + cancelRentalSuffix,
 		refused: http.StatusConflict,
 		answers: map[int]answerShape{
-			http.StatusOK:                 shapeOf(declaredBody[servedapi.RentalCommandResult](), cancelSucceeded),
-			http.StatusNotFound:           shapeOf(declaredBody[servedapi.ApiError](), cancelNotFound),
-			http.StatusConflict:           shapeOf(declaredBody[servedapi.ApiError](), cancelConflict),
-			http.StatusServiceUnavailable: shapeOf(declaredBody[servedapi.ApiError](), cancelUnavailable),
+			http.StatusOK:                 shapeOf(cancelSucceeded),
+			http.StatusNotFound:           shapeOf(cancelNotFound),
+			http.StatusConflict:           shapeOf(cancelConflict),
+			http.StatusServiceUnavailable: shapeOf(cancelUnavailable),
 		},
 	}
 
@@ -39,10 +39,10 @@ var (
 		path:    startRentalPath,
 		refused: http.StatusConflict,
 		answers: map[int]answerShape{
-			http.StatusOK:                 shapeOf(declaredBody[servedapi.RentalCommandResult](), startSucceeded),
-			http.StatusNotFound:           shapeOf(declaredBody[servedapi.ApiError](), startNotFound),
-			http.StatusConflict:           shapeOf(declaredBody[servedapi.ApiError](), startConflict),
-			http.StatusServiceUnavailable: shapeOf(declaredBody[servedapi.ApiError](), startUnavailable),
+			http.StatusOK:                 shapeOf(startSucceeded),
+			http.StatusNotFound:           shapeOf(startNotFound),
+			http.StatusConflict:           shapeOf(startConflict),
+			http.StatusServiceUnavailable: shapeOf(startUnavailable),
 		},
 	}
 
@@ -51,10 +51,10 @@ var (
 		path:    pauseRentalPath,
 		refused: http.StatusConflict,
 		answers: map[int]answerShape{
-			http.StatusOK:                 shapeOf(declaredBody[servedapi.RentalCommandResult](), pauseSucceeded),
-			http.StatusNotFound:           shapeOf(declaredBody[servedapi.ApiError](), pauseNotFound),
-			http.StatusConflict:           shapeOf(declaredBody[servedapi.ApiError](), pauseConflict),
-			http.StatusServiceUnavailable: shapeOf(declaredBody[servedapi.ApiError](), pauseUnavailable),
+			http.StatusOK:                 shapeOf(pauseSucceeded),
+			http.StatusNotFound:           shapeOf(pauseNotFound),
+			http.StatusConflict:           shapeOf(pauseConflict),
+			http.StatusServiceUnavailable: shapeOf(pauseUnavailable),
 		},
 	}
 
@@ -63,10 +63,10 @@ var (
 		path:    resumeRentalPath,
 		refused: http.StatusConflict,
 		answers: map[int]answerShape{
-			http.StatusOK:                 shapeOf(declaredBody[servedapi.RentalCommandResult](), resumeSucceeded),
-			http.StatusNotFound:           shapeOf(declaredBody[servedapi.ApiError](), resumeNotFound),
-			http.StatusConflict:           shapeOf(declaredBody[servedapi.ApiError](), resumeConflict),
-			http.StatusServiceUnavailable: shapeOf(declaredBody[servedapi.ApiError](), resumeUnavailable),
+			http.StatusOK:                 shapeOf(resumeSucceeded),
+			http.StatusNotFound:           shapeOf(resumeNotFound),
+			http.StatusConflict:           shapeOf(resumeConflict),
+			http.StatusServiceUnavailable: shapeOf(resumeUnavailable),
 		},
 	}
 
@@ -78,10 +78,10 @@ var (
 		path:    finishRentalPath,
 		refused: http.StatusConflict,
 		answers: map[int]answerShape{
-			http.StatusOK:                 shapeOf(declaredBody[servedapi.FinishResult](), finishSucceeded),
-			http.StatusNotFound:           shapeOf(declaredBody[servedapi.ApiError](), finishNotFound),
-			http.StatusConflict:           shapeOf(declaredBody[servedapi.ApiError](), finishConflict),
-			http.StatusServiceUnavailable: shapeOf(declaredBody[servedapi.ApiError](), finishUnavailable),
+			http.StatusOK:                 shapeOf(finishSucceeded),
+			http.StatusNotFound:           shapeOf(finishNotFound),
+			http.StatusConflict:           shapeOf(finishConflict),
+			http.StatusServiceUnavailable: shapeOf(finishUnavailable),
 		},
 	}
 
@@ -93,266 +93,203 @@ var (
 		path:    payInvoicePath,
 		refused: http.StatusConflict,
 		answers: map[int]answerShape{
-			http.StatusOK:                 shapeOf(declaredBody[servedapi.PayResult](), paySucceeded),
-			http.StatusNotFound:           shapeOf(declaredBody[servedapi.ApiError](), payNotFound),
-			http.StatusConflict:           shapeOf(declaredBody[servedapi.ApiError](), payConflict),
-			http.StatusServiceUnavailable: shapeOf(declaredBody[servedapi.ApiError](), payUnavailable),
+			http.StatusOK:                 shapeOf(paySucceeded),
+			http.StatusNotFound:           shapeOf(payNotFound),
+			http.StatusConflict:           shapeOf(payConflict),
+			http.StatusServiceUnavailable: shapeOf(payUnavailable),
 		},
 	}
 )
 
 // reserveCreated spells the answer of a reservation that was made.
-func reserveCreated(body servedapi.ReserveResult, _ bool) any {
+func reserveCreated(body servedapi.ReserveResult, headers answerHeaders) any {
 	return servedapi.Reserve201JSONResponse{
 		Body:    body,
-		Headers: servedapi.Reserve201ResponseHeaders{},
+		Headers: servedapi.Reserve201ResponseHeaders{IdempotencyReplayed: replayedHeader(headers.replayed)},
 	}
 }
 
 // reserveConflict spells a reservation that was refused.
-func reserveConflict(body servedapi.ApiError, _ bool) any {
+func reserveConflict(body servedapi.ApiError, headers answerHeaders) any {
 	return servedapi.Reserve409JSONResponse{
-		Body:    body,
-		Headers: servedapi.Reserve409ResponseHeaders{RetryAfter: retryAfterOf(body)},
+		Body: body,
+		Headers: servedapi.Reserve409ResponseHeaders{
+			IdempotencyReplayed: replayedHeader(headers.replayed),
+			RetryAfter:          headers.retry(body.Code),
+		},
 	}
 }
 
 // cancelSucceeded spells the answer of a reservation that was given back.
-func cancelSucceeded(body servedapi.RentalCommandResult, _ bool) any {
+func cancelSucceeded(body servedapi.RentalCommandResult, headers answerHeaders) any {
 	return servedapi.CancelRental200JSONResponse{
 		Body:    body,
-		Headers: servedapi.CancelRental200ResponseHeaders{},
+		Headers: servedapi.CancelRental200ResponseHeaders{IdempotencyReplayed: replayedHeader(headers.replayed)},
 	}
 }
 
 // cancelNotFound spells a rental this account does not hold, which is the answer to a cancellation and
 // to a ride command alike: a missing rental and somebody else's are one answer.
-func cancelNotFound(body servedapi.ApiError, _ bool) any {
+func cancelNotFound(body servedapi.ApiError, headers answerHeaders) any {
 	return servedapi.CancelRental404JSONResponse{Body: body}
 }
 
 // cancelConflict spells a cancellation that was refused.
-func cancelConflict(body servedapi.ApiError, _ bool) any {
+func cancelConflict(body servedapi.ApiError, headers answerHeaders) any {
 	return servedapi.CancelRental409JSONResponse{
-		Body:    body,
-		Headers: servedapi.CancelRental409ResponseHeaders{RetryAfter: retryAfterOf(body)},
+		Body: body,
+		Headers: servedapi.CancelRental409ResponseHeaders{
+			IdempotencyReplayed: replayedHeader(headers.replayed),
+			RetryAfter:          headers.retry(body.Code),
+		},
 	}
 }
 
 // startSucceeded, pauseSucceeded and resumeSucceeded spell the answer of a ride the command moved.
-func startSucceeded(body servedapi.RentalCommandResult, _ bool) any {
+func startSucceeded(body servedapi.RentalCommandResult, headers answerHeaders) any {
 	return servedapi.StartRental200JSONResponse{
 		Body:    body,
-		Headers: servedapi.StartRental200ResponseHeaders{},
+		Headers: servedapi.StartRental200ResponseHeaders{IdempotencyReplayed: replayedHeader(headers.replayed)},
 	}
 }
 
-func pauseSucceeded(body servedapi.RentalCommandResult, _ bool) any {
+func pauseSucceeded(body servedapi.RentalCommandResult, headers answerHeaders) any {
 	return servedapi.PauseRental200JSONResponse{
 		Body:    body,
-		Headers: servedapi.PauseRental200ResponseHeaders{},
+		Headers: servedapi.PauseRental200ResponseHeaders{IdempotencyReplayed: replayedHeader(headers.replayed)},
 	}
 }
 
-func resumeSucceeded(body servedapi.RentalCommandResult, _ bool) any {
+func resumeSucceeded(body servedapi.RentalCommandResult, headers answerHeaders) any {
 	return servedapi.ResumeRental200JSONResponse{
 		Body:    body,
-		Headers: servedapi.ResumeRental200ResponseHeaders{},
+		Headers: servedapi.ResumeRental200ResponseHeaders{IdempotencyReplayed: replayedHeader(headers.replayed)},
 	}
 }
 
 // startNotFound, pauseNotFound and resumeNotFound spell a rental this account does not hold.
-func startNotFound(body servedapi.ApiError, _ bool) any {
+func startNotFound(body servedapi.ApiError, headers answerHeaders) any {
 	return servedapi.StartRental404JSONResponse{Body: body}
 }
 
-func pauseNotFound(body servedapi.ApiError, _ bool) any {
+func pauseNotFound(body servedapi.ApiError, headers answerHeaders) any {
 	return servedapi.PauseRental404JSONResponse{Body: body}
 }
 
-func resumeNotFound(body servedapi.ApiError, _ bool) any {
+func resumeNotFound(body servedapi.ApiError, headers answerHeaders) any {
 	return servedapi.ResumeRental404JSONResponse{Body: body}
 }
 
 // startConflict, pauseConflict and resumeConflict spell a ride command that was refused.
-func startConflict(body servedapi.ApiError, _ bool) any {
+func startConflict(body servedapi.ApiError, headers answerHeaders) any {
 	return servedapi.StartRental409JSONResponse{
-		Body:    body,
-		Headers: servedapi.StartRental409ResponseHeaders{RetryAfter: retryAfterOf(body)},
+		Body: body,
+		Headers: servedapi.StartRental409ResponseHeaders{
+			IdempotencyReplayed: replayedHeader(headers.replayed),
+			RetryAfter:          headers.retry(body.Code),
+		},
 	}
 }
 
-func pauseConflict(body servedapi.ApiError, _ bool) any {
+func pauseConflict(body servedapi.ApiError, headers answerHeaders) any {
 	return servedapi.PauseRental409JSONResponse{
-		Body:    body,
-		Headers: servedapi.PauseRental409ResponseHeaders{RetryAfter: retryAfterOf(body)},
+		Body: body,
+		Headers: servedapi.PauseRental409ResponseHeaders{
+			IdempotencyReplayed: replayedHeader(headers.replayed),
+			RetryAfter:          headers.retry(body.Code),
+		},
 	}
 }
 
-func resumeConflict(body servedapi.ApiError, _ bool) any {
+func resumeConflict(body servedapi.ApiError, headers answerHeaders) any {
 	return servedapi.ResumeRental409JSONResponse{
-		Body:    body,
-		Headers: servedapi.ResumeRental409ResponseHeaders{RetryAfter: retryAfterOf(body)},
+		Body: body,
+		Headers: servedapi.ResumeRental409ResponseHeaders{
+			IdempotencyReplayed: replayedHeader(headers.replayed),
+			RetryAfter:          headers.retry(body.Code),
+		},
 	}
 }
 
 // reserveUnavailable, cancelUnavailable, startUnavailable, pauseUnavailable and resumeUnavailable spell
 // a command that could not be decided at all, which is the one answer every command operation states
 // for the same reason: the process, not the request, is what failed.
-func reserveUnavailable(body servedapi.ApiError, _ bool) any {
+func reserveUnavailable(body servedapi.ApiError, headers answerHeaders) any {
 	return servedapi.Reserve503JSONResponse{Body: body}
 }
 
-func cancelUnavailable(body servedapi.ApiError, _ bool) any {
+func cancelUnavailable(body servedapi.ApiError, headers answerHeaders) any {
 	return servedapi.CancelRental503JSONResponse{Body: body}
 }
 
-func startUnavailable(body servedapi.ApiError, _ bool) any {
+func startUnavailable(body servedapi.ApiError, headers answerHeaders) any {
 	return servedapi.StartRental503JSONResponse{Body: body}
 }
 
-func pauseUnavailable(body servedapi.ApiError, _ bool) any {
+func pauseUnavailable(body servedapi.ApiError, headers answerHeaders) any {
 	return servedapi.PauseRental503JSONResponse{Body: body}
 }
 
-func resumeUnavailable(body servedapi.ApiError, _ bool) any {
+func resumeUnavailable(body servedapi.ApiError, headers answerHeaders) any {
 	return servedapi.ResumeRental503JSONResponse{Body: body}
 }
 
 // finishSucceeded spells the answer of a ride that ended, which carries the invoice of it.
-func finishSucceeded(body servedapi.FinishResult, _ bool) any {
+func finishSucceeded(body servedapi.FinishResult, headers answerHeaders) any {
 	return servedapi.FinishRental200JSONResponse{
 		Body:    body,
-		Headers: servedapi.FinishRental200ResponseHeaders{},
+		Headers: servedapi.FinishRental200ResponseHeaders{IdempotencyReplayed: replayedHeader(headers.replayed)},
 	}
 }
 
 // finishNotFound spells a rental this account does not hold.
-func finishNotFound(body servedapi.ApiError, _ bool) any {
+func finishNotFound(body servedapi.ApiError, headers answerHeaders) any {
 	return servedapi.FinishRental404JSONResponse{Body: body}
 }
 
 // finishConflict spells a finish that was refused where the ride stands or how its position reads.
-func finishConflict(body servedapi.ApiError, _ bool) any {
+func finishConflict(body servedapi.ApiError, headers answerHeaders) any {
 	return servedapi.FinishRental409JSONResponse{
-		Body:    body,
-		Headers: servedapi.FinishRental409ResponseHeaders{RetryAfter: retryAfterOf(body)},
+		Body: body,
+		Headers: servedapi.FinishRental409ResponseHeaders{
+			IdempotencyReplayed: replayedHeader(headers.replayed),
+			RetryAfter:          headers.retry(body.Code),
+		},
 	}
 }
 
 // finishUnavailable spells a finish that could not be decided at all.
-func finishUnavailable(body servedapi.ApiError, _ bool) any {
+func finishUnavailable(body servedapi.ApiError, headers answerHeaders) any {
 	return servedapi.FinishRental503JSONResponse{Body: body}
 }
 
 // paySucceeded spells the answer of an invoice whose payment was decided, which carries the invoice
 // with the state of its payment rather than the ride it belongs to.
-func paySucceeded(body servedapi.PayResult, _ bool) any {
+func paySucceeded(body servedapi.PayResult, headers answerHeaders) any {
 	return servedapi.PayInvoice200JSONResponse{
 		Body:    body,
-		Headers: servedapi.PayInvoice200ResponseHeaders{},
+		Headers: servedapi.PayInvoice200ResponseHeaders{IdempotencyReplayed: replayedHeader(headers.replayed)},
 	}
 }
 
 // payNotFound spells an invoice this account does not hold.
-func payNotFound(body servedapi.ApiError, _ bool) any {
+func payNotFound(body servedapi.ApiError, headers answerHeaders) any {
 	return servedapi.PayInvoice404JSONResponse{Body: body}
 }
 
 // payConflict spells a payment that was refused: an invoice whose first attempt the service still owes,
 // and the two answers a command key that is already in use is given.
-func payConflict(body servedapi.ApiError, _ bool) any {
+func payConflict(body servedapi.ApiError, headers answerHeaders) any {
 	return servedapi.PayInvoice409JSONResponse{
-		Body:    body,
-		Headers: servedapi.PayInvoice409ResponseHeaders{RetryAfter: retryAfterOf(body)},
+		Body: body,
+		Headers: servedapi.PayInvoice409ResponseHeaders{
+			IdempotencyReplayed: replayedHeader(headers.replayed),
+			RetryAfter:          headers.retry(body.Code),
+		},
 	}
 }
 
 // payUnavailable spells a payment that could not be decided at all.
-func payUnavailable(body servedapi.ApiError, _ bool) any {
+func payUnavailable(body servedapi.ApiError, headers answerHeaders) any {
 	return servedapi.PayInvoice503JSONResponse{Body: body}
-}
-
-// markReplayed marks an answer an earlier attempt already gave. It is a header on the response object
-// rather than a status, and every command operation declares it for every status it answers.
-func markReplayed(spelled any) any {
-	switch answer := spelled.(type) {
-	case servedapi.Reserve201JSONResponse:
-		answer.Headers.IdempotencyReplayed = replayedHeader(true)
-		return answer
-	case servedapi.Reserve409JSONResponse:
-		answer.Headers.IdempotencyReplayed = replayedHeader(true)
-		return answer
-	case servedapi.CancelRental200JSONResponse:
-		answer.Headers.IdempotencyReplayed = replayedHeader(true)
-		return answer
-	case servedapi.CancelRental409JSONResponse:
-		answer.Headers.IdempotencyReplayed = replayedHeader(true)
-		return answer
-	case servedapi.StartRental200JSONResponse:
-		answer.Headers.IdempotencyReplayed = replayedHeader(true)
-		return answer
-	case servedapi.StartRental409JSONResponse:
-		answer.Headers.IdempotencyReplayed = replayedHeader(true)
-		return answer
-	case servedapi.PauseRental200JSONResponse:
-		answer.Headers.IdempotencyReplayed = replayedHeader(true)
-		return answer
-	case servedapi.PauseRental409JSONResponse:
-		answer.Headers.IdempotencyReplayed = replayedHeader(true)
-		return answer
-	case servedapi.ResumeRental200JSONResponse:
-		answer.Headers.IdempotencyReplayed = replayedHeader(true)
-		return answer
-	case servedapi.ResumeRental409JSONResponse:
-		answer.Headers.IdempotencyReplayed = replayedHeader(true)
-		return answer
-	case servedapi.FinishRental200JSONResponse:
-		answer.Headers.IdempotencyReplayed = replayedHeader(true)
-		return answer
-	case servedapi.FinishRental409JSONResponse:
-		answer.Headers.IdempotencyReplayed = replayedHeader(true)
-		return answer
-	case servedapi.PayInvoice200JSONResponse:
-		answer.Headers.IdempotencyReplayed = replayedHeader(true)
-		return answer
-	case servedapi.PayInvoice409JSONResponse:
-		answer.Headers.IdempotencyReplayed = replayedHeader(true)
-		return answer
-	default:
-		return spelled
-	}
-}
-
-// attachRetryAfter asks for a wait when a failure carries one. A stored refusal that carries a moment
-// of its own — an exhausted allowance above all — never borrows this header for it.
-func attachRetryAfter(spelled any, retryAfter *int) any {
-	if retryAfter == nil {
-		return spelled
-	}
-	switch answer := spelled.(type) {
-	case servedapi.Reserve409JSONResponse:
-		answer.Headers.RetryAfter = retryAfter
-		return answer
-	case servedapi.CancelRental409JSONResponse:
-		answer.Headers.RetryAfter = retryAfter
-		return answer
-	case servedapi.StartRental409JSONResponse:
-		answer.Headers.RetryAfter = retryAfter
-		return answer
-	case servedapi.PauseRental409JSONResponse:
-		answer.Headers.RetryAfter = retryAfter
-		return answer
-	case servedapi.ResumeRental409JSONResponse:
-		answer.Headers.RetryAfter = retryAfter
-		return answer
-	case servedapi.FinishRental409JSONResponse:
-		answer.Headers.RetryAfter = retryAfter
-		return answer
-	case servedapi.PayInvoice409JSONResponse:
-		answer.Headers.RetryAfter = retryAfter
-		return answer
-	default:
-		return spelled
-	}
 }

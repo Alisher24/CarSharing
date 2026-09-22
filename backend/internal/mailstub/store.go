@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Alisher24/CarSharing/backend/internal/platform/cursor"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -27,7 +28,6 @@ var (
 // The page sizes the collection declares: the size a request that states none is read with, and the
 // largest one a request may ask for.
 const (
-	PageSize    = 20
 	MaxPageSize = 100
 )
 
@@ -73,14 +73,7 @@ WHERE message.delivery_key = $1`
 	// was taken from. A page that starts at the newest letter states no position: the comparison is
 	// then against the last moment there can be, where every stored one is below it, and the
 	// identifier it is compared with second never has to decide anything.
-	pageSelection = `
-SELECT` + messageFields + `
-FROM mailstub.messages message
-WHERE (message.accepted_at, message.id) <
-      (COALESCE($1::timestamptz, 'infinity'::timestamptz),
-       COALESCE($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid))
-ORDER BY message.accepted_at DESC, message.id DESC
-LIMIT $3`
+
 )
 
 // Accept stores one letter under its delivery key, and reports whether this call stored it or
@@ -169,29 +162,21 @@ func (s *Store) ByID(ctx context.Context, id string) (Message, error) {
 	return s.read(ctx, messageByIDSelection, id)
 }
 
-// Position is where a page of the box starts: the sort key of the letter the previous page ended
-// with. It is the pair the collection is ordered by, so the page after it continues exactly after
-// that letter rather than at one the client guessed.
-type Position struct {
-	AcceptedAt time.Time
-	ID         string
-}
-
 // Page is one page of the box: the letters it holds, and the position the page after it starts from.
 // The position is absent on the last and on the empty page, which is the `next_cursor: null` the
 // contract declares.
 type Page struct {
 	Messages []Message
-	Next     *Position
+	Next     *cursor.Position
 }
 
 // ReadPage reads one page of the box after a position, in the order the collection publishes: newest
 // first, with the identifier deciding two letters accepted at the same moment. A page is read with
 // one letter more than it publishes, so whether anything follows is decided by the database rather
 // than by the page being shorter than the limit.
-func (s *Store) ReadPage(ctx context.Context, after *Position, limit int) (Page, error) {
+func (s *Store) ReadPage(ctx context.Context, after *cursor.Position, limit int) (Page, error) {
 	rows, err := database.QuerierFrom(ctx, s.pool).Query(ctx, pageSelection,
-		positionMoment(after), positionIdentifier(after), limit+1)
+		after.MomentArgument(), after.IdentifierArgument(), limit+1)
 	if err != nil {
 		return Page{}, err
 	}
@@ -208,60 +193,18 @@ func (s *Store) ReadPage(ctx context.Context, after *Position, limit int) (Page,
 	if err = rows.Err(); err != nil {
 		return Page{}, err
 	}
-	if len(messages) <= limit {
-		return Page{Messages: messages}, nil
-	}
-
-	messages = messages[:limit]
-	last := messages[len(messages)-1]
-	return Page{Messages: messages, Next: &Position{AcceptedAt: last.AcceptedAt, ID: last.ID}}, nil
-}
-
-// positionMoment and positionIdentifier read the two parts of an optional position. A page that
-// starts at the newest letter has none, and each part of the search key becomes a null the selection
-// reads as "before everything".
-func positionMoment(after *Position) *time.Time {
-	if after == nil {
-		return nil
-	}
-	moment := after.AcceptedAt
-	return &moment
-}
-
-func positionIdentifier(after *Position) *string {
-	if after == nil {
-		return nil
-	}
-	identifier := after.ID
-	return &identifier
+	published, next := cursor.Cut(messages, limit, messagePosition)
+	return Page{Messages: published, Next: next}, nil
 }
 
 // read reads at most one letter, so that a selection matching several rows is reported as a failure
 // of the caller's expectation rather than silently answering the first.
 func (s *Store) read(ctx context.Context, selection string, arguments ...any) (Message, error) {
-	rows, err := database.QuerierFrom(ctx, s.pool).Query(ctx, selection, arguments...)
-	if err != nil {
-		return Message{}, err
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		if err = rows.Err(); err != nil {
-			return Message{}, err
-		}
-		return Message{}, ErrMessageNotFound
-	}
-	var found Message
-	if err = scanMessage(rows, &found); err != nil {
-		return Message{}, err
-	}
-	if rows.Next() {
-		return Message{}, errors.New("the selection matched more than one message")
-	}
-	return found, rows.Err()
+	return database.ReadOne(ctx, database.QuerierFrom(ctx, s.pool),
+		scanMessage, ErrMessageNotFound, selection, arguments...)
 }
 
-func scanMessage(rows pgx.Rows, found *Message) error {
+func scanMessage(rows pgx.Row, found *Message) error {
 	return rows.Scan(
 		&found.ID,
 		&found.DeliveryKey,
@@ -271,3 +214,12 @@ func scanMessage(rows pgx.Rows, found *Message) error {
 		&found.AcceptedAt,
 	)
 }
+
+func messagePosition(item Message) cursor.Position {
+	return cursor.Position{Moment: item.AcceptedAt, ID: item.ID}
+}
+
+var pageSelection = `
+SELECT` + messageFields + `
+FROM mailstub.messages message
+WHERE ` + cursor.Descending("message.accepted_at", "message.id", 1)

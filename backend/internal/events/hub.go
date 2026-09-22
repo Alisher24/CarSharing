@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -170,5 +171,5 @@ func (h *Hub) publish(signal Signal) {
 // than this process's, because the browser compares what it is told against the times a snapshot
 // states.
 func (h *Hub) ServerTime(ctx context.Context) (time.Time, error) {
-	return serverTime(ctx, h.pool)
+	return database.Moment(ctx, database.QuerierFrom(ctx, h.pool))
 }

@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	"github.com/Alisher24/CarSharing/backend/internal/contracts/formats"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/httpheader"
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
@@ -23,7 +24,7 @@ const (
 	messageBodyUnreadable     = "Request body could not be read"
 	messageBodyUnexpected     = "Request body is not allowed"
 	messageBodyRequired       = "Request body is required"
-	messageContentTypeInvalid = "Expected " + jsonMediaType
+	messageContentTypeInvalid = "Expected " + httpheader.JSON
 )
 
 // bufferBodyWithinLimit reads the body once within the limit of its operation and replaces it with a
@@ -70,8 +71,8 @@ func requireJSONRequestBody(b *boundaryRequest) *contractError {
 		return validationFailure(bodyViolation("", codeRequiredField, messageBodyRequired))
 	}
 
-	media, _, err := mime.ParseMediaType(b.request.Header.Get(contentTypeHeader))
-	if err != nil || media != jsonMediaType {
+	media, _, err := mime.ParseMediaType(b.request.Header.Get(httpheader.ContentType))
+	if err != nil || media != httpheader.JSON {
 		return &contractError{code: codeUnsupportedMediaType, message: messageContentTypeInvalid}
 	}
 
@@ -81,7 +82,7 @@ func requireJSONRequestBody(b *boundaryRequest) *contractError {
 
 	var payload any
 	_ = json.Unmarshal(b.body, &payload)
-	schema := b.route.Operation.RequestBody.Value.Content[jsonMediaType].Schema.Value
+	schema := b.route.Operation.RequestBody.Value.Content[httpheader.JSON].Schema.Value
 	var violations []violation
 	for _, constraint := range formats.Constraints(schema, payload) {
 		violations = append(violations, bodyViolation(constraint.Pointer, codeInvalidField, constraint.Message))

@@ -12,21 +12,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/Alisher24/CarSharing/backend/internal/auth"
-	"github.com/Alisher24/CarSharing/backend/internal/events"
-	"github.com/Alisher24/CarSharing/backend/internal/fleet"
-	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
-	"github.com/Alisher24/CarSharing/backend/internal/invoices"
-	"github.com/Alisher24/CarSharing/backend/internal/mailstub"
-	"github.com/Alisher24/CarSharing/backend/internal/notifications"
-	"github.com/Alisher24/CarSharing/backend/internal/outbox"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/config"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
-	"github.com/Alisher24/CarSharing/backend/internal/platform/periodic"
-	"github.com/Alisher24/CarSharing/backend/internal/platform/ratelimit"
-	"github.com/Alisher24/CarSharing/backend/internal/platform/sessions"
-	"github.com/Alisher24/CarSharing/backend/internal/rentals"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
@@ -61,82 +48,4 @@ func run() error {
 		return err
 	}
 	return work(ctx, pool, letters)
-}
-
-// work runs the recurring jobs of this process until it is asked to stop. Each job is given the
-// behaviour it performs and the schedule it runs on; the process only decides that they run at all.
-//
-// Two workers may run side by side: the queue hands a task to one attempt at a time under a lease
-// that runs out on its own, the letter of an invoice is stored under a key the receiver deduplicates,
-// and the deadline pass performs one transition per reservation — its release or its warning —
-// whichever process performs it.
-func work(ctx context.Context, pool *pgxpool.Pool, letters config.InternalClient) error {
-	deliveries, err := deliveries(pool, letters)
-	if err != nil {
-		return err
-	}
-	delivery, err := outbox.NewWorker(pool, deliveries.Deliver)
-	if err != nil {
-		return err
-	}
-	go delivery.Run(ctx)
-	notificationStore := notifications.NewStore(pool)
-	deadlines, err := rentals.NewDeadlines(
-		pool,
-		fleet.NewStore(pool),
-		rentals.WarningOperations{
-			Create: notificationStore.CreateReservationWarning,
-			End:    notificationStore.EndReservationWarning,
-		},
-	)
-	if err != nil {
-		return err
-	}
-	go periodic.Run(
-		ctx,
-		"reservation deadlines",
-		rentals.DeadlineSweepInterval,
-		deadlines.Due,
-	)
-	go periodic.Run(ctx, "signal retention", events.RetentionInterval, events.NewReaper(pool).Delete)
-	go periodic.Run(ctx, "command result retention", idempotency.RetentionInterval,
-		idempotency.NewReaper(pool).Delete)
-	go periodic.Run(ctx, "sign-in counter retention", ratelimit.RetentionInterval,
-		ratelimit.NewReaper(pool).Delete)
-	go periodic.Run(ctx, "session retention", sessions.RetentionInterval, sessions.NewReaper(pool).Delete)
-
-	slog.Info("worker started")
-	<-ctx.Done()
-	slog.Info("worker stopped")
-	return nil
-}
-
-// deliveries is the table of what this process delivers, assembled where the process is: the signals
-// the queue carries to every API process, the first attempt at the payment of an invoice, and the
-// letter that carries the invoice to the account that owes it.
-//
-// A task of a kind this table does not name is kept in the queue with its error, so a kind whose
-// delivery belongs to a later task is owed rather than reported as delivered.
-func deliveries(pool *pgxpool.Pool, letters config.InternalClient) (outbox.Deliveries, error) {
-	payments, err := rentals.NewRentalPayment(pool)
-	if err != nil {
-		return nil, err
-	}
-	posted, err := mailstub.NewClient(letters.APIURL, letters.Token)
-	if err != nil {
-		return nil, err
-	}
-	delivery, err := mailstub.NewDelivery(invoices.NewStore(pool), auth.NewUserStore(pool), posted)
-	if err != nil {
-		return nil, err
-	}
-	table := events.Deliveries(pool)
-	table[rentals.PaymentAttemptTask()] = func(ctx context.Context, task outbox.Task) error {
-		_, err := payments.Attempt(ctx, task.ResourceID)
-		return err
-	}
-	table[rentals.InvoiceIssuedTask()] = func(ctx context.Context, task outbox.Task) error {
-		return delivery.Deliver(ctx, task.ResourceID)
-	}
-	return table, nil
 }

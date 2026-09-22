@@ -2,12 +2,10 @@ package httpapi
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 
 	internalapi "github.com/Alisher24/CarSharing/backend/internal/contracts/internalapi"
-	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals"
 	"github.com/getkin/kin-openapi/openapi3"
 )
@@ -127,7 +125,7 @@ type internalRefusal struct {
 // refuse spells a refusal the internal operations answer with. A refusal the internal contract does
 // not declare is reported as a defect of this server rather than written under another code.
 func refuse(refusal rentals.Refusal) (internalRefusal, error) {
-	code, status, message, err := internalRefusalContract(refusal)
+	code, status, message, err := refusalContract(refusal, internalRefusals)
 	if err != nil {
 		return internalRefusal{}, err
 	}
@@ -141,37 +139,6 @@ func refuse(refusal rentals.Refusal) (internalRefusal, error) {
 	return internalRefusal{status: status, body: encoded.Body}, nil
 }
 
-// internalRefusalContract names the code, status and message of one refusal.
-func internalRefusalContract(refusal rentals.Refusal) (string, int, string, error) {
-	switch refusal.Kind {
-	case rentals.VehicleInUse:
-		return string(internalapi.VEHICLEINUSE), http.StatusConflict, messageVehicleInUse, nil
-	case rentals.SourceNotCarried:
-		return string(internalapi.SOURCENOTCARRIED), http.StatusConflict, messageSourceNotCarried, nil
-	case rentals.SourceCapacityExceeded:
-		return string(internalapi.SOURCECAPACITYEXCEEDED), http.StatusConflict,
-			messageSourceCapacityExceeded, nil
-	case rentals.VehicleNotFound, rentals.RentalNotFound:
-		return string(codeResourceNotFound), http.StatusNotFound, messageResourceNotFound, nil
-	default:
-		return "", 0, "", fmt.Errorf("the rentals module refused with an unknown kind %q", refusal.Kind)
-	}
-}
-
-// internalFailure maps a failure of an internal command onto the answer the internal contract declares
-// for it. The two idempotency failures are answers a client can repeat; everything else is an outage
-// or a defect, which this surface reports the one way a public command does.
-func internalFailure(err error) (int, internalapi.ErrorCode, string) {
-	switch {
-	case errors.Is(err, idempotency.ErrFingerprintMismatch):
-		return http.StatusConflict, internalapi.IDEMPOTENCYCONFLICT, messageIdempotencyConflict
-	case errors.Is(err, idempotency.ErrInProgress):
-		return http.StatusConflict, internalapi.IDEMPOTENCYINPROGRESS, messageIdempotencyInProgress
-	default:
-		return http.StatusServiceUnavailable, internalapi.SERVICEUNAVAILABLE, messageServiceUnavailable
-	}
-}
-
 // internalIdentifiers renders a list of identifiers in the shape the contract publishes, which is an
 // array and never null.
 func internalIdentifiers(identifiers []string) []internalapi.ResourceId {
@@ -180,20 +147,4 @@ func internalIdentifiers(identifiers []string) []internalapi.ResourceId {
 		rendered = append(rendered, internalapi.ResourceId(identifier))
 	}
 	return rendered
-}
-
-// internalAttemptOf describes one attempt at an internal command: the identifier a repeat is
-// recognised by, the fingerprint of what it asked for, and the way its answer is spelled.
-func internalAttemptOf(
-	identifier, path string, body any, render rentals.Render,
-) (rentals.Attempt, error) {
-	fingerprint, err := commandFingerprintOf(http.MethodPost, path, body)
-	if err != nil {
-		return rentals.Attempt{}, err
-	}
-	return rentals.Attempt{
-		Key:         idempotency.Key(identifier),
-		Fingerprint: fingerprint,
-		Render:      render,
-	}, nil
 }

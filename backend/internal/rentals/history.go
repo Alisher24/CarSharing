@@ -8,6 +8,7 @@ import (
 
 	"github.com/Alisher24/CarSharing/backend/internal/completion"
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/cursor"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -46,26 +47,13 @@ type Ride struct {
 	Exhausted []fleet.SourceKind
 }
 
-// RidePosition is where a page of the history starts: the sort key of the ride the previous page
-// ended with. It is the pair the history is ordered by, so the page after it continues exactly after
-// that ride rather than at one the client guessed.
-type RidePosition struct {
-	CompletedAt time.Time
-	ID          string
-}
-
 // RidePage is one page of an account's history: the rides it holds, and the position the page after
 // it starts from. The position is absent on the last and on the empty page, which is the
 // `next_cursor: null` the contract declares.
 type RidePage struct {
 	Rides []Ride
-	Next  *RidePosition
+	Next  *cursor.Position
 }
-
-// RidePageSize is how many rides one page of the history carries when the client states no limit. It
-// is the contract's declared default, stated here so the module that pages the history and the
-// operation that serves it cannot disagree about it.
-const RidePageSize = 20
 
 // Rides answers one page of the caller's own finished rides, newest first. The owner is the account
 // the caller signed in as rather than anything the request carries, so no page can name another
@@ -74,10 +62,10 @@ const RidePageSize = 20
 // The read fixes nothing and takes no lock: a ride that has ended is history, and the transitions
 // that end one belong to the commands and the sweep that perform them.
 func (s *Service) Rides(
-	ctx context.Context, caller uuid.UUID, after *RidePosition, limit int,
+	ctx context.Context, caller uuid.UUID, after *cursor.Position, limit int,
 ) (RidePage, error) {
 	rows, err := database.QuerierFrom(ctx, s.pool).Query(ctx, ridePageSelection,
-		caller, ridePositionMoment(after), ridePositionIdentifier(after), limit+1)
+		caller, after.MomentArgument(), after.IdentifierArgument(), limit+1)
 	if err != nil {
 		return RidePage{}, err
 	}
@@ -101,15 +89,8 @@ func (s *Service) Rides(
 // starts from. One ride more than the page holds is read, so whether anything follows is decided by
 // the database rather than by the page being shorter than the limit.
 func ridePageOf(found []Ride, limit int) RidePage {
-	if len(found) <= limit {
-		return RidePage{Rides: found}
-	}
-	published := found[:limit]
-	last := published[len(published)-1]
-	return RidePage{
-		Rides: published,
-		Next:  &RidePosition{CompletedAt: last.CompletedAt, ID: last.ID},
-	}
+	published, next := cursor.Cut(found, limit, ridePosition)
+	return RidePage{Rides: published, Next: next}
 }
 
 // scanRide reads one row of the history. Only the invoice is read as an absence the row admits: the
@@ -146,21 +127,6 @@ func scanRide(rows pgx.Rows) (Ride, error) {
 	return ride, nil
 }
 
-// ridePositionMoment and ridePositionIdentifier read the two parts of an optional position. A page
-// that starts at the newest ride has none, and each part of the search key becomes a null the
-// selection reads as "before everything".
-func ridePositionMoment(after *RidePosition) *time.Time {
-	if after == nil {
-		return nil
-	}
-	moment := after.CompletedAt
-	return &moment
-}
-
-func ridePositionIdentifier(after *RidePosition) *string {
-	if after == nil {
-		return nil
-	}
-	identifier := after.ID
-	return &identifier
+func ridePosition(item Ride) cursor.Position {
+	return cursor.Position{Moment: item.CompletedAt, ID: item.ID}
 }

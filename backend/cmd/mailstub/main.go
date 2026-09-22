@@ -9,39 +9,19 @@ package main
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/mailstub"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/config"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/cursor"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/httpapi"
-	"github.com/Alisher24/CarSharing/backend/internal/platform/lifecycle"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/httpserver"
 	"github.com/jackc/pgx/v5/pgxpool"
-)
-
-const (
-	// readHeaderTimeout bounds how long a client may take to send the request headers, which is what
-	// keeps a connection that never finishes a request from holding a slot.
-	readHeaderTimeout = 5 * time.Second
-
-	// readTimeout and writeTimeout bound one whole request and its response.
-	readTimeout  = 10 * time.Second
-	writeTimeout = 10 * time.Second
-
-	// idleTimeout is how long a keep-alive connection may sit unused before it is closed.
-	idleTimeout = 60 * time.Second
-
-	// maxHeaderBytes is the largest request header block either listener reads. A letter travels in
-	// the body, so the headers stay small on both surfaces.
-	maxHeaderBytes = 16 << 10
 )
 
 func main() {
@@ -97,23 +77,9 @@ func assemble(server config.MailstubServer, pool *pgxpool.Pool) (assembled, erro
 		return assembled{}, err
 	}
 	return assembled{
-		internal: newServer(server.InternalAddr, internal),
-		inbox:    newServer(server.InboxAddr, inbox),
+		internal: httpserver.New(server.InternalAddr, internal),
+		inbox:    httpserver.New(server.InboxAddr, inbox),
 	}, nil
-}
-
-// newServer is one HTTP server of this process, with the timeouts a listener on the internal network
-// needs: a request that stalls at any stage is given up on rather than held.
-func newServer(addr string, handler http.Handler) *http.Server {
-	return &http.Server{
-		Addr:              addr,
-		Handler:           handler,
-		ReadHeaderTimeout: readHeaderTimeout,
-		ReadTimeout:       readTimeout,
-		WriteTimeout:      writeTimeout,
-		IdleTimeout:       idleTimeout,
-		MaxHeaderBytes:    maxHeaderBytes,
-	}
 }
 
 func run() error {
@@ -137,58 +103,5 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	return serveAll(ctx, serving)
-}
-
-// serveAll answers requests on both listeners until one of them fails or the context is cancelled.
-// Each listener is served by the same pair of functions — build a server, serve it — because the two
-// surfaces differ in their address and their routes and in nothing else: one process, two listeners,
-// one box.
-func serveAll(ctx context.Context, serving assembled) error {
-	failed := make(chan error, 2)
-	for _, server := range []*http.Server{serving.internal, serving.inbox} {
-		go func(server *http.Server) { failed <- listen(ctx, server) }(server)
-	}
-	slog.Info("mail stub started", "internal", serving.internal.Addr, "inbox", serving.inbox.Addr)
-
-	select {
-	case err := <-failed:
-		shutdownBoth(serving)
-		if err != nil {
-			return err
-		}
-	case <-ctx.Done():
-		shutdownBoth(serving)
-	}
-	slog.Info("mail stub stopped")
-	return nil
-}
-
-// listen serves one listener until it fails or the context is cancelled, and gives its in-flight
-// requests the shutdown budget before answering. A listener that stopped because it was asked to is
-// not a failure of the process.
-func listen(ctx context.Context, server *http.Server) error {
-	served := make(chan error, 1)
-	go func() { served <- server.ListenAndServe() }()
-	select {
-	case err := <-served:
-		if !errors.Is(err, http.ErrServerClosed) {
-			return fmt.Errorf("the listener on %s failed: %w", server.Addr, err)
-		}
-	case <-ctx.Done():
-	}
-	return nil
-}
-
-// shutdownBoth gives both listeners their in-flight requests before the process leaves. A listener
-// whose deadline is exceeded is closed rather than waited for: the process is stopping either way,
-// and a request that stalls past the budget is one nobody is waiting for.
-func shutdownBoth(serving assembled) {
-	shutdown, done := context.WithTimeout(context.Background(), lifecycle.ShutdownTimeout)
-	defer done()
-	for _, server := range []*http.Server{serving.internal, serving.inbox} {
-		if err := server.Shutdown(shutdown); err != nil {
-			_ = server.Close()
-		}
-	}
+	return httpserver.Serve(ctx, serving.internal, serving.inbox)
 }

@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/mailstub"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/cursor"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/httpheader"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/timestamp"
 )
 
@@ -235,7 +237,7 @@ func (p *inboxPages) frame(
 // when there is one. The page size, the order and the cursor are the collection's, because both
 // surfaces read one box.
 func (p *inboxPages) letterList(request pageRequest) inboxAnswer {
-	limit := mailstub.PageSize
+	limit := cursor.PageSize
 	after, err := p.served.positionOf(presentedCursor(request.query), limit)
 	if err != nil {
 		return refusalAnswer(http.StatusOK, inboxUnreadableCursor)
@@ -309,7 +311,7 @@ func inboxJSONPath(letter bool, identifier string) string {
 // writeInboxPageHeaders states what every page of this surface is: HTML that no intermediary stores
 // and that reaches no source outside itself.
 func writeInboxPageHeaders(w http.ResponseWriter) {
-	w.Header().Set(contentTypeHeader, htmlMediaType)
+	w.Header().Set(httpheader.ContentType, htmlMediaType)
 	w.Header().Set(cacheControlHeader, noStoreCacheControl)
 	w.Header().Set(contentTypeOptionsHeader, nosniffContentTypeOption)
 	w.Header().Set(contentSecurityHeader, contentSecurityPolicy)
