@@ -14,8 +14,7 @@ import (
 // run in that order, so a reservation that has run out is released rather than warned about the
 // minute it no longer has.
 type Deadlines struct {
-	expiry  *expiry
-	warning *warning
+	sweep *reservationSweep
 }
 
 // NewDeadlines assembles the reservation deadline pass from its required record owners.
@@ -37,8 +36,7 @@ func NewDeadlines(
 		}
 	}
 	return &Deadlines{
-		expiry:  newExpiry(pool, vehicles, warnings),
-		warning: newWarning(pool, warnings),
+		sweep: newReservationSweep(pool, vehicles, warnings),
 	}, nil
 }
 
@@ -46,10 +44,10 @@ func NewDeadlines(
 // warned. A pass that fails reports what it had already done, so a worker that stops seeing the
 // database keeps the count of the transitions that were committed before the failure.
 func (d *Deadlines) Due(ctx context.Context) (int64, error) {
-	ended, err := d.expiry.expireDue(ctx)
+	ended, err := d.sweep.expireDue(ctx)
 	if err != nil {
 		return ended, err
 	}
-	warned, err := d.warning.warnDue(ctx)
+	warned, err := d.sweep.warnDue(ctx)
 	return ended + warned, err
 }

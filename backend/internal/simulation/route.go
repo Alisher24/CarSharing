@@ -3,6 +3,7 @@ package simulation
 import (
 	"math"
 	"math/big"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -154,30 +155,52 @@ var (
 	isanovaFarNorth = meets(isanova, zhibekZholu, 74.57200, 42.90400)
 )
 
-// whichWay is the direction each street runs in where the rings are drawn: the avenues of the centre
-// run east and west, and the streets between them run south to north. It is taken from the map rather
-// than guessed, by comparing the two ends of a long stretch of each street.
-var whichWay = map[string]axis{
-	zhibekZholu:   runsEastWest,
-	frunze:        runsEastWest,
-	moskovskaya:   runsEastWest,
-	manasa:        runsNorthSouth,
-	turusbekova:   runsNorthSouth,
-	isanova:       runsNorthSouth,
-	logvinenko:    runsNorthSouth,
-	panfilova:     runsNorthSouth,
-	tynystanova:   runsNorthSouth,
-	abdrakhmanova: runsNorthSouth,
-	ibraimova:     runsNorthSouth,
-	gogol:         runsNorthSouth,
+// streetOfCentre is one street of the centre where the rings are drawn: the name a person reads on
+// the map, and the direction it runs in.
+type streetOfCentre struct {
+	name string
+	runs axis
+}
+
+// streetsOfCentre are every street this build declares a crossing on, with the way each of them runs.
+// The direction is taken from the map rather than guessed, by comparing the two ends of a long stretch
+// of each street: the avenues of the centre run east and west, and the streets between them run south
+// to north.
+//
+// This is the one declaration of the streets of the centre: NamedStreets answers these names, and
+// meets refuses a crossing of a street that is not here or of two that run the same way.
+var streetsOfCentre = [...]streetOfCentre{
+	{zhibekZholu, runsEastWest},
+	{frunze, runsEastWest},
+	{moskovskaya, runsEastWest},
+	{manasa, runsNorthSouth},
+	{turusbekova, runsNorthSouth},
+	{isanova, runsNorthSouth},
+	{logvinenko, runsNorthSouth},
+	{panfilova, runsNorthSouth},
+	{tynystanova, runsNorthSouth},
+	{abdrakhmanova, runsNorthSouth},
+	{ibraimova, runsNorthSouth},
+	{gogol, runsNorthSouth},
+}
+
+// wayOf answers the direction a street of the centre runs in, and reports whether this build declares
+// that street at all.
+func wayOf(street string) (axis, bool) {
+	for _, declared := range streetsOfCentre {
+		if declared.name == street {
+			return declared.runs, true
+		}
+	}
+	return 0, false
 }
 
 // meets declares the crossing of two streets at one place. A street this build knows no direction for,
 // or two streets running the same way, is a crossing that cannot exist: two parallel streets do not
 // meet, and one that crosses itself is not a corner.
 func meets(one string, other string, longitude, latitude float64) crossing {
-	oneWay, oneKnown := whichWay[one]
-	otherWay, otherKnown := whichWay[other]
+	oneWay, oneKnown := wayOf(one)
+	otherWay, otherKnown := wayOf(other)
 	if !oneKnown || !otherKnown || oneWay == otherWay {
 		panic("a crossing is declared of streets that do not cross")
 	}
@@ -189,44 +212,92 @@ func meets(one string, other string, longitude, latitude float64) crossing {
 	return crossing{north: other, east: one, at: point}
 }
 
-// Routes are every trajectory this build declares, one per demonstration vehicle. A vehicle names one
+// The identifiers of the trajectories this build declares, one per demonstration vehicle. They are
+// declared once because both the geometry below and the demonstration fleet that drives them name
+// them, so a mistyped identifier is a build error rather than a vehicle standing nowhere.
+const (
+	ElectricRoute1 RouteID = "electric-1"
+	ElectricRoute2 RouteID = "electric-2"
+	ElectricRoute3 RouteID = "electric-3"
+	ElectricRoute4 RouteID = "electric-4"
+	ElectricRoute5 RouteID = "electric-5"
+
+	GasolineRoute1 RouteID = "gasoline-1"
+	GasolineRoute2 RouteID = "gasoline-2"
+	GasolineRoute3 RouteID = "gasoline-3"
+	GasolineRoute4 RouteID = "gasoline-4"
+	GasolineRoute5 RouteID = "gasoline-5"
+
+	DieselRoute2 RouteID = "diesel-2"
+	DieselRoute3 RouteID = "diesel-3"
+	DieselRoute4 RouteID = "diesel-4"
+	DieselRoute5 RouteID = "diesel-5"
+
+	HybridRoute1 RouteID = "hybrid-1"
+	HybridRoute2 RouteID = "hybrid-2"
+	HybridRoute3 RouteID = "hybrid-3"
+	HybridRoute4 RouteID = "hybrid-4"
+	HybridRoute5 RouteID = "hybrid-5"
+
+	GasRoute1 RouteID = "gas-1"
+	GasRoute2 RouteID = "gas-2"
+	GasRoute3 RouteID = "gas-3"
+	GasRoute4 RouteID = "gas-4"
+	GasRoute5 RouteID = "gas-5"
+
+	// ScenarioRouteID names the one trajectory that leaves the demonstration service area: the
+	// vehicle on it drives out of the zone and back in, which is what an ending beyond the boundary
+	// is shown with.
+	ScenarioRouteID RouteID = "scenario-1"
+)
+
+// routes are every trajectory this build declares, one per demonstration vehicle. A vehicle names one
 // of them by identifier, and this is the only place the geometry of any of them lives.
 //
 // Every ring lies inside the demonstration service area but the scenario one, and every one of them is
 // four sides of the avenues the centre is laid out on, joined by two of the streets that cross them.
 // The vehicles are therefore spread over the whole centre and are seen driving along the streets the
 // city is built on, rather than around one block.
-var Routes = []Route{
-	ring("electric-1", zhibekAtManasa, zhibekAtGogol, moskovskayaAtGogol, moskovskayaAtManasa),
-	ring("electric-2", zhibekAtManasa, zhibekAtIbraimova, moskovskayaAtIbraimova, moskovskayaAtManasa),
-	ring("electric-3", zhibekAtManasa, zhibekAtAbdrakhmanova, moskovskayaAtAbdrakhmanova, moskovskayaAtManasa),
-	ring("electric-4", zhibekAtManasa, zhibekAtTynystanova, moskovskayaAtTynystanova, moskovskayaAtManasa),
-	ring("electric-5", zhibekAtManasa, zhibekAtPanfilova, moskovskayaAtPanfilova, moskovskayaAtManasa),
-	ring("gasoline-1", zhibekAtManasa, zhibekAtLogvinenko, moskovskayaAtLogvinenko, moskovskayaAtManasa),
-	ring("gasoline-2", zhibekAtTurusbekova, zhibekAtGogol, moskovskayaAtGogol, moskovskayaAtTurusbekova),
-	ring("gasoline-3", zhibekAtTurusbekova, zhibekAtIbraimova, moskovskayaAtIbraimova, moskovskayaAtTurusbekova),
-	ring("gasoline-4", zhibekAtManasa, zhibekAtIsanova, moskovskayaAtIsanova, moskovskayaAtManasa),
-	ring("gasoline-5", zhibekAtIsanova, zhibekAtGogol, moskovskayaAtGogol, moskovskayaAtIsanova),
+var routes = [...]Route{
+	ring(ElectricRoute1, zhibekAtManasa, zhibekAtGogol, moskovskayaAtGogol, moskovskayaAtManasa),
+	ring(ElectricRoute2, zhibekAtManasa, zhibekAtIbraimova, moskovskayaAtIbraimova, moskovskayaAtManasa),
+	ring(ElectricRoute3, zhibekAtManasa, zhibekAtAbdrakhmanova, moskovskayaAtAbdrakhmanova, moskovskayaAtManasa),
+	ring(ElectricRoute4, zhibekAtManasa, zhibekAtTynystanova, moskovskayaAtTynystanova, moskovskayaAtManasa),
+	ring(ElectricRoute5, zhibekAtManasa, zhibekAtPanfilova, moskovskayaAtPanfilova, moskovskayaAtManasa),
+	ring(GasolineRoute1, zhibekAtManasa, zhibekAtLogvinenko, moskovskayaAtLogvinenko, moskovskayaAtManasa),
+	ring(GasolineRoute2, zhibekAtTurusbekova, zhibekAtGogol, moskovskayaAtGogol, moskovskayaAtTurusbekova),
+	ring(GasolineRoute3, zhibekAtTurusbekova, zhibekAtIbraimova, moskovskayaAtIbraimova, moskovskayaAtTurusbekova),
+	ring(GasolineRoute4, zhibekAtManasa, zhibekAtIsanova, moskovskayaAtIsanova, moskovskayaAtManasa),
+	ring(GasolineRoute5, zhibekAtIsanova, zhibekAtGogol, moskovskayaAtGogol, moskovskayaAtIsanova),
 	ScenarioRoute(),
-	ring("diesel-2", zhibekAtTurusbekova, zhibekAtAbdrakhmanova, moskovskayaAtAbdrakhmanova, moskovskayaAtTurusbekova),
-	ring("diesel-3", frunzeAtTurusbekova, frunzeAtAbdrakhmanova, moskovskayaAtAbdrakhmanova, moskovskayaAtTurusbekova),
-	ring("diesel-4", zhibekAtIsanova, zhibekAtIbraimova, moskovskayaAtIbraimova, moskovskayaAtIsanova),
-	ring("diesel-5", zhibekAtTurusbekova, zhibekAtTynystanova, moskovskayaAtTynystanova, moskovskayaAtTurusbekova),
-	ring("hybrid-1", zhibekAtManasa, zhibekAtTurusbekova, moskovskayaAtTurusbekova, moskovskayaAtManasa),
-	ring("hybrid-2", zhibekAtLogvinenko, zhibekAtGogol, moskovskayaAtGogol, moskovskayaAtLogvinenko),
-	ring("hybrid-3", zhibekAtPanfilova, zhibekAtGogol, moskovskayaAtGogol, moskovskayaAtPanfilova),
-	ring("hybrid-4", zhibekAtTynystanova, zhibekAtGogol, moskovskayaAtGogol, moskovskayaAtTynystanova),
-	ring("hybrid-5", zhibekAtAbdrakhmanova, zhibekAtGogol, moskovskayaAtGogol, moskovskayaAtAbdrakhmanova),
-	ring("gas-1", zhibekAtLogvinenko, zhibekAtIbraimova, moskovskayaAtIbraimova, moskovskayaAtLogvinenko),
-	ring("gas-2", zhibekAtPanfilova, zhibekAtIbraimova, moskovskayaAtIbraimova, moskovskayaAtPanfilova),
-	ring("gas-3", zhibekAtTynystanova, zhibekAtIbraimova, moskovskayaAtIbraimova, moskovskayaAtTynystanova),
-	ring("gas-4", zhibekAtAbdrakhmanova, zhibekAtIbraimova, moskovskayaAtIbraimova, moskovskayaAtAbdrakhmanova),
-	ring("gas-5", zhibekAtIsanova, zhibekAtAbdrakhmanova, moskovskayaAtAbdrakhmanova, moskovskayaAtIsanova),
+	ring(DieselRoute2, zhibekAtTurusbekova, zhibekAtAbdrakhmanova, moskovskayaAtAbdrakhmanova, moskovskayaAtTurusbekova),
+	ring(DieselRoute3, frunzeAtTurusbekova, frunzeAtAbdrakhmanova, moskovskayaAtAbdrakhmanova, moskovskayaAtTurusbekova),
+	ring(DieselRoute4, zhibekAtIsanova, zhibekAtIbraimova, moskovskayaAtIbraimova, moskovskayaAtIsanova),
+	ring(DieselRoute5, zhibekAtTurusbekova, zhibekAtTynystanova, moskovskayaAtTynystanova, moskovskayaAtTurusbekova),
+	ring(HybridRoute1, zhibekAtManasa, zhibekAtTurusbekova, moskovskayaAtTurusbekova, moskovskayaAtManasa),
+	ring(HybridRoute2, zhibekAtLogvinenko, zhibekAtGogol, moskovskayaAtGogol, moskovskayaAtLogvinenko),
+	ring(HybridRoute3, zhibekAtPanfilova, zhibekAtGogol, moskovskayaAtGogol, moskovskayaAtPanfilova),
+	ring(HybridRoute4, zhibekAtTynystanova, zhibekAtGogol, moskovskayaAtGogol, moskovskayaAtTynystanova),
+	ring(HybridRoute5, zhibekAtAbdrakhmanova, zhibekAtGogol, moskovskayaAtGogol, moskovskayaAtAbdrakhmanova),
+	ring(GasRoute1, zhibekAtLogvinenko, zhibekAtIbraimova, moskovskayaAtIbraimova, moskovskayaAtLogvinenko),
+	ring(GasRoute2, zhibekAtPanfilova, zhibekAtIbraimova, moskovskayaAtIbraimova, moskovskayaAtPanfilova),
+	ring(GasRoute3, zhibekAtTynystanova, zhibekAtIbraimova, moskovskayaAtIbraimova, moskovskayaAtTynystanova),
+	ring(GasRoute4, zhibekAtAbdrakhmanova, zhibekAtIbraimova, moskovskayaAtIbraimova, moskovskayaAtAbdrakhmanova),
+	ring(GasRoute5, zhibekAtIsanova, zhibekAtAbdrakhmanova, moskovskayaAtAbdrakhmanova, moskovskayaAtIsanova),
 }
 
-// ScenarioRouteID names the one trajectory that leaves the demonstration service area: the vehicle on
-// it drives out of the zone and back in, which is what an ending beyond the boundary is shown with.
-const ScenarioRouteID RouteID = "scenario-1"
+// Routes answers every trajectory this build declares, as a copy of its own: the corpus, the streets of
+// each ring and the points of each ring are copied, so nothing outside this package can rewrite the
+// geometry a vehicle is driven along, add a circuit or drop one.
+func Routes() []Route {
+	declared := make([]Route, 0, len(routes))
+	for _, route := range routes {
+		route.Streets = slices.Clone(route.Streets)
+		route.Points = slices.Clone(route.Points)
+		declared = append(declared, route)
+	}
+	return declared
+}
 
 // ScenarioRoute is the trajectory that crosses the boundary of the demonstration area. It starts at a
 // corner inside the zone and runs north beyond it, so part of every lap is driven outside the area and
@@ -277,9 +348,9 @@ func notOneStreet(from, to crossing) string {
 // NamedStreets are every street this build declares a crossing on. A side of a ring is named after
 // one of these, so a name that is not here is a side nobody can look up on a map.
 func NamedStreets() []string {
-	named := []string{
-		zhibekZholu, frunze, moskovskaya, manasa, turusbekova, isanova,
-		logvinenko, panfilova, tynystanova, abdrakhmanova, ibraimova, gogol,
+	named := make([]string, 0, len(streetsOfCentre))
+	for _, street := range streetsOfCentre {
+		named = append(named, street.name)
 	}
 	sort.Strings(named)
 	return named
@@ -287,7 +358,7 @@ func NamedStreets() []string {
 
 // RouteOf answers the route a vehicle was given, and reports whether this build declares it.
 func RouteOf(id RouteID) (Route, bool) {
-	for _, route := range Routes {
+	for _, route := range routes {
 		if route.ID == id {
 			return route, true
 		}

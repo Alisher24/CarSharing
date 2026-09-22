@@ -3,10 +3,9 @@ package rentals
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
-	"github.com/Alisher24/CarSharing/backend/internal/events"
-	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 	"github.com/google/uuid"
@@ -14,39 +13,17 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// RideKind is one command that moves a ride from the stage it is in to the next one.
-type RideKind string
-
-const (
-	// StartRide turns a reservation into a ride that is driving.
-	StartRide RideKind = "start"
-
-	// PauseRide makes a driving ride stand still.
-	PauseRide RideKind = "pause"
-
-	// ResumeRide makes a paused ride drive again.
-	ResumeRide RideKind = "resume"
-)
-
-// RideCommand names one rental to move along the ride lifecycle, whoever asks. Whether the caller may
-// move it is decided from the rental the module reads rather than from anything the request carries.
-type RideCommand struct {
-	Caller   uuid.UUID
-	RentalID string
-	Attempt  Attempt
-}
-
-// Ride moves one of the caller's rentals along the ride lifecycle, or answers why it cannot.
+// rideAlong moves one of the caller's rentals along the ride lifecycle, or answers why it cannot.
 //
 // The whole decision is one transaction under the shared lock order: the rental, its vehicle and the
 // account are locked, the relationships are read again under those locks, and the moment every
 // boundary is judged by is read from the database afterwards. A start that meets a reservation whose
 // deadline has passed records the expiry before it answers, and a refusal never undoes a transition
 // that had already become due.
-func (s *Service) Ride(ctx context.Context, kind RideKind, command RideCommand) (Answered, error) {
-	transition, known := rideTransitions[kind]
+func (s *Service) rideAlong(ctx context.Context, command RentalCommand) (Answered, error) {
+	transition, known := rideTransitions[command.Action]
 	if !known {
-		return Answered{}, errors.New("the ride command is not one the module knows")
+		return Answered{}, fmt.Errorf("the rental command %q moves no ride", command.Action)
 	}
 	return s.answer(ctx, idempotency.ForAccount(command.Caller), command.Attempt,
 		rideParticipants(s.pool, command),
@@ -69,15 +46,15 @@ type rideTransition struct {
 // rideTransitions is the whole of "which command applies where", including the stage each one
 // produces. Start applies to a reservation, and pausing and continuing apply to a ride that has begun,
 // so a command met in any other stage is a refusal rather than a transition.
-var rideTransitions = map[RideKind]rideTransition{
-	StartRide:  {from: stage.Reserved, to: stage.Active, mode: Driving},
-	PauseRide:  {from: stage.Active, to: stage.Paused, mode: Paused},
-	ResumeRide: {from: stage.Paused, to: stage.Active, mode: Driving},
+var rideTransitions = map[RentalAction]rideTransition{
+	StartRental:  {from: stage.Reserved, to: stage.Active, mode: Driving},
+	PauseRental:  {from: stage.Active, to: stage.Paused, mode: Paused},
+	ResumeRental: {from: stage.Paused, to: stage.Active, mode: Driving},
 }
 
 // rideParticipants is the rows a ride command touches: the caller, the rental it names, the vehicle
 // that rental holds, and whichever rental currently holds either of them.
-func rideParticipants(pool *pgxpool.Pool, command RideCommand) func(context.Context) (participants, error) {
+func rideParticipants(pool *pgxpool.Pool, command RentalCommand) func(context.Context) (participants, error) {
 	return func(ctx context.Context) (participants, error) {
 		planned := participants{users: []uuid.UUID{command.Caller}}
 		target, err := rentalByIDFor(ctx, pool, command.Caller, command.RentalID)
@@ -101,7 +78,7 @@ func (s *Service) rideWithin(
 	tx pgx.Tx,
 	transition rideTransition,
 	moment time.Time,
-	command RideCommand,
+	command RentalCommand,
 ) (Outcome, error) {
 	target, refusal, err := s.reconciledRideTarget(ctx, tx, moment, command)
 	if err != nil {
@@ -131,7 +108,7 @@ func (s *Service) reconciledRideTarget(
 	ctx context.Context,
 	tx pgx.Tx,
 	moment time.Time,
-	command RideCommand,
+	command RentalCommand,
 ) (Rental, *Refusal, error) {
 	target, err := rentalByIDFor(ctx, s.pool, command.Caller, command.RentalID)
 	if errors.Is(err, ErrRentalNotFound) {
@@ -167,7 +144,7 @@ func (s *Service) movePreparedRide(
 	if err = deactivateWarning(ctx, s.warnings, moved); err != nil {
 		return Outcome{}, err
 	}
-	if err = announceRide(ctx, s.pool, s.vehicles, tx, moved); err != nil {
+	if err = announceRentalChange(ctx, s.pool, s.vehicles, tx, moved); err != nil {
 		return Outcome{}, err
 	}
 	vehicle, err := s.vehicles.VehicleAt(ctx, moved.VehicleID, moment)
@@ -215,25 +192,4 @@ func (s *Service) ridePrepared(
 		return nil, nil
 	}
 	return &Refusal{Kind: VehicleUnavailable, UnavailableReasons: vehicle.StartRefusalReasons()}, nil
-}
-
-// announceRide raises the version of the vehicle the ride holds and records the signals of both
-// changes, so the catalog a visitor reads and the account that holds the ride hear about the mode it
-// entered in the transaction that entered it.
-func announceRide(
-	ctx context.Context,
-	pool *pgxpool.Pool,
-	vehicles *fleet.Store,
-	tx pgx.Tx,
-	moved Rental,
-) error {
-	version, err := vehicles.PublishChange(ctx, tx, moved.VehicleID, fleet.VehicleChange{})
-	if err != nil {
-		return err
-	}
-	return events.Record(ctx, pool,
-		events.Signal{Kind: events.RentalChanged, ResourceID: moved.ID,
-			Version: moved.Version, Recipient: moved.UserID},
-		events.Signal{Kind: events.VehicleChanged, ResourceID: moved.VehicleID, Version: version},
-	)
 }

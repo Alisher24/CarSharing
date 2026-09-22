@@ -73,7 +73,9 @@ func (fixedReservations) Reserve(
 	return rentals.Answered{}, nil
 }
 
-func (fixedReservations) Cancel(context.Context, rentals.CancelCommand) (rentals.Answered, error) {
+func (fixedReservations) Apply(
+	context.Context, rentals.RentalCommand,
+) (rentals.Answered, error) {
 	return rentals.Answered{}, nil
 }
 
@@ -87,31 +89,13 @@ func (fixedReservations) Rides(
 	return rentals.RidePage{}, nil
 }
 
-func (fixedReservations) StartRide(
-	context.Context, rentals.StartRideCommand,
-) (rentals.Answered, error) {
-	return rentals.Answered{}, nil
-}
-
-func (fixedReservations) PauseRide(
-	context.Context, rentals.PauseRideCommand,
-) (rentals.Answered, error) {
-	return rentals.Answered{}, nil
-}
-
-func (fixedReservations) ResumeRide(
-	context.Context, rentals.ResumeRideCommand,
-) (rentals.Answered, error) {
-	return rentals.Answered{}, nil
-}
-
-func (fixedReservations) FinishRide(
+func (fixedReservations) Finish(
 	context.Context, rentals.FinishCommand,
 ) (rentals.Answered, error) {
 	return rentals.Answered{}, nil
 }
 
-func (fixedReservations) PayInvoice(
+func (fixedReservations) Pay(
 	context.Context, rentals.PayCommand,
 ) (rentals.Answered, error) {
 	return rentals.Answered{}, nil

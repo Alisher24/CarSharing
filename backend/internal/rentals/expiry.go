@@ -2,7 +2,6 @@ package rentals
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
@@ -17,22 +16,9 @@ import (
 // which is close enough for a person watching the map to see the vehicle free itself.
 const DeadlineSweepInterval = time.Second
 
-// expiry ends reservations whose deadline has passed. It is the rentals module's own transition: the
-// catalog reads the result rather than depicting a release the database has not made.
-type expiry struct {
-	pool     *pgxpool.Pool
-	vehicles *fleet.Store
-	warnings WarningOperations
-}
-
-func newExpiry(
-	pool *pgxpool.Pool,
-	vehicles *fleet.Store,
-	warnings WarningOperations,
-) *expiry {
-	return &expiry{pool: pool, vehicles: vehicles, warnings: warnings}
-}
-
+// dueReservations names the reservations whose deadline has passed, which is what the sweep hands to
+// the expiry transition. The moment is the database's own, so the pass and the command that meets the
+// same reservation judge it by one clock.
 func dueReservations(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
 	rows, err := database.QuerierFrom(ctx, pool).Query(ctx, dueReservationsStatement, stage.Reserved)
 	if err != nil {
@@ -52,50 +38,20 @@ func dueReservations(ctx context.Context, pool *pgxpool.Pool) ([]string, error) 
 }
 
 // expireDue ends every reservation already past its deadline and reports how many it ended.
-//
-// Each reservation is ended in its own transaction under the shared lock order, so a sweep and a
-// command arriving at the same moment wait for each other rather than taking the accounts and
-// vehicles of the fleet in two different orders. A reservation another transaction ended first is
-// counted as not ended by this sweep: the transition happened once.
-func (e *expiry) expireDue(ctx context.Context) (int64, error) {
-	due, err := dueReservations(ctx, e.pool)
-	if err != nil {
-		return 0, err
-	}
-	var ended int64
-	for _, id := range due {
-		moved, err := e.expire(ctx, id)
-		if err != nil {
-			return ended, err
-		}
-		if moved {
-			ended++
-		}
-	}
-	return ended, nil
+func (s *reservationSweep) expireDue(ctx context.Context) (int64, error) {
+	return s.sweepDue(ctx, dueReservations, s.expire)
 }
 
-// expire ends one reservation that was due when the sweep read it. The deadline is compared again
-// after the locks with the moment the transaction fixed, because the wait for those locks may have
-// been long: a reservation that is not due at that moment is left for a later sweep.
-func (e *expiry) expire(ctx context.Context, id string) (bool, error) {
-	var ended bool
-	err := transact(ctx, e.pool, rentalParticipants(e.pool, id),
-		func(txCtx context.Context, tx pgx.Tx, moment time.Time) error {
-			due, err := rentalByID(txCtx, e.pool, id)
-			if errors.Is(err, ErrRentalNotFound) {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-			if !due.Overdue(moment) {
-				return nil
-			}
-			ended, err = endReservation(txCtx, e.pool, e.vehicles, e.warnings, tx, due)
-			return err
-		})
-	return ended, err
+// expire ends one reservation that was due when the sweep read it. The deadline is compared again with
+// the moment the transaction fixed after its locks, because the wait for those locks may have been
+// long: a reservation that is not due at that moment is left for a later sweep.
+func (s *reservationSweep) expire(
+	ctx context.Context, tx pgx.Tx, moment time.Time, due Rental,
+) (bool, error) {
+	if !due.Overdue(moment) {
+		return false, nil
+	}
+	return endReservation(ctx, s.pool, s.vehicles, s.warnings, tx, due)
 }
 
 // liveRentalAt reads the rental that currently holds one account or one vehicle at the moment the

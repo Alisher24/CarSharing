@@ -121,10 +121,25 @@ func TestEveryPreparedRentalHasItsOwnServiceAccount(t *testing.T) {
 		}
 		accounts[vehicle.ScenarioAccount] = vehicle.Model
 	}
-	for _, manual := range demo.ManualCheckAccounts {
+	for _, manual := range demo.ManualCheckAccounts() {
 		if held, taken := accounts[manual]; taken {
 			t.Errorf("a manual check account holds the rental of %s", held)
 		}
+	}
+}
+
+// The accounts are answered as a copy rather than handed out, so a caller that rewrites what it was
+// given cannot change who may sign in to the demonstration.
+func TestARewrittenManualAccountDoesNotReachTheDeclaration(t *testing.T) {
+	handed := demo.ManualCheckAccounts()
+	if len(handed) == 0 {
+		t.Fatal("the demonstration declares no accounts to check it with")
+	}
+	declared := handed[0]
+	handed[0] = "rewritten"
+
+	if answered := demo.ManualCheckAccounts(); answered[0] != declared {
+		t.Errorf("the declaration now answers %q where it declared %q", answered[0], declared)
 	}
 }
 
@@ -181,7 +196,7 @@ func TestTheDeclaredCircuitsAreTheOnesTheFleetDrives(t *testing.T) {
 		driven[vehicle.RouteID]++
 	}
 
-	for _, route := range simulation.Routes {
+	for _, route := range simulation.Routes() {
 		if driven[route.ID] == 0 {
 			t.Errorf("%s is declared and no vehicle drives it", route.ID)
 		}

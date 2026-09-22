@@ -35,7 +35,12 @@ Ten commands, each one process:
   and changes nothing itself. `-once [-tick-id]` advances the fleet exactly once. It belongs to the
   demonstration profile, because starting the demonstration is a deliberate act.
 - `democontrol` — one set-to-value command of the demonstration, carried to the internal API under the
-  token of its own capability.
+  token of its own capability. `internal/demoaction` names the changes once — the identifiers the
+  contract publishes, which the rentals module, the mail stub, the terminal and the internal surface
+  all name — and `internal/democontrol` declares what each change carries: the fields of the request,
+  the terminal's flags and their hints. The usage line, the flags, the request the terminal writes and
+  the surface's reading of that request all follow from that declaration, and a test holds the surface's
+  reading to the kinds the module knows rather than a second list doing it.
 - `migrate` — goose `up` or `status` under a lock and a two-minute deadline; it refuses any other word.
 - `seed` — installs the demonstration, and refuses to run outside `APP_ENV=demo`.
 - `demoscenario` — puts the prepared scenario back, and refuses to run outside `APP_ENV=demo`.
@@ -97,6 +102,16 @@ it (`npm --prefix tools/openapi run generate`), never the Go file.
   `rentals/store.go`; focused owner operations for another aggregate live beside that aggregate, such
   as fleet installation and telemetry confirmation. A handler or a demonstration moves values between
   owners and writes no SQL for their tables.
+- The commands that act on one of the caller's rentals — starting, pausing, continuing and giving a
+  reservation back — are one `rentals.RentalCommand` that names its action, dispatched by one table in
+  `rentals/rentalcommand.go`. A new action is a row there rather than a method per verb, and the action
+  spellings are the operation names the HTTP layer uses.
+- The reservation deadline pass is one sweep over the reservations a statement finds due. It supplies
+  the locking and the per-reservation transaction; the expiry of a reservation past its deadline and
+  the warning of one inside its last minute are the two bodies it runs, each in its own file.
+- A rental that moves and a rental that ends announce the same two changes — the rental and the vehicle
+  it holds — through one function. The announcement of an ending adds what only an ending has, which is
+  the invoice and the work it owes.
 - An operation used inside another module's transaction accepts the concrete `pgx.Tx`. The caller keeps
   ownership of commit and rollback, while the callee keeps ownership of its table and statement. Rental
   transactions acquire their participants through the one `users`, `vehicles`, `rentals` lock plan.
@@ -118,7 +133,9 @@ it (`npm --prefix tools/openapi run generate`), never the Go file.
 
 - `platform/database.Settings` is the connection shape filled by the loader. Database code does not
   import configuration. `Moment` reads the authoritative clock; `ReadOne` verifies row cardinality for
-  reads and transition results. Idempotency's `ClaimKey` and `Complete` require the transaction directly.
+  reads and transition results; `InitialVersion` is the version a stored row carries when it is
+  created, so no module states that number again. Idempotency's `ClaimKey` and `Complete` require the
+  transaction directly.
 - `platform/cursor` owns the page size, optional `Position`, descending keyset SQL and page slicing.
   Collection owners provide their SQL column names and the record's sort position. The cursor payload
   has one declaration; `compatibility_test.go` preserves the previously issued wire format.
@@ -143,6 +160,10 @@ a ring of four sides along named streets of central Bishkek, declared as the cro
   street names, and a made-up crossing shows itself as a car in a courtyard.
 - The demo fleet no longer declares where its vehicles stand. `demo.Fleet()` takes the first vertex of
   the route as the place, so the same twenty-five coordinates are stated once.
+- Every ring is named by a declared `simulation.RouteID` constant, and the demonstration fleet names
+  its circuits by those constants, so a misspelt circuit is a build error rather than a vehicle
+  standing nowhere. `Routes()` answers a copy of its own — corpus, streets and points — so a package
+  that drives the fleet can neither add a circuit nor rewrite the geometry of one.
 - `route_test.go` holds the declaration to what it claims: every ring is closed, stays inside the
   demonstration service area (except the one scenario ring, which exists to leave it), has no side
   shorter than `ShortestSideMetres`, is named by the streets it follows, and no two rings are the same

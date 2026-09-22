@@ -10,6 +10,7 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/billing"
 	"github.com/Alisher24/CarSharing/backend/internal/completion"
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/google/uuid"
 )
 
@@ -100,7 +101,7 @@ func (i Invoice) CompletionReason() completion.Reason { return i.Completion }
 func (i Invoice) AsIssued() Invoice {
 	status, paidAt := FirstPayment(i.TotalTyiyn, i.IssuedAt)
 	i.Payment = status
-	i.PaymentVersion = issuedVersion
+	i.PaymentVersion = database.InitialVersion
 	i.PaymentUpdatedAt = i.IssuedAt
 	i.PaidAt, i.FailedAt, i.FailureCode = paidAt, nil, nil
 	return i

@@ -2,6 +2,7 @@ package demo
 
 import (
 	"github.com/Alisher24/CarSharing/backend/internal/billing"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/tariffs"
 )
 
@@ -11,8 +12,7 @@ const (
 	drivingRateTyiynPerStartedMinute = 1234
 	pausedRateTyiynPerStartedMinute  = 321
 
-	demoCurrency         = "KGS"
-	tariffInitialVersion = 1
+	demoCurrency = "KGS"
 )
 
 // Tariff is the price list the demonstration installs. It charges by the policy the billing module
@@ -25,6 +25,6 @@ func Tariff() tariffs.Tariff {
 		BillingPolicy:                    billing.PolicyPerModeStartedMinuteV1,
 		DrivingRateTyiynPerStartedMinute: drivingRateTyiynPerStartedMinute,
 		PausedRateTyiynPerStartedMinute:  pausedRateTyiynPerStartedMinute,
-		Version:                          tariffInitialVersion,
+		Version:                          database.InitialVersion,
 	}
 }

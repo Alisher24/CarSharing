@@ -40,7 +40,7 @@ func (h payHandlers) PayInvoice(
 	if err != nil {
 		return nil, err
 	}
-	answered, err := h.reservations.PayInvoice(ctx, rentals.PayCommand{
+	answered, err := h.reservations.Pay(ctx, rentals.PayCommand{
 		Caller:    caller,
 		InvoiceID: string(request.Id),
 		Attempt:   attempt,

@@ -2,7 +2,6 @@ package rentals
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
@@ -11,18 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// warning creates the warning of a reservation that has entered the minute before its deadline. It
-// is the rentals module's own transition for the same reason the expiry is: what the record tells
-// about is a reservation, and the module that owns the stages owns what a stage means.
-type warning struct {
-	pool       *pgxpool.Pool
-	operations WarningOperations
-}
-
-func newWarning(pool *pgxpool.Pool, operations WarningOperations) *warning {
-	return &warning{pool: pool, operations: operations}
-}
-
+// dueWarnings names the reservations that have entered the minute before their deadline, which is what
+// the sweep hands to the warning transition.
 func dueWarnings(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
 	rows, err := database.QuerierFrom(ctx, pool).Query(ctx, dueWarningsStatement,
 		stage.Reserved, WarningLead.Seconds())
@@ -44,48 +33,18 @@ func dueWarnings(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
 
 // warnDue creates the warning of every reservation inside its last minute and reports how many it
 // created.
-//
-// Each reservation is warned in its own transaction under the shared lock order, so a pass and a
-// command arriving at the same moment wait for each other rather than taking the accounts and
-// vehicles of the fleet in two different orders. A reservation another pass or a read has already
-// warned is counted as not warned by this pass: the warning was created once.
-func (w *warning) warnDue(ctx context.Context) (int64, error) {
-	due, err := dueWarnings(ctx, w.pool)
-	if err != nil {
-		return 0, err
-	}
-	var warned int64
-	for _, id := range due {
-		created, err := w.warn(ctx, id)
-		if err != nil {
-			return warned, err
-		}
-		if created {
-			warned++
-		}
-	}
-	return warned, nil
+func (s *reservationSweep) warnDue(ctx context.Context) (int64, error) {
+	return s.sweepDue(ctx, dueWarnings, s.warn)
 }
 
 // warn creates the warning of one reservation that was inside its last minute when the pass read it.
-// Whether it still is decides the transition, and that is judged after the locks with the moment the
-// transaction fixed: a wait for those locks cannot put a warning past a deadline, and a rental that
-// has left reserved in the meantime is left alone.
-func (w *warning) warn(ctx context.Context, id string) (bool, error) {
-	var created bool
-	err := transact(ctx, w.pool, rentalParticipants(w.pool, id),
-		func(txCtx context.Context, _ pgx.Tx, moment time.Time) error {
-			held, err := rentalByID(txCtx, w.pool, id)
-			if errors.Is(err, ErrRentalNotFound) {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-			created, err = createDueWarning(txCtx, w.operations, held, moment)
-			return err
-		})
-	return created, err
+// Whether it still is decides the transition, and that is judged with the moment the transaction fixed:
+// a wait for the locks cannot put a warning past a deadline, and a rental that has left reserved in the
+// meantime is left alone.
+func (s *reservationSweep) warn(
+	ctx context.Context, _ pgx.Tx, moment time.Time, held Rental,
+) (bool, error) {
+	return createDueWarning(ctx, s.warnings, held, moment)
 }
 
 // createDueWarning writes the warning of one reservation whose last minute has begun at the moment

@@ -24,11 +24,40 @@ type Rates struct {
 // Refusal reports why a charge could not be computed: a duration or a rate that cannot be one, or a
 // value beyond the signed 64-bit range. The amount a refusal carries is the zero Charge, so no
 // partial answer can be read as a result.
+//
+// The rules below return one of the reasons declared under this type, because an invoice refuses a
+// draft under the same rules and states the same reason.
 type Refusal struct {
 	Reason string
 }
 
 func (r Refusal) Error() string { return r.Reason }
+
+var (
+	// RefusalNegativeDuration reports a duration that is less than no time.
+	RefusalNegativeDuration = Refusal{Reason: "a duration cannot be negative"}
+
+	// RefusalNegativeMinutes reports a count of minutes begun that is less than none.
+	RefusalNegativeMinutes = Refusal{Reason: "minutes begun cannot be negative"}
+
+	// RefusalNegativeRate reports a rate that is less than nothing per begun minute.
+	RefusalNegativeRate = Refusal{Reason: "a rate cannot be negative"}
+
+	// RefusalModeAmountBeyondRange reports the amount of one mode leaving the signed 64-bit range.
+	RefusalModeAmountBeyondRange = Refusal{
+		Reason: "the amount of a mode does not fit the signed 64-bit range",
+	}
+
+	// RefusalTotalAmountBeyondRange reports a total leaving the signed 64-bit range.
+	RefusalTotalAmountBeyondRange = Refusal{
+		Reason: "the total amount does not fit the signed 64-bit range",
+	}
+
+	// RefusalModeDurationBeyondRange reports the duration of one mode leaving the signed 64-bit range.
+	RefusalModeDurationBeyondRange = Refusal{
+		Reason: "the duration of a mode does not fit the signed 64-bit range",
+	}
+)
 
 // Charge is what a ride owes at one moment under one price list: how long it spent in each mode, the
 // minutes begun in each, what those minutes cost, and the rates they were priced at. It is the whole
@@ -57,7 +86,7 @@ type Charge struct {
 // separately would bill three twenty-second intervals as three begun minutes instead of one.
 func StartedMinutes(duration time.Duration) (int64, error) {
 	if duration < 0 {
-		return 0, Refusal{Reason: "a duration cannot be negative"}
+		return 0, RefusalNegativeDuration
 	}
 	microseconds := duration.Microseconds()
 	minutes := microseconds / MicrosecondsPerMinute
@@ -72,14 +101,14 @@ func StartedMinutes(duration time.Duration) (int64, error) {
 // product is computed rather than answered with the digits that overflow leaves behind.
 func PricedAt(rate RateTyiynPerStartedMinute, minutes int64) (AmountTyiyn, error) {
 	if rate < 0 {
-		return 0, Refusal{Reason: "a rate cannot be negative"}
+		return 0, RefusalNegativeRate
 	}
 	if minutes < 0 {
-		return 0, Refusal{Reason: "minutes begun cannot be negative"}
+		return 0, RefusalNegativeMinutes
 	}
 	product, carried := times(int64(rate), minutes)
 	if carried {
-		return 0, Refusal{Reason: "the amount of a mode does not fit the signed 64-bit range"}
+		return 0, RefusalModeAmountBeyondRange
 	}
 	return AmountTyiyn(product), nil
 }
@@ -124,7 +153,7 @@ func Compute(rates Rates, driving, paused time.Duration) (Charge, error) {
 func Add(left, right AmountTyiyn) (AmountTyiyn, error) {
 	total, carried := plus(int64(left), int64(right))
 	if carried {
-		return 0, Refusal{Reason: "the total amount does not fit the signed 64-bit range"}
+		return 0, RefusalTotalAmountBeyondRange
 	}
 	return AmountTyiyn(total), nil
 }

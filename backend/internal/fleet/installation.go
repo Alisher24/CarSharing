@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -21,9 +22,6 @@ type InstalledVehicle struct {
 	Sources        []EnergySource
 	ConfirmedAgo   time.Duration
 }
-
-// InitialVersion is the first published representation of a vehicle.
-const InitialVersion int64 = 1
 
 const insertVehicleStatement = `
 INSERT INTO vehicles (id, model, powertrain_type, connected, reporting, route_id, version)
@@ -54,7 +52,7 @@ func (s *Store) Install(ctx context.Context, tx pgx.Tx, vehicle InstalledVehicle
 		vehicle.Connected,
 		vehicle.Reporting,
 		vehicle.RouteID,
-		InitialVersion,
+		database.InitialVersion,
 	)
 	if err != nil {
 		return err

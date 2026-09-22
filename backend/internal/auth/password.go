@@ -14,10 +14,10 @@ const (
 	maxPasswordCodePoints = 128
 )
 
-// ErrPasswordInvalid reports a password outside the allowed range or carrying whitespace. It never
-// says which rule was broken and never carries the password, so neither a response nor a log can
-// narrow the search space for a guess.
-var ErrPasswordInvalid = errors.New("password does not meet the policy")
+// ErrPasswordInvalid reports a password outside the allowed range or carrying whitespace. Its text is
+// the one a registration is answered with. It never says which rule was broken and never carries the
+// password, so neither a response nor a log can narrow the search space for a guess.
+var ErrPasswordInvalid = errors.New("Password does not meet the policy")
 
 // ValidatePassword reports whether a password may be used. The password is neither trimmed nor
 // normalized: what a person typed is what is hashed, so two spellings a normalizer would fold

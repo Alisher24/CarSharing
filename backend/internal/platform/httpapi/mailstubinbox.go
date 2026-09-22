@@ -18,6 +18,13 @@ import (
 // its signature rather than by a comparison somebody has to remember to write.
 const getMessagesOperation = "getMessages"
 
+// The failures of reading the box, named once because both surfaces of the inbox report them: a page
+// that could not read the box states the same failure the collection does.
+const (
+	logBoxUnreadable    = "the mail box could not be read"
+	logLetterUnreadable = "one letter could not be read"
+)
+
 // mailstubInboxHandlers answers the two operations of the read-only inbox: one page of the box and
 // one letter of it. It holds no operation that changes anything, which is the whole of what this
 // surface is.
@@ -46,7 +53,7 @@ func (h mailstubInboxHandlers) GetMessages(
 	}
 	read, err := h.pageOf(ctx, after, limit)
 	if err != nil {
-		slog.ErrorContext(ctx, "the mail box could not be read", "error", err)
+		slog.ErrorContext(ctx, logBoxUnreadable, "error", err)
 		return mailstubapi.GetMessages503JSONResponse{Body: mailstubUnavailable(ctx)}, nil
 	}
 	body, err := h.collectionBody(read)
@@ -102,7 +109,7 @@ func (h mailstubInboxHandlers) GetMessage(
 		}, nil
 	}
 	if err != nil {
-		slog.ErrorContext(ctx, "one letter could not be read", "error", err)
+		slog.ErrorContext(ctx, logLetterUnreadable, "error", err)
 		return mailstubapi.GetMessage503JSONResponse{Body: mailstubUnavailable(ctx)}, nil
 	}
 	return mailstubapi.GetMessage200JSONResponse{Body: mailstubapi.Message{

@@ -104,19 +104,16 @@ func replayedHeader(replayed bool) *bool {
 // have finished.
 type Reservations interface {
 	Reserve(ctx context.Context, command rentals.ReserveCommand) (rentals.Answered, error)
-	Cancel(ctx context.Context, command rentals.CancelCommand) (rentals.Answered, error)
 	Current(ctx context.Context, caller uuid.UUID) (rentals.Current, error)
 	Rides(ctx context.Context, caller uuid.UUID, after *cursor.Position, limit int) (rentals.RidePage, error)
 
-	// The ride commands move a rental between a reservation, a driving ride and a paused one, the
-	// finish ends it and issues the invoice, and the payment settles that invoice. They belong to the
-	// same module and the same surface, so they are asked of the same dependency rather than of a
-	// second one naming one implementation twice.
-	StartRide(ctx context.Context, command rentals.StartRideCommand) (rentals.Answered, error)
-	PauseRide(ctx context.Context, command rentals.PauseRideCommand) (rentals.Answered, error)
-	ResumeRide(ctx context.Context, command rentals.ResumeRideCommand) (rentals.Answered, error)
-	FinishRide(ctx context.Context, command rentals.FinishCommand) (rentals.Answered, error)
-	PayInvoice(ctx context.Context, command rentals.PayCommand) (rentals.Answered, error)
+	// Apply carries a command that names one of the caller's rentals — starting, pausing and
+	// continuing a ride, and giving a reservation back — and the finish ends a ride and issues its
+	// invoice. They belong to the same module and the same surface, so they are asked of the same
+	// dependency rather than of a second one naming one implementation twice.
+	Apply(ctx context.Context, command rentals.RentalCommand) (rentals.Answered, error)
+	Finish(ctx context.Context, command rentals.FinishCommand) (rentals.Answered, error)
+	Pay(ctx context.Context, command rentals.PayCommand) (rentals.Answered, error)
 }
 
 // reservationHandlers answers the operations that belong to one signed-in person's own reservation.
@@ -213,7 +210,8 @@ func (h reservationHandlers) CancelRental(
 		return nil, err
 	}
 
-	answered, err := h.reservations.Cancel(ctx, rentals.CancelCommand{
+	answered, err := h.reservations.Apply(ctx, rentals.RentalCommand{
+		Action:   rentals.CancelRental,
 		Caller:   caller,
 		RentalID: string(request.Id),
 		Attempt:  cancelAttempt(ctx, commandKeyHeader(request.Params.IdempotencyKey), fingerprint),

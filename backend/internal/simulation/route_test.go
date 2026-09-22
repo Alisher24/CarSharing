@@ -26,7 +26,7 @@ const (
 const metresPerDegreeLatitude = 111_190
 
 func TestEveryRingIsClosed(t *testing.T) {
-	for _, route := range simulation.Routes {
+	for _, route := range simulation.Routes() {
 		if len(route.Points) < 4 {
 			t.Errorf("%s is drawn with %d points, and a ring has at least three sides", route.ID, len(route.Points))
 			continue
@@ -43,7 +43,7 @@ func TestEveryRingIsClosed(t *testing.T) {
 // show itself as a vehicle jumping to the nearest point of its circuit on its first movement, which
 // is exactly what the declaration exists to prevent.
 func TestEveryRingStartsWhereItsFirstSideDoes(t *testing.T) {
-	for _, route := range simulation.Routes {
+	for _, route := range simulation.Routes() {
 		if len(route.Points) < 2 {
 			t.Errorf("%s has no sides at all", route.ID)
 			continue
@@ -61,7 +61,7 @@ func TestEveryRingStartsWhereItsFirstSideDoes(t *testing.T) {
 // A side shorter than a block is not a street: it is a corner cut across one, which is what a ring
 // assembled from guessed geometry looks like when a person follows it on the map.
 func TestNoRingHasASideShorterThanABlock(t *testing.T) {
-	for _, route := range simulation.Routes {
+	for _, route := range simulation.Routes() {
 		for index, metres := range sideLengths(route) {
 			if metres < simulation.ShortestSideMetres {
 				t.Errorf("%s follows %s for only %.0f metres", route.ID, route.Streets[index], metres)
@@ -74,7 +74,7 @@ func TestNoRingHasASideShorterThanABlock(t *testing.T) {
 // vehicle a rental may be ended on. The scenario ring is the one exception, and it is checked for the
 // crossing it exists to produce.
 func TestEveryRingButTheScenarioOneKeepsToTheServiceArea(t *testing.T) {
-	for _, route := range simulation.Routes {
+	for _, route := range simulation.Routes() {
 		if route.ID == simulation.ScenarioRouteID {
 			continue
 		}
@@ -118,7 +118,7 @@ func TestEveryRingIsNamedByTheStreetsItFollows(t *testing.T) {
 		known[street] = true
 	}
 
-	for _, route := range simulation.Routes {
+	for _, route := range simulation.Routes() {
 		if len(route.Streets) != len(route.Points)-1 {
 			t.Errorf("%s has %d sides and names %d streets", route.ID, len(route.Points)-1, len(route.Streets))
 		}
@@ -135,7 +135,7 @@ func TestEveryRingIsNamedByTheStreetsItFollows(t *testing.T) {
 
 func TestEveryRingIdentifierIsDeclaredOnce(t *testing.T) {
 	seen := map[simulation.RouteID]bool{}
-	for _, route := range simulation.Routes {
+	for _, route := range simulation.Routes() {
 		if seen[route.ID] {
 			t.Errorf("%s is declared twice", route.ID)
 		}
@@ -146,18 +146,45 @@ func TestEveryRingIdentifierIsDeclaredOnce(t *testing.T) {
 	}
 }
 
+// The declaration is answered as a copy of its own, streets and points included, so a caller that
+// rewrites any part of what it was given cannot change the geometry the next reader of the fleet is
+// placed by.
+func TestARewrittenRouteDoesNotReachTheDeclaration(t *testing.T) {
+	declared := simulation.Routes()
+	if len(declared) == 0 {
+		t.Fatal("this build declares no routes at all")
+	}
+	handed := simulation.Routes()
+	handed[0] = simulation.Route{ID: "rewritten"}
+	handed[1].Streets[0] = "rewritten"
+	handed[1].Points[0] = fleet.Position{Longitude: 0, Latitude: 0}
+
+	answered := simulation.Routes()
+	if answered[0].ID != declared[0].ID {
+		t.Errorf("the declaration now answers %q where it declared %q", answered[0].ID, declared[0].ID)
+	}
+	if answered[1].Streets[0] != declared[1].Streets[0] {
+		t.Errorf("the declaration now names the side %q, want %q",
+			answered[1].Streets[0], declared[1].Streets[0])
+	}
+	if answered[1].Points[0] != declared[1].Points[0] {
+		t.Errorf("the declaration now stands at %+v, want %+v",
+			answered[1].Points[0], declared[1].Points[0])
+	}
+}
+
 // A position on the ring is answered by the distance along it, and a place beside the ring is
 // answered with how far beside it lies — which is what the model uses to decide whether a
 // demonstration command placed a vehicle on its route or away from it.
 func TestAPlaceOnTheRingIsNoDistanceFromIt(t *testing.T) {
-	for _, route := range simulation.Routes {
+	for _, route := range simulation.Routes() {
 		halfway := route.PositionAt(route.Length() / 2)
 		if _, metres := route.DistanceFrom(halfway); metres > 1.0 {
 			t.Errorf("the middle of %s lies %v metres from it", route.ID, metres)
 		}
 	}
 
-	route, declared := simulation.RouteOf("gas-1")
+	route, declared := simulation.RouteOf(simulation.GasRoute1)
 	if !declared {
 		t.Fatal("this build declares no gas-1")
 	}
@@ -219,7 +246,7 @@ func insideServiceArea(point fleet.Position) bool {
 // avenues and a dozen streets, so they do — but not all four of them.
 func TestNoTwoRingsAreTheSameCircuit(t *testing.T) {
 	seen := map[string]simulation.RouteID{}
-	for _, route := range simulation.Routes {
+	for _, route := range simulation.Routes() {
 		key := circuitOf(route)
 		if previous, taken := seen[key]; taken {
 			t.Errorf("%s drives the same circuit as %s", route.ID, previous)

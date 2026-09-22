@@ -41,7 +41,7 @@ func (h finishHandlers) FinishRental(
 	if err != nil {
 		return nil, err
 	}
-	answered, err := h.reservations.FinishRide(ctx, rentals.FinishCommand{
+	answered, err := h.reservations.Finish(ctx, rentals.FinishCommand{
 		Caller:   caller,
 		RentalID: string(request.Id),
 		Attempt:  attempt,

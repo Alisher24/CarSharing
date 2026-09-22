@@ -17,18 +17,11 @@ import (
 )
 
 // Messages the account operations answer failures with. They describe the outcome without telling
-// a caller which half of a credential pair was wrong.
+// a caller which half of a credential pair was wrong. The registration refusals are not here: the
+// module that owns them publishes their text, and the answer states it rather than a second copy.
 const (
-	messageEmailAlreadyRegistered = "Email is already registered"
-	messageInvalidCredentials     = "Invalid email or password"
-	messageRateLimited            = "Too many attempts; try again later"
-)
-
-// Messages the account operations answer a malformed field with. Unlike the pair above, these name
-// the field, because registration is where the field is chosen rather than guessed at.
-const (
-	messageEmailInvalid    = "Email is not a valid address"
-	messagePasswordInvalid = "Password does not meet the policy"
+	messageInvalidCredentials = "Invalid email or password"
+	messageRateLimited        = "Too many attempts; try again later"
 )
 
 // accounts answers the operations an account is created and proven through. Registration and
@@ -83,7 +76,7 @@ func (a accounts) Register(
 		// The generated response type carries the 409 itself, so this code never reaches
 		// writeError and has no transport alias.
 		return servedapi.Register409JSONResponse{
-			Body: apiErrorBody(ctx, servedapi.EMAILALREADYREGISTERED, messageEmailAlreadyRegistered),
+			Body: apiErrorBody(ctx, servedapi.EMAILALREADYREGISTERED, auth.ErrEmailTaken.Error()),
 		}, nil
 	}
 
@@ -106,14 +99,14 @@ func (a accounts) registrationPreflight(
 ) (auth.Email, servedapi.RegisterResponseObject, error) {
 	email, err := auth.ParseEmail(request.Body.Email)
 	if err != nil {
-		emailViolation := bodyViolation("/email", codeInvalidField, messageEmailInvalid)
+		emailViolation := bodyViolation("/email", codeInvalidField, auth.ErrEmailInvalid.Error())
 		return "", servedapi.Register422JSONResponse{
 			Body: a.validationError(ctx, emailViolation),
 		}, nil
 	}
 
 	if err = auth.ValidatePassword(request.Body.Password); err != nil {
-		passwordViolation := bodyViolation("/password", codeInvalidField, messagePasswordInvalid)
+		passwordViolation := bodyViolation("/password", codeInvalidField, auth.ErrPasswordInvalid.Error())
 		return "", servedapi.Register422JSONResponse{
 			Body: a.validationError(ctx, passwordViolation),
 		}, nil

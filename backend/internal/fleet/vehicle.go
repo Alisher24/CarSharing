@@ -97,29 +97,40 @@ func (v Vehicle) FitToStart() bool {
 //
 // A vehicle taken out of service is refused whatever it holds: a refilled tank does not undo the ride
 // that ran out, which is why this reason is stated beside the energy rather than through it.
+//
+// The conditions are the ones declared once below, read through the flag that says which of them stop
+// a start, so this question cannot come to name a reason the catalog does not publish.
 func (v Vehicle) StartRefusalReasons() []UnavailableReason {
 	var reasons []UnavailableReason
-	if !v.FitToStart() {
-		reasons = append(reasons, InsufficientEnergy)
-	}
-	if v.ServiceRequired {
-		reasons = append(reasons, ServiceRequired)
+	for _, check := range unavailabilityChecks {
+		// A condition that refuses a start reads no instant, so none is passed to it.
+		if check.refusesStart && check.applies(v, time.Time{}) {
+			reasons = append(reasons, check.reason)
+		}
 	}
 	return reasons
 }
 
 // unavailabilityCheck is one condition that keeps a free vehicle from being rented.
 type unavailabilityCheck struct {
-	reason  UnavailableReason
+	reason UnavailableReason
+
+	// refusesStart is whether the condition stops a rental from beginning as well as a free vehicle
+	// from being booked. Only a condition that reads no instant may set it, because a start is asked
+	// of the vehicle itself rather than at a moment.
+	refusesStart bool
+
 	applies func(Vehicle, time.Time) bool
 }
 
 // unavailabilityChecks are every such condition, in the order the catalog lists them, so that one
-// vehicle's reasons are always spelled in the same sequence. A new condition is a new entry here.
+// vehicle's reasons are always spelled in the same sequence. A new condition is a new entry here, and
+// the reasons a start is refused are read from this same list rather than from a second one.
 var unavailabilityChecks = []unavailabilityCheck{
 	{
-		reason:  InsufficientEnergy,
-		applies: func(vehicle Vehicle, _ time.Time) bool { return !vehicle.FitToStart() },
+		reason:       InsufficientEnergy,
+		refusesStart: true,
+		applies:      func(vehicle Vehicle, _ time.Time) bool { return !vehicle.FitToStart() },
 	},
 	{
 		reason: TelemetryStale,
@@ -138,8 +149,9 @@ var unavailabilityChecks = []unavailabilityCheck{
 		applies: func(vehicle Vehicle, _ time.Time) bool { return !vehicle.InsideServiceZone() },
 	},
 	{
-		reason:  ServiceRequired,
-		applies: func(vehicle Vehicle, _ time.Time) bool { return vehicle.ServiceRequired },
+		reason:       ServiceRequired,
+		refusesStart: true,
+		applies:      func(vehicle Vehicle, _ time.Time) bool { return vehicle.ServiceRequired },
 	},
 }
 

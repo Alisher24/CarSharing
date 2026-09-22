@@ -186,8 +186,6 @@ VALUES (
 )
 ON CONFLICT DO NOTHING`
 
-const reservationInitialVersion int64 = 1
-
 func insertReservation(
 	ctx context.Context,
 	pool *pgxpool.Pool,
@@ -213,7 +211,7 @@ func insertReservation(
 		about.price.DrivingRateTyiynPerStartedMinute,
 		about.price.PausedRateTyiynPerStartedMinute,
 		about.price.Version,
-		reservationInitialVersion,
+		database.InitialVersion,
 	)
 	if err != nil {
 		return Rental{}, false, err
@@ -236,6 +234,9 @@ UPDATE rentals
 SET stage = $2, mode_started_at = $3, version = version + 1
 WHERE id = $1 AND stage = $4
 RETURNING` + rentalFields
+
+// errRentalMoved reports that the rental no longer stood in the stage the command was judged against.
+var errRentalMoved = errors.New("the rental had already been moved")
 
 func moveRide(
 	ctx context.Context,
@@ -355,7 +356,7 @@ func (s *Store) InstallPrepared(ctx context.Context, tx pgx.Tx, prepared Prepare
 		prepared.ZoneID,
 		ReservationLifetime.Seconds(),
 		prepared.Stage != stage.Reserved,
-		reservationInitialVersion,
+		database.InitialVersion,
 	)
 	return err
 }
@@ -412,7 +413,7 @@ func (s *Store) RestorePrepared(
 		prepared.ZoneID,
 		ReservationLifetime.Seconds(),
 		prepared.Stage != stage.Reserved,
-		reservationInitialVersion,
+		database.InitialVersion,
 	).Scan(&version)
 	return version, err
 }
