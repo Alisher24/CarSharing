@@ -129,8 +129,10 @@ services:
       migrate: { condition: service_completed_successfully }
       mailstub: { condition: service_healthy }
     # This process serves nothing, so its probe reads the mark it writes to /tmp: a worker that hangs
-    # stops marking and is shown as unhealthy, which a running container otherwise never says.
-    tmpfs: [/tmp]
+    # stops marking and is shown as unhealthy, which a running container otherwise never says. The
+    # mode is stated because the mount is otherwise owned by root, and this process is not root.
+    tmpfs:
+      - /tmp:mode=1777
     healthcheck:
       test: [CMD, /usr/local/bin/healthcheck, heartbeat]
       interval: 10s

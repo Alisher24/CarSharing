@@ -43,10 +43,10 @@ export async function servedContract() {
 }
 
 /**
- * The contract whose browser client this repository generates, which exactly one declares, and the
- * directory inside the frontend package it is written into.
+ * The contract whose browser client this repository generates, which exactly one declares, together
+ * with the directory inside the frontend package it is written into.
  */
-export async function browserClient() {
+export async function browserClientContract() {
   const clients = (await contracts()).filter((contract) => contract.browserClient);
   if (clients.length !== 1) {
     throw new Error(`${MANIFEST_PATH} names ${clients.length} browser clients`);

@@ -35,7 +35,7 @@ export function publishedStatusOf(vehicleId) {
  * rule is the rentals module's, and a check that wrote the transition itself would be a second
  * declaration of it.
  */
-export function expireReservationOf(vehicleId) {
+export function makeExpiryDue(vehicleId) {
   const rentalId = sql(`SELECT id FROM rentals WHERE vehicle_id = '${vehicleId}' AND ended_at IS NULL`);
   if (rentalId === '') throw new Error(`no live reservation held the vehicle ${vehicleId}`);
   moveDeadline(rentalId, DEADLINE_IN_THE_PAST_SECONDS);

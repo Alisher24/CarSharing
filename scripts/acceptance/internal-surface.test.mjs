@@ -54,7 +54,7 @@ const TOKEN_FILE = {
   mailstubDemo: '.secrets/mailstub_demo_token',
 };
 
-before(waitForReady);
+before(() => waitForReady());
 
 describe('the internal surfaces are not reachable from outside', () => {
   test('every internal and health path answers the unknown-path body through the proxy', async () => {

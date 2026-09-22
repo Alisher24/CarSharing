@@ -72,10 +72,10 @@ tests enforce them:
 - `x-error-codes` — the error codes an operation answers with; the inventory test holds every operation
   to the ones its responses declare.
 - `x-body-limit` — the byte cap of a request body, declared on every operation of a surface. The tests
-  require every operation that accepts a body to declare it and every declared value on one surface to
-  be the same one, so the limit cannot drift between operations. The proxy restates the public 65536 as
-  its own `client_max_body_size`, because nginx cannot import this file; the acceptance suite keeps the
-  two in step.
+  require every operation that accepts a body to declare it and every such operation of one surface to
+  declare the same value, so the limit cannot drift between the operations that read a body. The proxy
+  restates the public 65536 as its own `client_max_body_size`, because nginx cannot import this file;
+  the acceptance suite keeps the two in step.
 - `x-idempotency-retention-seconds` — how long an idempotent result remains repeatable. The repository
   check keeps every operation, the service retention and the browser repeat window equal.
 - `x-event-schemas` — the events a stream carries; `x-listener` — which listener of the mail stub a path

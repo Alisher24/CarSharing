@@ -12,20 +12,28 @@ import (
 	"strings"
 )
 
-// probes are the health checks this command answers, by the name the service passes it. A service
-// adds a probe by adding a row here and naming it in its own health check.
-var probes = map[string]func() int{
+// probes are the health checks this command answers, by the name the service passes it. A service adds
+// a probe by adding a row here and naming it in its own health check. A probe reports the container
+// unhealthy by returning why, so every probe says as much about a failure as the check can.
+var probes = map[string]func() error{
 	"ready":     readyProbe,
 	"heartbeat": heartbeatProbe,
 }
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+// run answers the probe the service asked for.
+func run() error {
 	probe, known := probes[probeArgument()]
 	if !known {
-		fmt.Fprintf(os.Stderr, "usage: healthcheck <%s>\n", joinNames())
-		os.Exit(2)
+		return fmt.Errorf("usage: healthcheck <%s>", joinNames())
 	}
-	os.Exit(probe())
+	return probe()
 }
 
 // probeArgument is the probe the service asked for, which is absent when the command is run by hand.

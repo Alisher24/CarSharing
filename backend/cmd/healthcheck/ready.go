@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"time"
@@ -26,17 +27,17 @@ const (
 )
 
 // readyProbe reports whether the API in this container answers its readiness operation.
-func readyProbe() int {
+func readyProbe() error {
 	client := http.Client{Timeout: probeTimeout}
 	resp, err := client.Get(readyURL())
 	if err != nil {
-		return 1
+		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return 1
+		return fmt.Errorf("the API answered %s at %s", resp.Status, readyURL())
 	}
-	return 0
+	return nil
 }
 
 // readyURL is the readiness URL of the API in this container. The port comes from the same setting

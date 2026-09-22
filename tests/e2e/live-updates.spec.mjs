@@ -7,13 +7,7 @@
 // anyway. The second check leaves the shipped interval alone.
 import { expect, test } from '@playwright/test';
 import { until } from '../../scripts/acceptance/reservations.mjs';
-import {
-  expireReservationOf,
-  publishedStatusOf,
-  RESERVED_VEHICLE_MODEL,
-  restoreScenario,
-  vehicleIdOf,
-} from './scenario.mjs';
+import { makeExpiryDue, publishedStatusOf, RESERVED_VEHICLE_MODEL, restoreScenario, vehicleIdOf } from './scenario.mjs';
 
 /** The bound a change must reach a connected client within, measured from the moment it is visible. */
 const DELIVERY_BOUND_MS = 2000;
@@ -59,7 +53,7 @@ test('a change reaches a second client within two seconds of becoming visible', 
     }
     await Promise.all([expectNoNotice(other), expectNoNotice(watching)]);
 
-    expireReservationOf(vehicleId);
+    makeExpiryDue(vehicleId);
 
     // The deadline pass commits the transition on its own moment, so what the delivery is measured
     // from is the moment the change became visible in the database: the pass runs every second, and
@@ -108,7 +102,7 @@ test('a client whose stream is broken says so and keeps repairing itself', async
     await expect(statusOf(page, RESERVED_VEHICLE_MODEL)).toHaveAttribute('data-status', 'reserved');
     await expect(page.locator('.stream-notice')).toHaveText(new RegExp(DELAYED_NOTICE));
 
-    expireReservationOf(vehicleId);
+    makeExpiryDue(vehicleId);
 
     // The signal never arrives, so what shows the change is the reconciliation the shipped
     // application runs while it is open.

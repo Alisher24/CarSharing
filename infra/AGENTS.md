@@ -90,6 +90,8 @@ A service's health check is the contract its dependents wait on, so it moves wit
   apart.
 - `frontend` fetches `/api/v1/health/live`; `postgres` runs `pg_isready` as `carsharing_migrator`.
 
-A service that leaves a mark needs a writable `/tmp`, which is why `worker` declares the `tmpfs` the
-frontend already declares. Renaming a route, a binary, a probe or a port means editing the check in
-`compose.yaml` in the same change.
+A service that leaves a mark needs a writable `/tmp`: `worker` declares the `tmpfs` the frontend
+declares, with the mode stated — the process is not root, and a mount nobody declared the mode of is
+one it cannot write to. Renaming a route, a binary, a probe or a port means editing the check in
+`compose.yaml` in the same change, and `scripts/health-probe.test.mjs` holds every one of those
+declarations to the process it probes.

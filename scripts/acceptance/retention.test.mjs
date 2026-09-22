@@ -29,7 +29,7 @@ const SWEEP_POLL_MS = 500;
 const COUNTER_RETENTION_HOURS = 1;
 const SESSION_LIFETIME_HOURS = 12;
 
-before(waitForReady);
+before(() => waitForReady());
 
 describe('the tables nothing else removes from are swept', () => {
   test('a counter inside its retention is kept, and the one past it is removed', async () => {

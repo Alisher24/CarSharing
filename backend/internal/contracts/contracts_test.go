@@ -75,17 +75,25 @@ var implementationStatuses = map[any]bool{implementationStatus: true, "planned":
 func TestContractInventorySchemasAndExamples(t *testing.T) {
 	declared := declaredContracts(t)
 	for _, one := range declared {
-		load, generated := generatedPackages[one.Name]
-		if !generated {
-			t.Fatalf("the manifest declares the contract %s and no generated package reads it", one.Name)
-		}
-		t.Run(one.Name, func(t *testing.T) { checkContract(t, load, one.ServedByProduction) })
+		t.Run(one.Name, func(t *testing.T) { checkContract(t, loadContract(t, one.Name), one.ServedByProduction) })
 	}
 	for name := range generatedPackages {
 		if !declares(declared, name) {
 			t.Errorf("the package of the contract %s is read and the manifest does not declare it", name)
 		}
 	}
+}
+
+// loadContract names the generated package a contract is checked through. A contract the manifest
+// declares without one has nothing to read, which is a defect in the manifest rather than a reason to
+// skip the checks.
+func loadContract(t *testing.T, name string) func() (*openapi3.T, error) {
+	t.Helper()
+	load, generated := generatedPackages[name]
+	if !generated {
+		t.Fatalf("the manifest declares the contract %s and no generated package reads it", name)
+	}
+	return load
 }
 
 // declaredContracts reads the manifest, which is the one declaration of the contract set the
@@ -575,7 +583,7 @@ func wireFormatBoundaries() []wireFormat {
 func TestReplayHeaderOnlyWhereResultsAreSaved(t *testing.T) {
 	for _, one := range declaredContracts(t) {
 		t.Run(one.Name, func(t *testing.T) {
-			spec, err := generatedPackages[one.Name]()
+			spec, err := loadContract(t, one.Name)()
 			if err != nil {
 				t.Fatal(err)
 			}

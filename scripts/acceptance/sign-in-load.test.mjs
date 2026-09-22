@@ -120,7 +120,7 @@ function assertRefusalsAreDocumented(answers, measured) {
 // harness standing between the burst and the next reader of the same instance.
 after(settleAfterBurst);
 
-before(waitForReady);
+before(() => waitForReady());
 
 describe('a burst of simultaneous sign-ins does not release more password checks than the budget', () => {
   test('forty at once against one email and address reach the password no more often than the budget', async () => {

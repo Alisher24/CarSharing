@@ -21,7 +21,7 @@ const ORIGIN_NOT_ALLOWED_CODE = 'ORIGIN_NOT_ALLOWED';
 const CLEARED_COOKIE_PATTERN = /Max-Age=0|Expires=Thu, 01 Jan 1970/i;
 const UNKNOWN_SESSION_COOKIE = `${SESSION_COOKIE_NAME}=a-token-that-names-no-session`;
 
-before(waitForReady);
+before(() => waitForReady());
 
 // Every suite shares one address, so each test starts with the rate limits untouched by the last.
 beforeEach(resetRateLimits);
