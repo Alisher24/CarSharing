@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/Alisher24/CarSharing/backend/internal/demoaction"
 	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/jackc/pgx/v5"
@@ -33,8 +34,10 @@ var (
 type Action string
 
 const (
-	// DropNextResponseAfterAccept asks the next delivery to store its letter and lose its answer.
-	DropNextResponseAfterAccept Action = "drop_next_response_after_accept"
+	// DropNextResponseAfterAccept asks the next delivery to store its letter and lose its answer. The
+	// identifier is the one the demonstration's own vocabulary declares, so the terminal that states
+	// the action and the stub that applies it cannot come to name it differently.
+	DropNextResponseAfterAccept Action = Action(demoaction.DropNextResponseAfterAccept)
 )
 
 // Known reports whether an action is one this build declares, which is what a request is judged by

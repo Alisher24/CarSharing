@@ -35,10 +35,12 @@ Ten commands, each one process:
   and changes nothing itself. `-once [-tick-id]` advances the fleet exactly once. It belongs to the
   demonstration profile, because starting the demonstration is a deliberate act.
 - `democontrol` — one set-to-value command of the demonstration, carried to the internal API under the
-  token of its own capability. The commands are declared once in `internal/democontrol`: the name the
-  contract publishes, the fields the request carries, the terminal's flags and their hints. The usage
-  line, the flags and the internal surface's reading of a request all follow from that one table, so a
-  new demonstration command is a row there and nothing else.
+  token of its own capability. `internal/demoaction` names the changes once — the identifiers the
+  contract publishes, which the rentals module, the mail stub, the terminal and the internal surface
+  all name — and `internal/democontrol` declares what each change carries: the fields of the request,
+  the terminal's flags and their hints. The usage line, the flags, the request the terminal writes and
+  the surface's reading of that request all follow from that declaration, and a test holds the surface's
+  reading to the kinds the module knows rather than a second list doing it.
 - `migrate` — goose `up` or `status` under a lock and a two-minute deadline; it refuses any other word.
 - `seed` — installs the demonstration, and refuses to run outside `APP_ENV=demo`.
 - `demoscenario` — puts the prepared scenario back, and refuses to run outside `APP_ENV=demo`.
@@ -160,8 +162,8 @@ a ring of four sides along named streets of central Bishkek, declared as the cro
   the route as the place, so the same twenty-five coordinates are stated once.
 - Every ring is named by a declared `simulation.RouteID` constant, and the demonstration fleet names
   its circuits by those constants, so a misspelt circuit is a build error rather than a vehicle
-  standing nowhere. `Routes()` answers a copy of the corpus: a package that drives the fleet cannot add
-  a circuit to it or drop one from it.
+  standing nowhere. `Routes()` answers a copy of its own — corpus, streets and points — so a package
+  that drives the fleet can neither add a circuit nor rewrite the geometry of one.
 - `route_test.go` holds the declaration to what it claims: every ring is closed, stays inside the
   demonstration service area (except the one scenario ring, which exists to leave it), has no side
   shorter than `ShortestSideMetres`, is named by the streets it follows, and no two rings are the same

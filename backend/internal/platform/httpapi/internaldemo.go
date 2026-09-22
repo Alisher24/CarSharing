@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 
 	internalapi "github.com/Alisher24/CarSharing/backend/internal/contracts/internalapi"
 	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
@@ -68,17 +67,14 @@ func demoCommandOf(action internalapi.DemoAction) (rentals.DemoCommand, error) {
 // read by the row that knows it, so an action stating fields this surface already reads is a row of the
 // vocabulary rather than another branch.
 func demoCommand(stated democontrol.Stated) (rentals.DemoCommand, error) {
-	command := rentals.DemoCommand{
-		ActionID: stated.ActionID,
-		Kind:     rentals.DemoActionKind(stated.Action),
-	}
-	for field, values := range stated.Values {
+	command := rentals.DemoCommand{ActionID: stated.ActionID, Kind: stated.Action}
+	for _, field := range stated.Fields() {
 		read, known := demoFields[field]
 		if !known {
 			return rentals.DemoCommand{}, fmt.Errorf(
 				"the demonstration field %q is not one this build reads", field)
 		}
-		if err := read(&command, values); err != nil {
+		if err := read(&command, stated); err != nil {
 			return rentals.DemoCommand{}, err
 		}
 	}
@@ -87,45 +83,65 @@ func demoCommand(stated democontrol.Stated) (rentals.DemoCommand, error) {
 
 // demoFields is what each field of a demonstration request states about the command the module applies:
 // one row per field of the vocabulary rather than per action.
-var demoFields = map[democontrol.Field]func(*rentals.DemoCommand, []string) error{
-	democontrol.VehicleIDField: func(command *rentals.DemoCommand, stated []string) error {
-		command.VehicleID = stated[0]
-		return nil
-	},
-	democontrol.TelemetryStateField: func(command *rentals.DemoCommand, stated []string) error {
-		command.Online = stated[0] == string(internalapi.Online)
-		return nil
-	},
-	democontrol.PositionField: func(command *rentals.DemoCommand, stated []string) error {
-		longitude, err := strconv.ParseFloat(stated[0], 64)
+var demoFields = map[democontrol.Field]func(*rentals.DemoCommand, democontrol.Stated) error{
+	democontrol.VehicleIDField: func(command *rentals.DemoCommand, stated democontrol.Stated) error {
+		vehicle, err := stated.Text(democontrol.VehicleIDField)
 		if err != nil {
-			return fmt.Errorf("the longitude of a demonstration position: %w", err)
+			return err
 		}
-		latitude, err := strconv.ParseFloat(stated[1], 64)
+		command.VehicleID = vehicle
+		return nil
+	},
+	democontrol.TelemetryStateField: func(command *rentals.DemoCommand, stated democontrol.Stated) error {
+		state, err := stated.Text(democontrol.TelemetryStateField)
 		if err != nil {
-			return fmt.Errorf("the latitude of a demonstration position: %w", err)
+			return err
+		}
+		command.Online = state == string(internalapi.Online)
+		return nil
+	},
+	democontrol.PositionField: func(command *rentals.DemoCommand, stated democontrol.Stated) error {
+		longitude, latitude, err := stated.Point(democontrol.PositionField)
+		if err != nil {
+			return err
 		}
 		command.Position = fleet.Position{Longitude: longitude, Latitude: latitude}
 		return nil
 	},
-	democontrol.SourceKindField: func(command *rentals.DemoCommand, stated []string) error {
-		command.Source = fleet.SourceKind(stated[0])
+	democontrol.SourceKindField: func(command *rentals.DemoCommand, stated democontrol.Stated) error {
+		source, err := stated.Text(democontrol.SourceKindField)
+		if err != nil {
+			return err
+		}
+		command.Source = fleet.SourceKind(source)
 		return nil
 	},
-	democontrol.RemainingField: func(command *rentals.DemoCommand, stated []string) error {
-		remaining, err := fleet.ParseAmount(stated[0])
+	democontrol.RemainingField: func(command *rentals.DemoCommand, stated democontrol.Stated) error {
+		carried, err := stated.Text(democontrol.RemainingField)
+		if err != nil {
+			return err
+		}
+		remaining, err := fleet.ParseAmount(carried)
 		if err != nil {
 			return fmt.Errorf("the reserve of a demonstration refill: %w", err)
 		}
 		command.Remaining = remaining
 		return nil
 	},
-	democontrol.RentalIDField: func(command *rentals.DemoCommand, stated []string) error {
-		command.RentalID = stated[0]
+	democontrol.RentalIDField: func(command *rentals.DemoCommand, stated democontrol.Stated) error {
+		rental, err := stated.Text(democontrol.RentalIDField)
+		if err != nil {
+			return err
+		}
+		command.RentalID = rental
 		return nil
 	},
-	democontrol.OutcomeField: func(command *rentals.DemoCommand, stated []string) error {
-		command.Outcome = invoices.DemoOutcome(stated[0])
+	democontrol.OutcomeField: func(command *rentals.DemoCommand, stated democontrol.Stated) error {
+		outcome, err := stated.Text(democontrol.OutcomeField)
+		if err != nil {
+			return err
+		}
+		command.Outcome = invoices.DemoOutcome(outcome)
 		return nil
 	},
 }

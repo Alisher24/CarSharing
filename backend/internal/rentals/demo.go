@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Alisher24/CarSharing/backend/internal/demoaction"
 	"github.com/Alisher24/CarSharing/backend/internal/events"
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
 	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
@@ -16,37 +17,12 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// DemoActionKind is one set-to-value change a demonstration may make. The spelling is the one the
-// internal contract publishes as the action.
-type DemoActionKind string
-
-const (
-	// SetTelemetryState links or unlinks a vehicle, which is what shows the difference between a
-	// vehicle that reports and one that keeps the reading it last confirmed.
-	SetTelemetryState DemoActionKind = "set_telemetry_state"
-
-	// SetPosition puts a vehicle somewhere by hand. It is refused while the vehicle is booked or
-	// moving, and the model drives it back to its route from wherever it was put.
-	SetPosition DemoActionKind = "set_position"
-
-	// SetEnergyRemaining states what one source of a vehicle holds now, which is how a demonstration
-	// prepares a ride that runs out within minutes.
-	SetEnergyRemaining DemoActionKind = "set_energy_remaining"
-
-	// MarkServiced returns a vehicle to its service point, fills every source and clears the flag
-	// that took it out of service.
-	MarkServiced DemoActionKind = "mark_serviced"
-
-	// SetNextPaymentOutcome records what the next attempt at the payment of one ride will decide.
-	SetNextPaymentOutcome DemoActionKind = "set_next_payment_outcome"
-)
-
 // DemoCommand is one demonstration command. Which fields it carries follows from its kind: a command
 // that names a source states no position, and one that names a rental states no vehicle. The fields a
 // kind does not use are read by nothing.
 type DemoCommand struct {
 	ActionID string
-	Kind     DemoActionKind
+	Kind     demoaction.Kind
 	Attempt  Attempt
 
 	// VehicleID is the vehicle a change to its state names.
@@ -72,11 +48,11 @@ type DemoCommand struct {
 // rather than a refusal a client caused.
 func (c DemoCommand) Validate() error {
 	switch c.Kind {
-	case SetTelemetryState:
+	case demoaction.SetTelemetryState:
 		return c.needsVehicle()
-	case SetPosition:
+	case demoaction.SetPosition:
 		return c.needsVehicle()
-	case SetEnergyRemaining:
+	case demoaction.SetEnergyRemaining:
 		if err := c.needsVehicle(); err != nil {
 			return err
 		}
@@ -84,9 +60,9 @@ func (c DemoCommand) Validate() error {
 			return errors.New("a refill must name the source it fills")
 		}
 		return nil
-	case MarkServiced:
+	case demoaction.MarkServiced:
 		return c.needsVehicle()
-	case SetNextPaymentOutcome:
+	case demoaction.SetNextPaymentOutcome:
 		if c.RentalID == "" {
 			return errors.New("a payment outcome must name the ride it decides")
 		}
@@ -163,7 +139,7 @@ func (s *Service) demoWithin(
 	moment time.Time,
 	command DemoCommand,
 ) (Outcome, error) {
-	if command.Kind == SetNextPaymentOutcome {
+	if command.Kind == demoaction.SetNextPaymentOutcome {
 		return s.setPaymentOutcome(ctx, moment, command)
 	}
 	return s.setVehicleState(ctx, tx, moment, command)
@@ -228,19 +204,19 @@ func (s *Service) setVehicleState(
 // when it does.
 func demoRefusal(vehicle fleet.SimulatedVehicle, held *Rental, command DemoCommand) (*Refusal, error) {
 	switch command.Kind {
-	case SetPosition:
+	case demoaction.SetPosition:
 		// A vehicle is moved by hand only when it is standing still: a booked or moving vehicle is
 		// where the ride put it, and moving it would rewrite a journey that is under way.
 		if held != nil && held.Stage != stage.Paused {
 			return &Refusal{Kind: VehicleInUse}, nil
 		}
-	case MarkServiced:
+	case demoaction.MarkServiced:
 		// Servicing is what puts a vehicle nobody may book back into the fleet, so it applies to a
 		// vehicle no rental holds.
 		if held != nil {
 			return &Refusal{Kind: VehicleInUse}, nil
 		}
-	case SetEnergyRemaining:
+	case demoaction.SetEnergyRemaining:
 		if !carriesSource(vehicle, command.Source) {
 			return &Refusal{Kind: SourceNotCarried}, nil
 		}
@@ -257,11 +233,11 @@ func changeVehicle(
 	state simulation.State, command DemoCommand,
 ) simulation.State {
 	switch command.Kind {
-	case SetPosition:
+	case demoaction.SetPosition:
 		return positioned(state, command.Position)
-	case SetEnergyRemaining:
+	case demoaction.SetEnergyRemaining:
 		return refilled(state, command.Source, command.Remaining)
-	case MarkServiced:
+	case demoaction.MarkServiced:
 		return serviced(state)
 	default:
 		// Linking and unlinking a vehicle changes nothing about where it is or what it holds.
@@ -304,11 +280,11 @@ func (s *Service) publishVehicleState(
 // statement reads as "leave it as it is".
 func pendingVehicleChange(command DemoCommand) fleet.VehicleChange {
 	var change fleet.VehicleChange
-	if command.Kind == SetTelemetryState {
+	if command.Kind == demoaction.SetTelemetryState {
 		change.Connected = &command.Online
 		change.Reporting = &command.Online
 	}
-	if command.Kind == MarkServiced {
+	if command.Kind == demoaction.MarkServiced {
 		serviceRequired := false
 		change.ServiceRequired = &serviceRequired
 	}
@@ -329,7 +305,7 @@ func confirmedVehicleState(vehicleID string, state simulation.State) fleet.Confi
 // confirming reports whether the vehicle confirms what it does after this command. Linking a vehicle
 // makes it confirm again; unlinking it stops it; every other command leaves the link as it was.
 func confirming(vehicle fleet.SimulatedVehicle, command DemoCommand) bool {
-	if command.Kind == SetTelemetryState {
+	if command.Kind == demoaction.SetTelemetryState {
 		return command.Online
 	}
 	return vehicle.Confirming()

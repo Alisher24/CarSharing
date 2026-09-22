@@ -286,10 +286,17 @@ var routes = [...]Route{
 	ring(GasRoute5, zhibekAtIsanova, zhibekAtAbdrakhmanova, moskovskayaAtAbdrakhmanova, moskovskayaAtIsanova),
 }
 
-// Routes answers every trajectory this build declares, as a copy. The declaration itself is never
-// handed out, so nothing outside this package can add a circuit to it or drop one from it.
+// Routes answers every trajectory this build declares, as a copy of its own: the corpus, the streets of
+// each ring and the points of each ring are copied, so nothing outside this package can rewrite the
+// geometry a vehicle is driven along, add a circuit or drop one.
 func Routes() []Route {
-	return slices.Clone(routes[:])
+	declared := make([]Route, 0, len(routes))
+	for _, route := range routes {
+		route.Streets = slices.Clone(route.Streets)
+		route.Points = slices.Clone(route.Points)
+		declared = append(declared, route)
+	}
+	return declared
 }
 
 // ScenarioRoute is the trajectory that crosses the boundary of the demonstration area. It starts at a

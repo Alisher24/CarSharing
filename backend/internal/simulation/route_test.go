@@ -146,18 +146,30 @@ func TestEveryRingIdentifierIsDeclaredOnce(t *testing.T) {
 	}
 }
 
-// The declaration is answered as a copy rather than handed out, so a caller that rewrites what it was
-// given cannot change the geometry the next reader of the fleet is placed by.
+// The declaration is answered as a copy of its own, streets and points included, so a caller that
+// rewrites any part of what it was given cannot change the geometry the next reader of the fleet is
+// placed by.
 func TestARewrittenRouteDoesNotReachTheDeclaration(t *testing.T) {
-	handed := simulation.Routes()
-	if len(handed) == 0 {
+	declared := simulation.Routes()
+	if len(declared) == 0 {
 		t.Fatal("this build declares no routes at all")
 	}
-	declared := handed[0].ID
+	handed := simulation.Routes()
 	handed[0] = simulation.Route{ID: "rewritten"}
+	handed[1].Streets[0] = "rewritten"
+	handed[1].Points[0] = fleet.Position{Longitude: 0, Latitude: 0}
 
-	if answered := simulation.Routes(); answered[0].ID != declared {
-		t.Errorf("the declaration now answers %q where it declared %q", answered[0].ID, declared)
+	answered := simulation.Routes()
+	if answered[0].ID != declared[0].ID {
+		t.Errorf("the declaration now answers %q where it declared %q", answered[0].ID, declared[0].ID)
+	}
+	if answered[1].Streets[0] != declared[1].Streets[0] {
+		t.Errorf("the declaration now names the side %q, want %q",
+			answered[1].Streets[0], declared[1].Streets[0])
+	}
+	if answered[1].Points[0] != declared[1].Points[0] {
+		t.Errorf("the declaration now stands at %+v, want %+v",
+			answered[1].Points[0], declared[1].Points[0])
 	}
 }
 

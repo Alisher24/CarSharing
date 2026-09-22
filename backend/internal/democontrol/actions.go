@@ -1,12 +1,12 @@
 package democontrol
 
 import (
-	"encoding/json"
-	"flag"
 	"fmt"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/Alisher24/CarSharing/backend/internal/demoaction"
 )
 
 // Field is one value a demonstration action states. It is spelled the way the request carries it, so
@@ -48,7 +48,8 @@ const (
 	Point
 )
 
-// Flag is one name a terminal states a value under, together with what the terminal says about it.
+// Flag is one name a terminal states a value under. What the flag states is not repeated here: a
+// word's hint is the words themselves, and every other flag says what it carries.
 type Flag struct {
 	Name string
 	Hint string
@@ -63,7 +64,8 @@ type Value struct {
 	// Kind is how the value is written in that field.
 	Kind Kind
 
-	// Words are the words a Word may be, in the order a terminal offers them.
+	// Words are the words a Word may be, in the order a terminal offers them. They are both what a
+	// statement is checked against and what a terminal says about the flag that states it.
 	Words []string
 
 	// Flags are the terminal's own names for the value, one for every number it is made of: a point
@@ -77,9 +79,9 @@ type Value struct {
 // Action is one set-to-value command of the demonstration, declared once for both the terminal that
 // states it and the surface that applies it.
 type Action struct {
-	// Name is the identifier the contract publishes for the action, which is also the word the
-	// internal surface dispatches on and the kind the module applies.
-	Name string
+	// Kind is the change the action makes: the identifier the contract publishes and the word the
+	// module applies.
+	Kind demoaction.Kind
 
 	// Values are what the action states, in the order a terminal names them.
 	Values []Value
@@ -98,14 +100,14 @@ func (a Action) Command() string {
 	if a.Terminal != "" {
 		return a.Terminal
 	}
-	return strings.ReplaceAll(a.Name, "_", "-")
+	return strings.ReplaceAll(string(a.Kind), "_", "-")
 }
 
 // actions is every set-to-value command this build applies, declared once. A new command is a new row:
 // the terminal's flags and usage line and the surface's reading of a request all follow from it.
 var actions = [...]Action{
 	{
-		Name: "set_telemetry_state",
+		Kind: demoaction.SetTelemetryState,
 		Values: []Value{
 			{
 				Field:  VehicleIDField,
@@ -118,12 +120,12 @@ var actions = [...]Action{
 				Kind:   Word,
 				Words:  []string{"online", "offline"},
 				Needed: true,
-				Flags:  []Flag{{Name: "state", Hint: "online or offline"}},
+				Flags:  []Flag{{Name: "state"}},
 			},
 		},
 	},
 	{
-		Name: "set_position",
+		Kind: demoaction.SetPosition,
 		Values: []Value{
 			{
 				Field:  VehicleIDField,
@@ -143,7 +145,7 @@ var actions = [...]Action{
 		},
 	},
 	{
-		Name: "set_energy_remaining",
+		Kind: demoaction.SetEnergyRemaining,
 		Values: []Value{
 			{
 				Field:  VehicleIDField,
@@ -153,9 +155,10 @@ var actions = [...]Action{
 			},
 			{
 				Field:  SourceKindField,
-				Kind:   Text,
+				Kind:   Word,
+				Words:  []string{"battery", "gasoline", "diesel", "lpg", "cng"},
 				Needed: true,
-				Flags:  []Flag{{Name: "source", Hint: "battery, gasoline, diesel, lpg or cng"}},
+				Flags:  []Flag{{Name: "source"}},
 			},
 			{
 				Field:  RemainingField,
@@ -166,7 +169,7 @@ var actions = [...]Action{
 		},
 	},
 	{
-		Name: "mark_serviced",
+		Kind: demoaction.MarkServiced,
 		Values: []Value{
 			{
 				Field:  VehicleIDField,
@@ -177,7 +180,7 @@ var actions = [...]Action{
 		},
 	},
 	{
-		Name: "set_next_payment_outcome",
+		Kind: demoaction.SetNextPaymentOutcome,
 		Values: []Value{
 			{
 				Field:  RentalIDField,
@@ -190,12 +193,12 @@ var actions = [...]Action{
 				Kind:   Word,
 				Words:  []string{"paid", "failed"},
 				Needed: true,
-				Flags:  []Flag{{Name: "outcome", Hint: "paid or failed"}},
+				Flags:  []Flag{{Name: "outcome"}},
 			},
 		},
 	},
 	{
-		Name:     "drop_next_response_after_accept",
+		Kind:     demoaction.DropNextResponseAfterAccept,
 		Terminal: "drop-next-response",
 		Mail:     true,
 	},
@@ -206,7 +209,7 @@ func Actions() []Action { return slices.Clone(actions[:]) }
 
 // ActionOf answers the action the contract names, and reports whether this build applies it.
 func ActionOf(name string) (Action, bool) {
-	return actionMatching(func(action Action) bool { return action.Name == name })
+	return actionMatching(func(action Action) bool { return string(action.Kind) == name })
 }
 
 // ActionNamed answers the action a terminal names, and reports whether this build applies it.
@@ -233,150 +236,6 @@ func Commands() []string {
 	return commands
 }
 
-// Declare declares one flag for every value of the action on a terminal's flag set, under the names
-// and with the hints this declaration states. The order is the order the values are declared in, so a
-// terminal's flags read in the order its usage line does.
-func (a Action) Declare(flags *flag.FlagSet) {
-	for _, value := range a.Values {
-		for _, named := range value.Flags {
-			flags.String(named.Name, "", named.Hint)
-		}
-	}
-}
-
-// StatedOf reads what a terminal stated of the action out of the flags that were declared for it. A
-// flag that was not named reads as the empty string, which is how a value the action needs is told
-// from one that was stated.
-func (a Action) StatedOf(flags *flag.FlagSet) map[Field][]string {
-	stated := make(map[Field][]string, len(a.Values))
-	for _, value := range a.Values {
-		for _, named := range value.Flags {
-			stated[value.Field] = append(stated[value.Field], flags.Lookup(named.Name).Value.String())
-		}
-	}
-	return stated
-}
-
-// Request writes what a terminal stated as the request the contract receives: the action it is, and
-// every value it carries under the field the contract puts it in. A value the action needs that was
-// not stated, and a word outside the declared set, are refused here rather than by the surface.
-func (a Action) Request(stated map[Field][]string) (Request, error) {
-	request := Request{ActionField: a.Name}
-	for _, value := range a.Values {
-		given := stated[value.Field]
-		if !value.Needed && !slices.ContainsFunc(given, statedText) {
-			continue
-		}
-		packed, err := value.Pack(given)
-		if err != nil {
-			return nil, err
-		}
-		request[string(value.Field)] = packed
-	}
-	return request, nil
-}
-
-func statedText(text string) bool { return text != "" }
-
-// Stated is one demonstration request as a surface reads it: the action it names, the identifier the
-// command is remembered by, and what each value of that action stated.
-type Stated struct {
-	Action   string
-	ActionID string
-	Values   map[Field][]string
-}
-
-// Read reads one request body as the action it names together with what that action's values stated.
-// A body naming an action this build does not apply, or stating a value in a shape the declaration
-// does not allow, is refused rather than half-read.
-func Read(body []byte) (Stated, error) {
-	var request map[string]any
-	if err := json.Unmarshal(body, &request); err != nil {
-		return Stated{}, fmt.Errorf("a demonstration request is an object: %w", err)
-	}
-	action, err := statedAction(request)
-	if err != nil {
-		return Stated{}, err
-	}
-	stated := Stated{Action: action.Name, Values: map[Field][]string{}}
-	stated.ActionID, _ = request[ActionIDField].(string)
-	for _, value := range action.Values {
-		carried, declared := request[string(value.Field)]
-		if !declared || carried == nil {
-			if value.Needed {
-				return Stated{}, fmt.Errorf("the %s action states %s", action.Name, value.Field)
-			}
-			continue
-		}
-		values, err := value.Unpack(carried)
-		if err != nil {
-			return Stated{}, err
-		}
-		stated.Values[value.Field] = values
-	}
-	return stated, nil
-}
-
-func statedAction(request map[string]any) (Action, error) {
-	name, _ := request[ActionField].(string)
-	action, known := ActionOf(name)
-	if !known {
-		return Action{}, fmt.Errorf("the demonstration action %q is not one this build applies", name)
-	}
-	return action, nil
-}
-
-// Pack writes what a terminal stated as the field the request carries. A value the action needs that
-// was not stated, a word outside the declared set and a number that is not one are refused here, so
-// the terminal judges a statement by the declaration the surface reads it with.
-func (v Value) Pack(stated []string) (any, error) {
-	checked, err := v.checked(stated)
-	if err != nil {
-		return nil, err
-	}
-	if v.Kind != Point {
-		return checked[0], nil
-	}
-	numbers := make([]any, 0, len(checked))
-	for _, number := range checked {
-		parsed, err := strconv.ParseFloat(number, 64)
-		if err != nil {
-			return nil, fmt.Errorf("%s is a number: %w", v.statedAs(), err)
-		}
-		numbers = append(numbers, parsed)
-	}
-	return map[string]any{"type": "Point", "coordinates": numbers}, nil
-}
-
-// Unpack reads the field of a request back as what a terminal stated, so the surface applies an action
-// by the declaration the terminal wrote it with.
-func (v Value) Unpack(carried any) ([]string, error) {
-	if v.Kind != Point {
-		text, isText := carried.(string)
-		if !isText {
-			return nil, fmt.Errorf("the %s of a demonstration request is text", v.Field)
-		}
-		return v.checked([]string{text})
-	}
-	point, isPoint := carried.(map[string]any)
-	if !isPoint {
-		return nil, fmt.Errorf("the %s of a demonstration request is a point", v.Field)
-	}
-	coordinates, areCoordinates := point["coordinates"].([]any)
-	if !areCoordinates || len(coordinates) != len(v.Flags) {
-		return nil, fmt.Errorf("the %s of a demonstration request is a point", v.Field)
-	}
-	stated := make([]string, 0, len(coordinates))
-	for _, coordinate := range coordinates {
-		number, isNumber := coordinate.(float64)
-		if !isNumber {
-			return nil, fmt.Errorf("the %s of a demonstration request is a point", v.Field)
-		}
-		stated = append(stated, strconv.FormatFloat(number, 'f', -1, 64))
-	}
-	return v.checked(stated)
-}
-
 // checked refuses what either side must refuse: a value made of the wrong number of numbers, one the
 // action cannot be applied without that was not stated, and a value of the wrong kind.
 func (v Value) checked(stated []string) ([]string, error) {
@@ -393,7 +252,7 @@ func (v Value) checkKind(stated []string) error {
 	switch v.Kind {
 	case Word:
 		if !slices.Contains(v.Words, stated[0]) {
-			return fmt.Errorf("%s is %s", v.statedAs(), strings.Join(v.Words, " or "))
+			return fmt.Errorf("%s is %s", v.statedAs(), v.words())
 		}
 	case Number:
 		if _, err := strconv.ParseFloat(stated[0], 64); err != nil {
@@ -410,4 +269,20 @@ func (v Value) statedAs() string {
 		names = append(names, "--"+flag.Name)
 	}
 	return strings.Join(names, ", ")
+}
+
+// hintOf is what a terminal says about one flag: the words a word may be, or what the flag carries.
+func (v Value) hintOf(flag Flag) string {
+	if v.Kind == Word {
+		return v.words()
+	}
+	return flag.Hint
+}
+
+// words spells the set a word may come from the way a person reads a list.
+func (v Value) words() string {
+	if len(v.Words) < 2 {
+		return strings.Join(v.Words, "")
+	}
+	return strings.Join(v.Words[:len(v.Words)-1], ", ") + " or " + v.Words[len(v.Words)-1]
 }
