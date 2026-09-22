@@ -96,6 +96,31 @@ func TestACommandWithoutAValueItNeedsIsRefusedByTheTerminal(t *testing.T) {
 	}
 }
 
+// A row is complete only if every value it declares can be stated and checked: a word declares the
+// words it may be, a point declares the two numbers it is made of, and every value names the flag a
+// terminal states it with.
+func TestEveryValueDeclaresWhatItTakes(t *testing.T) {
+	for _, action := range democontrol.Actions() {
+		for _, value := range action.Values {
+			if len(value.Flags) == 0 {
+				t.Errorf("the %s of the %s action names no flag", value.Field, action.Kind)
+			}
+			switch value.Kind {
+			case democontrol.Word:
+				if len(value.Words) == 0 {
+					t.Errorf("the %s of the %s action is a word with no words",
+						value.Field, action.Kind)
+				}
+			case democontrol.Point:
+				if len(value.Flags) != 2 {
+					t.Errorf("the %s of the %s action is a point of %d numbers",
+						value.Field, action.Kind, len(value.Flags))
+				}
+			}
+		}
+	}
+}
+
 // The two names of an action cannot collide with those of another: a terminal finds exactly one command
 // to apply, and the surface exactly one action to read.
 func TestEveryActionHasItsOwnTwoNames(t *testing.T) {
