@@ -67,6 +67,11 @@ tests run without the stack, and `npm test` runs all of them.
 
 ## The gates
 
+- The shell gates are POSIX `sh`: `/bin/sh` is dash on Debian and Ubuntu, and dash refuses
+  `set -o pipefail`, so the scripts state `set -eu` and keep no pipeline whose earlier command could
+  fail unseen — the one pipeline they had, the checksum comparison in `install-gitleaks.sh`, reads a
+  file instead. A pipeline that comes back needs its failure named rather than an option the shell
+  does not have.
 - `format-staged.mjs` is what `.githooks/pre-commit` runs: staged files (`--diff-filter=ACMR`, so a
   deletion is never reformatted) through the Prettier resolved from the repository's own
   `node_modules`, never a globally installed one, honouring `.prettierignore`.

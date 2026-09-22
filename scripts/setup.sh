@@ -1,5 +1,5 @@
 #!/bin/sh
-set -euo pipefail
+set -eu
 project_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 # The image carries Git as well as Node: the setup it runs installs the pre-commit gate of the working
 # copy it is given, and that is a setting of the copy, which only Git can write.
