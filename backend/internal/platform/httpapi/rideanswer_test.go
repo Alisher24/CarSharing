@@ -93,11 +93,11 @@ func TestEveryRefusalKindIsSpelled(t *testing.T) {
 		rentals.InvoiceNotFound,
 	}
 	for _, kind := range kinds {
-		if _, _, _, err := refusalContract(rentals.Refusal{Kind: kind}); err != nil {
+		if _, _, _, err := refusalContract(rentals.Refusal{Kind: kind}, publicRefusals); err != nil {
 			t.Errorf("the %s refusal is not spelled: %v", kind, err)
 		}
 	}
-	if _, _, _, err := refusalContract(rentals.Refusal{}); err == nil {
+	if _, _, _, err := refusalContract(rentals.Refusal{}, publicRefusals); err == nil {
 		t.Error("a refusal of no kind is spelled rather than reported")
 	}
 }

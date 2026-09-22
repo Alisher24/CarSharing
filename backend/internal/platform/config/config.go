@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/hashing"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/ratelimit"
 )
@@ -110,19 +111,10 @@ const (
 	defaultArgon2Concurrent  = 2
 )
 
-// Database is the address and credential a process uses to reach PostgreSQL.
-type Database struct {
-	Host     string
-	Port     uint16
-	Name     string
-	User     string
-	Password string
-}
-
 // Config is everything an application process is told about the installation it runs in.
 type Config struct {
 	HTTPAddr string
-	Database Database
+	Database database.Settings
 
 	Environment Environment
 
@@ -198,28 +190,28 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
-func loadDatabase() (Database, error) {
-	database := Database{
+func loadDatabase() (database.Settings, error) {
+	settings := database.Settings{
 		Host: envOrDefault("DB_HOST", "postgres"),
 		Name: envOrDefault("DB_NAME", "carsharing"),
 		User: envOrDefault("DB_USER", "carsharing_app"),
 	}
 	port, err := strconv.ParseUint(envOrDefault("DB_PORT", "5432"), 10, 16)
 	if err != nil || port == 0 {
-		return Database{}, errors.New("DB_PORT must be between 1 and 65535")
+		return database.Settings{}, errors.New("DB_PORT must be between 1 and 65535")
 	}
-	database.Port = uint16(port)
+	settings.Port = uint16(port)
 	if os.Getenv(DatabasePasswordFileVariable) == "" {
-		return Database{}, errors.New(DatabasePasswordFileVariable + " is required")
+		return database.Settings{}, errors.New(DatabasePasswordFileVariable + " is required")
 	}
-	database.Password, err = secretFromFile(DatabasePasswordFileVariable)
+	settings.Password, err = secretFromFile(DatabasePasswordFileVariable)
 	if err != nil {
-		return Database{}, err
+		return database.Settings{}, err
 	}
-	if len(database.Password) < minPasswordLength {
-		return Database{}, errors.New(minPasswordLengthMessage)
+	if len(settings.Password) < minPasswordLength {
+		return database.Settings{}, errors.New(minPasswordLengthMessage)
 	}
-	return database, nil
+	return settings, nil
 }
 
 func loadSessionCookieSecure() (bool, error) {

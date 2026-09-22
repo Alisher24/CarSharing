@@ -8,6 +8,7 @@ import (
 	"context"
 	"flag"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -33,7 +34,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	client, err := simulator.NewClient(cfg.APIURL, cfg.Token)
+	client, err := simulator.NewClient(cfg.APIURL, cfg.Token, http.DefaultTransport)
 	if err != nil {
 		return err
 	}

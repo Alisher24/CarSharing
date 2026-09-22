@@ -11,6 +11,7 @@ import (
 
 	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
 	"github.com/Alisher24/CarSharing/backend/internal/events"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/httpheader"
 )
 
 // The two streaming operations, declared by the contract as `text/event-stream`. What a stream
@@ -53,13 +54,13 @@ func TestAServedStreamWritesTheHandshakeAsItIsProduced(t *testing.T) {
 	if stream.Code != http.StatusOK {
 		t.Fatalf("status = %d: %s", stream.Code, stream.Body.String())
 	}
-	if got := stream.Header().Get(contentTypeHeader); got != streamMediaType {
+	if got := stream.Header().Get(httpheader.ContentType); got != streamMediaType {
 		t.Fatalf("content type = %q", got)
 	}
 	if got := stream.Header().Get(cacheControlHeader); got != noStoreCacheControl {
 		t.Fatalf("cache control = %q", got)
 	}
-	if stream.Header().Get(requestIDHeader) == "" {
+	if stream.Header().Get(httpheader.RequestID) == "" {
 		t.Fatal("the stream states no request identifier")
 	}
 	if stream.Body.String() != string(handshake) {
@@ -74,7 +75,7 @@ func TestThePrivateStreamRefusesACallerWithoutASession(t *testing.T) {
 	if refused.Code != http.StatusUnauthorized || !hasErrorCode(refused, "AUTHENTICATION_REQUIRED") {
 		t.Fatalf("status = %d: %s", refused.Code, refused.Body.String())
 	}
-	if refused.Header().Get(contentTypeHeader) != jsonMediaType {
+	if refused.Header().Get(httpheader.ContentType) != httpheader.JSON {
 		t.Fatal("a refused stream did not answer with the error contract")
 	}
 }
@@ -130,7 +131,7 @@ func testStreamRouter(t *testing.T, hub EventStream) http.Handler {
 	served := server{
 		health:          health{probe: readyProbe},
 		catalogHandlers: handlers,
-		streams:         streams{hub: hub},
+		streams:         streams{timing: events.DefaultStreamTiming(), hub: hub},
 	}
 	policy := Policy{AllowedOrigins: map[string]bool{}, Authenticate: refuseCredentials}
 	strict := servedapi.NewStrictHandlerWithOptions(served, nil, strictErrorHandlers())

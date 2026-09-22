@@ -10,6 +10,7 @@ import (
 
 	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
 	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/cursor"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals"
 	"github.com/google/uuid"
 )
@@ -105,7 +106,7 @@ type Reservations interface {
 	Reserve(ctx context.Context, command rentals.ReserveCommand) (rentals.Answered, error)
 	Cancel(ctx context.Context, command rentals.CancelCommand) (rentals.Answered, error)
 	Current(ctx context.Context, caller uuid.UUID) (rentals.Current, error)
-	Rides(ctx context.Context, caller uuid.UUID, after *rentals.RidePosition, limit int) (rentals.RidePage, error)
+	Rides(ctx context.Context, caller uuid.UUID, after *cursor.Position, limit int) (rentals.RidePage, error)
 
 	// The ride commands move a rental between a reservation, a driving ride and a paused one, the
 	// finish ends it and issues the invoice, and the payment settles that invoice. They belong to the
@@ -247,4 +248,10 @@ func cancelAttempt(ctx context.Context, key idempotency.Key, fingerprint idempot
 			return cancelRender(ctx, outcome)
 		},
 	}
+}
+
+func registerReservationHandlers(served *server, dependencies Dependencies) error {
+	var err error
+	served.reservationHandlers, err = newReservationHandlers(dependencies.Reservations)
+	return err
 }

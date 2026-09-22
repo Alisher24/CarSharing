@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/httpheader"
 )
 
 func TestRoutingErrorsUseTheAPIErrorContract(t *testing.T) {
@@ -32,7 +33,7 @@ func TestRoutingErrorsUseTheAPIErrorContract(t *testing.T) {
 			if w.Code != tc.status || body.Code != tc.code {
 				t.Fatalf("%d %s", w.Code, w.Body.String())
 			}
-			if body.RequestID == "" || body.RequestID != w.Header().Get(requestIDHeader) {
+			if body.RequestID == "" || body.RequestID != w.Header().Get(httpheader.RequestID) {
 				t.Fatal("request IDs disagree")
 			}
 			if w.Header().Get(cacheControlHeader) != noStoreCacheControl {

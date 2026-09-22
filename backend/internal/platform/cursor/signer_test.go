@@ -26,8 +26,8 @@ var owner = uuid.MustParse("01994342-6ba7-7000-8000-000000000001")
 // The moment every position below is taken from, and two positions inside one collection.
 var (
 	positionMoment = time.Date(2026, time.September, 12, 7, 15, 30, 123456000, time.UTC)
-	middlePosition = Position{CreatedAt: positionMoment, ID: "01994342-6ba7-7000-8000-000000000010"}
-	lastPosition   = Position{CreatedAt: positionMoment, ID: "01994342-6ba7-7000-8000-000000000020"}
+	middlePosition = Position{Moment: positionMoment, ID: "01994342-6ba7-7000-8000-000000000010"}
+	lastPosition   = Position{Moment: positionMoment, ID: "01994342-6ba7-7000-8000-000000000020"}
 )
 
 func scopeOf(limit string) Scope {
@@ -74,9 +74,9 @@ func TestIssueAndReadRoundTrip(t *testing.T) {
 		if err != nil {
 			t.Fatalf("the issued cursor was refused: %v", err)
 		}
-		if !read.CreatedAt.Equal(positionMoment) || read.ID != position.ID {
+		if !read.Moment.Equal(positionMoment) || read.ID != position.ID {
 			t.Fatalf("the cursor reads %s at %s rather than %s at %s",
-				read.ID, timestamp.Format(read.CreatedAt), position.ID, timestamp.Format(positionMoment))
+				read.ID, timestamp.Format(read.Moment), position.ID, timestamp.Format(positionMoment))
 		}
 	}
 }
@@ -201,7 +201,7 @@ func TestIssueRefusesAnIncompleteScopeOrPosition(t *testing.T) {
 		scope    Scope
 	}{
 		"no moment":     {Position{ID: middlePosition.ID}, scopeOf("20")},
-		"no identifier": {Position{CreatedAt: positionMoment}, scopeOf("20")},
+		"no identifier": {Position{Moment: positionMoment}, scopeOf("20")},
 		"no operation":  {middlePosition, OperationOn("", owner, Parameter{Name: "limit", Value: "20"})},
 		"no account":    {middlePosition, OperationOn(operation, uuid.Nil, Parameter{Name: "limit", Value: "20"})},
 		"no name":       {middlePosition, OperationOn(operation, owner, Parameter{Value: "20"})},

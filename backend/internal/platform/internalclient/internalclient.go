@@ -15,12 +15,17 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/Alisher24/CarSharing/backend/internal/platform/httpheader"
 )
 
 // Settings are the bounds one caller places on its calls. A call is a short request inside a larger
 // piece of work, so a caller whose work has a deadline of its own gives a call less than that
 // deadline rather than as much as it can.
 type Settings struct {
+	// Transport is supplied by process assembly, including the transport used by deadline tests.
+	Transport http.RoundTripper
+
 	// Timeout bounds one call from the first byte sent to the last byte read.
 	Timeout time.Duration
 
@@ -41,6 +46,9 @@ type Client struct {
 // answer-size bounds of a call: a caller that was given no address would call nothing, and a caller
 // without a token would be refused on every call.
 func New(baseURL, token string, settings Settings) (*Client, error) {
+	if settings.Transport == nil {
+		return nil, errors.New("the internal client must be given an HTTP transport")
+	}
 	if baseURL == "" {
 		return nil, errors.New("the internal client must be told the address it calls")
 	}
@@ -54,7 +62,7 @@ func New(baseURL, token string, settings Settings) (*Client, error) {
 		return nil, errors.New("the internal client must be told how much of an answer it reads")
 	}
 	return &Client{
-		http:           &http.Client{Timeout: settings.Timeout},
+		http:           &http.Client{Timeout: settings.Timeout, Transport: settings.Transport},
 		baseURL:        baseURL,
 		token:          token,
 		maxAnswerBytes: settings.MaxAnswerBytes,
@@ -90,8 +98,8 @@ func (c *Client) Post(ctx context.Context, call Call) (Answer, error) {
 	if err != nil {
 		return Answer{}, err
 	}
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Authorization", "Bearer "+c.token)
+	request.Header.Set(httpheader.ContentType, httpheader.JSON)
+	request.Header.Set(httpheader.Authorization, httpheader.BearerPrefix+c.token)
 	for name, value := range call.Headers {
 		request.Header.Set(name, value)
 	}

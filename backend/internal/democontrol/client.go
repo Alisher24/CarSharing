@@ -33,8 +33,8 @@ type Client struct{ call *internalclient.Client }
 
 // NewClient assembles the client over one address and one credential. Both are required: a client
 // without them would call the operation as an anonymous request and be refused.
-func NewClient(baseURL, token string) (*Client, error) {
-	call, err := internalclient.New(baseURL, token, internalclient.Settings{
+func NewClient(baseURL, token string, transport http.RoundTripper) (*Client, error) {
+	call, err := internalclient.New(baseURL, token, internalclient.Settings{Transport: transport,
 		Timeout:        RequestTimeout,
 		MaxAnswerBytes: maxAnswerBytes,
 	})

@@ -57,8 +57,8 @@ var signatureLength = base64.RawURLEncoding.EncodedLen(sha256.Size)
 // record rather than from the answer, so the page after a cursor continues exactly after the item
 // the cursor was taken from.
 type Position struct {
-	// CreatedAt is the moment the last item of the previous page was created.
-	CreatedAt time.Time
+	// Moment is the timestamp column the collection sorts by.
+	Moment time.Time
 
 	// ID is that item's identifier, which breaks ties between items created at the same moment.
 	ID string
@@ -187,7 +187,7 @@ func (s *Signer) payload(position Position, scope Scope) ([]byte, error) {
 	if err := scope.validate(); err != nil {
 		return nil, err
 	}
-	if position.CreatedAt.IsZero() {
+	if position.Moment.IsZero() {
 		return nil, errors.New("a cursor needs the moment of the position it reads after")
 	}
 	if err := validIdentifier("a cursor position identifier", position.ID); err != nil {
@@ -199,7 +199,7 @@ func (s *Signer) payload(position Position, scope Scope) ([]byte, error) {
 	}
 	return json.Marshal(payload{
 		Version:   version,
-		CreatedAt: timestamp.Format(position.CreatedAt),
+		CreatedAt: timestamp.Format(position.Moment),
 		ID:        position.ID,
 		Operation: scope.operation,
 		Owner:     scope.ownerText(),
@@ -228,16 +228,9 @@ func (s *Signer) signature(encodedPayload string) string {
 }
 
 // parsePayload reads a payload this signer has already verified.
-func parsePayload(payload []byte) (Position, Scope, error) {
-	var carried struct {
-		Version   int               `json:"v"`
-		CreatedAt string            `json:"t"`
-		ID        string            `json:"id"`
-		Operation string            `json:"op"`
-		Owner     string            `json:"sub"`
-		Params    map[string]string `json:"q"`
-	}
-	if err := json.Unmarshal(payload, &carried); err != nil {
+func parsePayload(encoded []byte) (Position, Scope, error) {
+	var carried payload
+	if err := json.Unmarshal(encoded, &carried); err != nil {
 		return Position{}, Scope{}, ErrMalformed
 	}
 	if carried.Version != version {
@@ -257,7 +250,7 @@ func parsePayload(payload []byte) (Position, Scope, error) {
 	if err := scope.validate(); err != nil {
 		return Position{}, Scope{}, ErrMalformed
 	}
-	return Position{CreatedAt: moment, ID: carried.ID}, scope, nil
+	return Position{Moment: moment, ID: carried.ID}, scope, nil
 }
 
 // readScope reads the scope one payload carries. An empty owner is an anonymous collection rather

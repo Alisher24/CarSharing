@@ -54,7 +54,7 @@ type MailActions interface {
 // MailInbox is what the two read operations need of the box: one letter, and one page of them.
 type MailInbox interface {
 	ByID(ctx context.Context, id string) (mailstub.Message, error)
-	ReadPage(ctx context.Context, after *mailstub.Position, limit int) (mailstub.Page, error)
+	ReadPage(ctx context.Context, after *cursor.Position, limit int) (mailstub.Page, error)
 }
 
 // MailstubInternalDependencies is what the internal listener of the mail stub is served over: the two

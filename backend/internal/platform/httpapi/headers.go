@@ -9,16 +9,12 @@ const (
 	csrfTokenHeader          = "X-CSRF-Token"
 	idempotencyKeyHeader     = "Idempotency-Key"
 	deliveryKeyHeader        = "Delivery-Key"
-	authorizationHeader      = "Authorization"
-	contentTypeHeader        = "Content-Type"
-	requestIDHeader          = "X-Request-ID"
 	cacheControlHeader       = "Cache-Control"
 	contentTypeOptionsHeader = "X-Content-Type-Options"
 	contentSecurityHeader    = "Content-Security-Policy"
 
 	noStoreCacheControl      = "no-store"
 	nosniffContentTypeOption = "nosniff"
-	jsonMediaType            = "application/json"
 	htmlMediaType            = "text/html; charset=utf-8"
 	streamMediaType          = "text/event-stream"
 )

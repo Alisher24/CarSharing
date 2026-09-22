@@ -3,6 +3,8 @@ package config
 import (
 	"errors"
 	"os"
+
+	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 )
 
 // The settings the mail stub process reads beyond the database it connects to. Each has one owner:
@@ -44,7 +46,7 @@ func MailstubInboxAddrFromEnvironment() string {
 // capabilities the API does not have and serves a listener the API does not publish: a loader that
 // handed it the API's shape would name settings it never reads.
 type MailstubServer struct {
-	Database    Database
+	Database    database.Settings
 	Environment Environment
 
 	// InternalAddr is the listener the contract's internal operations are served on. It is the

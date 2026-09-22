@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/Alisher24/CarSharing/backend/internal/auth"
+	"github.com/Alisher24/CarSharing/backend/internal/events"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/cursor"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/sessions"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -31,7 +32,8 @@ type Dependencies struct {
 	// Events is the fan-out of the changes the streams this process serves write out. Only the
 	// full application serves them: a router built for the health probe and the routing tests is
 	// given an implementation that refuses every stream instead.
-	Events EventStream
+	Events       EventStream
+	StreamTiming events.StreamTiming
 
 	// Reservations is the account's own rentals: the commands that move one, the ride commands that
 	// start, pause and continue it, the read that answers what is current, and the history of the

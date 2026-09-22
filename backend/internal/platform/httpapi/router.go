@@ -30,59 +30,24 @@ func NewAnonymousRouter(probe ReadinessProbe, catalog Catalog) (http.Handler, er
 // NewHandler builds the router this process serves. It reports the dependencies it was not given
 // rather than deferring the failure to the first request that reaches one.
 func NewHandler(dependencies Dependencies) (http.Handler, error) {
-	accounts, err := newAccounts(dependencies)
-	if err != nil {
-		return nil, err
+	served := server{health: health{probe: dependencies.Probe}}
+	for _, register := range []func(*server, Dependencies) error{
+		registerAccounts,
+		registerCatalogHandlers,
+		registerReservationHandlers,
+		registerRideHandlers,
+		registerFinishHandlers,
+		registerPayHandlers,
+		registerNotificationHandlers,
+		registerRideCollectionHandlers,
+		registerInvoiceHandlers,
+		registerStreams,
+	} {
+		if err := register(&served, dependencies); err != nil {
+			return nil, err
+		}
 	}
-	handlers, err := newCatalogHandlers(dependencies.Catalog)
-	if err != nil {
-		return nil, err
-	}
-	reservations, err := newReservationHandlers(dependencies.Reservations)
-	if err != nil {
-		return nil, err
-	}
-	rides, err := newRideHandlers(dependencies.Reservations)
-	if err != nil {
-		return nil, err
-	}
-	finishes, err := newFinishHandlers(dependencies.Reservations)
-	if err != nil {
-		return nil, err
-	}
-	payments, err := newPayHandlers(dependencies.Reservations)
-	if err != nil {
-		return nil, err
-	}
-	notifications, err := newNotificationHandlers(dependencies.Notifications, dependencies.Cursors)
-	if err != nil {
-		return nil, err
-	}
-	rideCollection, err := newRideCollectionHandlers(dependencies.Reservations, dependencies.Cursors)
-	if err != nil {
-		return nil, err
-	}
-	invoices, err := newInvoiceHandlers(dependencies.Invoices, dependencies.Cursors)
-	if err != nil {
-		return nil, err
-	}
-	streaming, err := newStreams(dependencies.Events, dependencies.Sessions)
-	if err != nil {
-		return nil, err
-	}
-	served := server{
-		health:                 health{probe: dependencies.Probe},
-		accounts:               accounts,
-		catalogHandlers:        handlers,
-		reservationHandlers:    reservations,
-		rideHandlers:           rides,
-		finishHandlers:         finishes,
-		payHandlers:            payments,
-		notificationHandlers:   notifications,
-		rideCollectionHandlers: rideCollection,
-		invoiceHandlers:        invoices,
-		streams:                streaming,
-	}
+
 	strict := servedapi.NewStrictHandlerWithOptions(served, nil, strictErrorHandlers())
 	policy := Policy{
 		AllowedOrigins: originSet(dependencies.AllowedOrigins),

@@ -13,6 +13,7 @@ import (
 	mailstubapi "github.com/Alisher24/CarSharing/backend/internal/contracts/mailstubapi"
 	publicapi "github.com/Alisher24/CarSharing/backend/internal/contracts/publicapi"
 	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/httpheader"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
 )
@@ -44,7 +45,7 @@ const (
 func contractRouter(t *testing.T, spec *openapi3.T) http.Handler {
 	t.Helper()
 	return Boundary(spec, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set(contentTypeHeader, jsonMediaType)
+		w.Header().Set(httpheader.ContentType, httpheader.JSON)
 		w.WriteHeader(http.StatusNoContent)
 	}), Policy{
 		AllowedOrigins: originSet([]string{testOrigin}),
@@ -78,7 +79,7 @@ func TestCommandAndPaginationRequestBoundaries(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
-			r.Header.Set(contentTypeHeader, jsonMediaType)
+			r.Header.Set(httpheader.ContentType, httpheader.JSON)
 			r.Header.Set(originHeader, testOrigin)
 			r.Header.Set(csrfTokenHeader, "example-csrf-value")
 			if tc.key != "" {
@@ -106,7 +107,7 @@ func TestDemoPositionRejectsLatitudeOutsideWGS84(t *testing.T) {
 		"position": {"type": "Point", "coordinates": [74.6, 91]}
 	}`
 	r := httptest.NewRequest("POST", "/internal/v1/demo/actions", strings.NewReader(body))
-	r.Header.Set(contentTypeHeader, jsonMediaType)
+	r.Header.Set(httpheader.ContentType, httpheader.JSON)
 	w := httptest.NewRecorder()
 	contractRouter(t, spec).ServeHTTP(w, r)
 	if w.Code != 422 || !strings.Contains(w.Body.String(), `/position/coordinates/1`) {
@@ -150,7 +151,7 @@ func TestInternalContractsAuthenticateBeforePayloadAndUseLargerBodyLimit(t *test
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					r := httptest.NewRequest("POST", contract.path, strings.NewReader(tc.body))
-					r.Header.Set(contentTypeHeader, jsonMediaType)
+					r.Header.Set(httpheader.ContentType, httpheader.JSON)
 					r.Header.Set("Authorization", tc.token)
 					r.Header.Set(deliveryKeyHeader, "invoice:"+resourceID+":issued")
 					w := httptest.NewRecorder()
@@ -174,20 +175,20 @@ func TestSessionContractReportsRequestErrors(t *testing.T) {
 		name, body, media, requestID, code string
 		status                             int
 	}{
-		{"malformed JSON", `{"email":`, jsonMediaType, "", "MALFORMED_JSON", 400},
-		{"unknown field", registerUnknownFieldBody, jsonMediaType, "", "VALIDATION_FAILED", 422},
-		{"missing fields", `{}`, jsonMediaType, "", "VALIDATION_FAILED", 422},
-		{"absent body", ``, jsonMediaType, "", "VALIDATION_FAILED", 422},
-		{"invalid header", registerBody, jsonMediaType, "has a space", "INVALID_HEADER", 400},
+		{"malformed JSON", `{"email":`, httpheader.JSON, "", "MALFORMED_JSON", 400},
+		{"unknown field", registerUnknownFieldBody, httpheader.JSON, "", "VALIDATION_FAILED", 422},
+		{"missing fields", `{}`, httpheader.JSON, "", "VALIDATION_FAILED", 422},
+		{"absent body", ``, httpheader.JSON, "", "VALIDATION_FAILED", 422},
+		{"invalid header", registerBody, httpheader.JSON, "has a space", "INVALID_HEADER", 400},
 		{"media type", `{}`, "text/plain", "", "UNSUPPORTED_MEDIA_TYPE", 415},
-		{"body limit", strings.Repeat("x", 64<<10+1), jsonMediaType, "", "BODY_TOO_LARGE", 413},
+		{"body limit", strings.Repeat("x", 64<<10+1), httpheader.JSON, "", "BODY_TOO_LARGE", 413},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := httptest.NewRequest("POST", registerPath, strings.NewReader(tc.body))
-			r.Header.Set(contentTypeHeader, tc.media)
+			r.Header.Set(httpheader.ContentType, tc.media)
 			r.Header.Set(originHeader, testOrigin)
 			if tc.requestID != "" {
-				r.Header.Set(requestIDHeader, tc.requestID)
+				r.Header.Set(httpheader.RequestID, tc.requestID)
 			}
 			w := httptest.NewRecorder()
 			handler.ServeHTTP(w, r)
@@ -204,7 +205,7 @@ func TestSessionContractReportsRequestErrors(t *testing.T) {
 			if w.Code != tc.status || body.Code != tc.code {
 				t.Fatalf("got %d %s", w.Code, w.Body.String())
 			}
-			if body.RequestID == "" || body.RequestID != w.Header().Get(requestIDHeader) {
+			if body.RequestID == "" || body.RequestID != w.Header().Get(httpheader.RequestID) {
 				t.Fatal("request ID mismatch")
 			}
 			if w.Header().Get(cacheControlHeader) != noStoreCacheControl {

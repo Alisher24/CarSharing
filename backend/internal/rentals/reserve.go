@@ -49,7 +49,7 @@ func (s *Service) answer(
 ) (Answered, error) {
 	var answered Answered
 	err := transact(ctx, s.pool, discover, func(txCtx context.Context, tx pgx.Tx, moment time.Time) error {
-		claim, err := s.results.Claim(txCtx, owner, attempt.Key, attempt.Fingerprint)
+		claim, err := idempotency.ClaimKey(txCtx, tx, owner, attempt.Key, attempt.Fingerprint)
 		if err != nil {
 			return err
 		}
@@ -67,7 +67,7 @@ func (s *Service) answer(
 			return err
 		}
 		stored := idempotency.Result{Status: response.Status, Body: response.Body}
-		if err := s.results.Complete(txCtx, owner, attempt.Key, stored); err != nil {
+		if err := idempotency.Complete(txCtx, tx, owner, attempt.Key, stored); err != nil {
 			return err
 		}
 		answered = Answered{Response: response}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Alisher24/CarSharing/backend/internal/platform/cursor"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -21,7 +22,7 @@ type Result struct {
 // Collection is one page of notifications together with the moment the coordinated read fixed.
 type Collection struct {
 	Notifications []Notification
-	Next          *Position
+	Next          *cursor.Position
 	Moment        time.Time
 }
 
@@ -44,10 +45,6 @@ func NewService(pool *pgxpool.Pool) (*Service, error) {
 	return &Service{pool: pool, store: NewStore(pool)}, nil
 }
 
-// momentStatement reads the moment one operation acts on, which is the database's own clock: a read
-// moment the client could choose would not be the moment the change happened.
-const momentStatement = `SELECT clock_timestamp()`
-
 // MarkRead stores the read of one notification of this account. The moment is read from the database
 // inside the transaction that stores it, so two reads racing for the same notification wait for each
 // other rather than overwriting each other's moment, and the personal signal commits with the change.
@@ -57,7 +54,7 @@ const momentStatement = `SELECT clock_timestamp()`
 func (s *Service) MarkRead(ctx context.Context, owner uuid.UUID, id string) (Result, error) {
 	var result Result
 	err := database.InTransaction(ctx, s.pool, func(txCtx context.Context) error {
-		moment, err := readMoment(txCtx, s.pool)
+		moment, err := database.Moment(txCtx, database.QuerierFrom(txCtx, s.pool))
 		if err != nil {
 			return err
 		}
@@ -72,10 +69,4 @@ func (s *Service) MarkRead(ctx context.Context, owner uuid.UUID, id string) (Res
 		return Result{}, err
 	}
 	return result, nil
-}
-
-func readMoment(ctx context.Context, pool *pgxpool.Pool) (time.Time, error) {
-	var moment time.Time
-	err := database.QuerierFrom(ctx, pool).QueryRow(ctx, momentStatement).Scan(&moment)
-	return moment, err
 }

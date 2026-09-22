@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/httpheader"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
@@ -52,7 +53,7 @@ func writeError(w http.ResponseWriter, r *http.Request,
 	if len(violations) > 0 {
 		body.Details = violationDetails(violations)
 	}
-	w.Header().Set(contentTypeHeader, jsonMediaType)
+	w.Header().Set(httpheader.ContentType, httpheader.JSON)
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
 }

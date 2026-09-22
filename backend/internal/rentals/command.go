@@ -164,7 +164,6 @@ type Service struct {
 	pool     *pgxpool.Pool
 	vehicles *fleet.Store
 	prices   *tariffs.Store
-	results  *idempotency.Store
 
 	// invoices records what a finished ride cost and recordCompletion reports it to the account that
 	// rode. Both are reached inside the transaction that ends the ride, so neither can describe an
@@ -209,7 +208,6 @@ func NewService(
 		pool:             pool,
 		vehicles:         vehicles,
 		prices:           prices,
-		results:          idempotency.NewStore(pool),
 		invoices:         issued,
 		warnings:         warnings,
 		recordCompletion: recordCompletion,
@@ -303,7 +301,7 @@ func transact(
 			if !planned.sameRows(locked) {
 				return errParticipantsChanged
 			}
-			moment, err := readMoment(txCtx, tx)
+			moment, err := database.Moment(txCtx, tx)
 			if err != nil {
 				return err
 			}
@@ -351,12 +349,6 @@ func lock(ctx context.Context, tx pgx.Tx, planned participants) error {
 		}
 	}
 	return nil
-}
-
-func readMoment(ctx context.Context, tx pgx.Tx) (time.Time, error) {
-	var moment time.Time
-	err := tx.QueryRow(ctx, momentStatement).Scan(&moment)
-	return moment, err
 }
 
 // restartable reports whether a failure is one the transaction may start over from. A deadlock or a

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/Alisher24/CarSharing/backend/internal/platform/config"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -37,7 +36,7 @@ const (
 	sslModeDisableDSN = "sslmode=disable"
 )
 
-func PoolConfig(database config.Database) (*pgxpool.Config, error) {
+func PoolConfig(database Settings) (*pgxpool.Config, error) {
 	poolConfig, err := pgxpool.ParseConfig(sslModeDisableDSN)
 	if err != nil {
 		return nil, err
@@ -51,7 +50,7 @@ func PoolConfig(database config.Database) (*pgxpool.Config, error) {
 	return poolConfig, nil
 }
 
-func Open(ctx context.Context, database config.Database) (*pgxpool.Pool, error) {
+func Open(ctx context.Context, database Settings) (*pgxpool.Pool, error) {
 	poolConfig, err := PoolConfig(database)
 	if err != nil {
 		return nil, err

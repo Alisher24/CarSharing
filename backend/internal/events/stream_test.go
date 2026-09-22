@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/uuid"
@@ -63,7 +64,11 @@ func next(t *testing.T, written frames, patience time.Duration) string {
 func TestAStreamAnnouncesItselfBeforeAnyChange(t *testing.T) {
 	hub := NewHub(nil)
 	established := time.Date(2026, time.September, 12, 7, 15, 30, 0, time.UTC)
-	written, _, stop := serve(t, hub, StreamOptions{Audience: Public(), EstablishedAt: established})
+	written, _, stop := serve(t, hub, StreamOptions{
+		Timing:        DefaultStreamTiming(),
+		Audience:      Public(),
+		EstablishedAt: established,
+	})
 	defer stop()
 
 	handshake := next(t, written, time.Second)
@@ -82,45 +87,57 @@ func TestAStreamAnnouncesItselfBeforeAnyChange(t *testing.T) {
 // A private stream proves its session while nothing happens, and ends when that session is gone: a
 // person who is signed out must stop receiving what their account is told.
 func TestAPrivateStreamEndsWhenItsSessionIsNoLongerLive(t *testing.T) {
-	hub := NewHub(nil)
-	owner := uuid.New()
-	live := true
-	session := func(context.Context) (SessionState, error) {
-		return SessionState{Owner: owner, Live: live}, nil
-	}
-	started := time.Now()
-	_, ended, stop := serve(t, hub, StreamOptions{Audience: Private(owner), Session: session})
-	defer stop()
+	synctest.Test(t, func(t *testing.T) {
+		hub := NewHub(nil)
+		owner := uuid.New()
+		live := true
+		session := func(context.Context) (SessionState, error) {
+			return SessionState{Owner: owner, Live: live}, nil
+		}
+		started := time.Now()
+		_, ended, stop := serve(t, hub, StreamOptions{
+			Timing:   DefaultStreamTiming(),
+			Audience: Private(owner),
+			Session:  session,
+		})
+		defer stop()
 
-	live = false
-	select {
-	case err := <-ended:
-		if !errors.Is(err, ErrSessionEnded) {
-			t.Fatalf("the stream ended with %v", err)
+		live = false
+		select {
+		case err := <-ended:
+			if !errors.Is(err, ErrSessionEnded) {
+				t.Fatalf("the stream ended with %v", err)
+			}
+			if waited := time.Since(started); waited < sessionCheckInterval {
+				t.Fatalf("the session was proven again after %s, inside its interval", waited)
+			}
+		case <-time.After(sessionCheckInterval + 2*time.Second):
+			t.Fatal("a private stream outlived the session it was opened with")
 		}
-		if waited := time.Since(started); waited < sessionCheckInterval {
-			t.Fatalf("the session was proven again after %s, inside its interval", waited)
-		}
-	case <-time.After(sessionCheckInterval + 2*time.Second):
-		t.Fatal("a private stream outlived the session it was opened with")
-	}
+	})
 }
 
 // A session that cannot be checked is not a session that was proven live.
 func TestAPrivateStreamEndsWhenItsSessionCannotBeChecked(t *testing.T) {
-	hub := NewHub(nil)
-	session := func(context.Context) (SessionState, error) { return SessionState{}, errSessionStoreDown }
-	_, ended, stop := serve(t, hub, StreamOptions{Audience: Private(uuid.New()), Session: session})
-	defer stop()
+	synctest.Test(t, func(t *testing.T) {
+		hub := NewHub(nil)
+		session := func(context.Context) (SessionState, error) { return SessionState{}, errSessionStoreDown }
+		_, ended, stop := serve(t, hub, StreamOptions{
+			Timing:   DefaultStreamTiming(),
+			Audience: Private(uuid.New()),
+			Session:  session,
+		})
+		defer stop()
 
-	select {
-	case err := <-ended:
-		if !errors.Is(err, ErrSessionEnded) || !errors.Is(err, errSessionStoreDown) {
-			t.Fatalf("the stream ended with %v", err)
+		select {
+		case err := <-ended:
+			if !errors.Is(err, ErrSessionEnded) || !errors.Is(err, errSessionStoreDown) {
+				t.Fatalf("the stream ended with %v", err)
+			}
+		case <-time.After(sessionCheckInterval + 2*time.Second):
+			t.Fatal("a stream whose session could not be checked stayed open")
 		}
-	case <-time.After(sessionCheckInterval + 2*time.Second):
-		t.Fatal("a stream whose session could not be checked stayed open")
-	}
+	})
 }
 
 var errSessionStoreDown = errors.New("session store did not answer")
@@ -128,26 +145,34 @@ var errSessionStoreDown = errors.New("session store did not answer")
 // A client that has stopped reading is closed rather than held open: the write bound is what turns a
 // client that accepts nothing into a stream that ends.
 func TestAStreamWhoseClientStopsReadingEndsWithinTheWriteBound(t *testing.T) {
-	hub := NewHub(nil)
-	reader, writer := io.Pipe()
-	defer func() { _ = reader.Close() }()
+	synctest.Test(t, func(t *testing.T) {
+		hub := NewHub(nil)
+		reader, writer := io.Pipe()
+		defer func() { _ = reader.Close() }()
 
-	started := time.Now()
-	// Nobody reads this pipe, so even the handshake cannot be written.
-	err := hub.Serve(context.Background(), writer, StreamOptions{Audience: Public()})
-	if !errors.Is(err, ErrClientGone) || !errors.Is(err, ErrWriteTimeout) {
-		t.Fatalf("the stream ended with %v", err)
-	}
-	if waited := time.Since(started); waited < writeTimeout {
-		t.Fatalf("the stream gave up after %s, inside its write bound", waited)
-	}
+		started := time.Now()
+		// Nobody reads this pipe, so even the handshake cannot be written.
+		err := hub.Serve(context.Background(), writer, StreamOptions{
+			Timing:   DefaultStreamTiming(),
+			Audience: Public(),
+		})
+		if !errors.Is(err, ErrClientGone) || !errors.Is(err, ErrWriteTimeout) {
+			t.Fatalf("the stream ended with %v", err)
+		}
+		if waited := time.Since(started); waited < writeTimeout {
+			t.Fatalf("the stream gave up after %s, inside its write bound", waited)
+		}
+	})
 }
 
 // A private stream is refused where it is built when nothing can prove its session, rather than
 // discovered at the first change it is offered.
 func TestAPrivateStreamWithoutASessionCheckIsRefused(t *testing.T) {
 	hub := NewHub(nil)
-	err := hub.Serve(context.Background(), io.Discard, StreamOptions{Audience: Private(uuid.New())})
+	err := hub.Serve(context.Background(), io.Discard, StreamOptions{
+		Timing:   DefaultStreamTiming(),
+		Audience: Private(uuid.New()),
+	})
 	if !errors.Is(err, ErrIncompleteStream) {
 		t.Fatalf("the stream was opened with %v", err)
 	}

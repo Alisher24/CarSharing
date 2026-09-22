@@ -50,8 +50,8 @@ Every `main` sets up JSON logging, calls `run() error` and exits 1 on the error;
 
 ## Wiring
 
-`cmd/api/main.go` is the composition root: `run` loads the configuration, opens the pool, and
-`assemble(cfg, pool, hub)` builds the public `httpapi.Dependencies` and the internal
+`cmd/api/` is the composition root: `run` in `main.go` loads the configuration and opens the pool;
+`assemble(cfg, pool, hub)` in `assembly.go` builds the public `httpapi.Dependencies` and the internal
 `httpapi.InternalDependencies` field by field and serves both through `httpapi.NewSurfaceRouter`.
 `NewHandler` and `NewInternalHandler` then derive their handler groups from those and fail at
 construction when something is missing — `router_dependencies_test.go` removes each dependency in turn
@@ -81,7 +81,9 @@ themselves. The API uses it only to decide whether to run the demonstration tele
   `newXHandlers` constructor and a struct holding what it was given. Registration is one line per group
   in `NewHandler`; nothing else has to be edited to add one.
 - Command operations declare their answers as a table in `operations.go` (`status → shape`) rather than
-  as a growing conditional, so a replayed answer is spelled as the operation that was asked.
+  as a growing conditional. Public and internal commands share the decoder and header metadata in
+  `answershape.go`; each response constructor declares the replay and retry headers its contract allows.
+  The refusal dictionaries in `refusalcontract.go` select each surface's vocabulary.
 - An operation is served when its id is in `openapi/served.codegen.yaml`; `dropUnimplementedPaths`
   removes the rest from the embedded specification, which is how a `planned` operation answers as an
   unknown resource.
@@ -99,7 +101,7 @@ it (`npm --prefix tools/openapi run generate`), never the Go file.
   ownership of commit and rollback, while the callee keeps ownership of its table and statement. Rental
   transactions acquire their participants through the one `users`, `vehicles`, `rentals` lock plan.
 - What two modules both need is joined at the composition root, not by one module importing the other's
-  records. `notificationOperations` in `cmd/api/main.go` supplies notification-owned callbacks to the
+  records. `notificationOperations` in `cmd/api/notificationoperations.go` supplies notification-owned callbacks to the
   rental transaction and adapts the collection result; neither module imports the other's record types.
 - The fleet owner alone changes `vehicles.version`. Callers describe a `fleet.VehicleChange`; the owner
   increments the stored value and returns the resulting version, so restoration cannot put it back.
@@ -111,6 +113,22 @@ it (`npm --prefix tools/openapi run generate`), never the Go file.
 - `db/migrations/0000N_name.sql` with `embed.go`; goose applies them, one statement set per numbered
   file, and the migrator role owns the schema. The API connects as `carsharing_app`, which has no DDL —
   a migration that needs a privilege the app role lacks is a migration, not a reason to widen the role.
+
+## Shared platform mechanisms
+
+- `platform/database.Settings` is the connection shape filled by the loader. Database code does not
+  import configuration. `Moment` reads the authoritative clock; `ReadOne` verifies row cardinality for
+  reads and transition results. Idempotency's `ClaimKey` and `Complete` require the transaction directly.
+- `platform/cursor` owns the page size, optional `Position`, descending keyset SQL and page slicing.
+  Collection owners provide their SQL column names and the record's sort position. The cursor payload
+  has one declaration; `compatibility_test.go` preserves the previously issued wire format.
+- Each retention owner exposes `DeleteExpired`. `cmd/worker/retention.go` registers one `retention.Sweep`
+  per owner; `platform/retention` supplies the common interval and batch size. `periodic.RunAll` joins
+  all worker tasks before the process closes the pool.
+- `platform/httpserver` supplies listener bounds and shutdown for API and mailstub. `httpheader` owns
+  their shared protocol names. Internal clients receive their HTTP transport from command assembly.
+- Stream timing is passed by API assembly and validated when handlers are built. Stream and internal
+  client timeout tests use `testing/synctest`, so their deadlines advance without wall-clock waits.
 
 ## The modelled fleet's routes
 

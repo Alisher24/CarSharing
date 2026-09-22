@@ -17,7 +17,7 @@ import (
 // payment, and an invoice this account does not hold is reported as absent.
 type InvoiceReads interface {
 	ByID(ctx context.Context, owner uuid.UUID, id string) (invoices.Invoice, error)
-	ReadPage(ctx context.Context, owner uuid.UUID, after *invoices.Position, limit int) (invoices.Page, error)
+	ReadPage(ctx context.Context, owner uuid.UUID, after *cursor.Position, limit int) (invoices.Page, error)
 }
 
 // invoiceHandlers answers the reads of the caller's own invoices: one of them, and the collection
@@ -71,4 +71,10 @@ func (h invoiceHandlers) GetInvoice(
 		return nil, err
 	}
 	return servedapi.GetInvoice200JSONResponse{Body: body}, nil
+}
+
+func registerInvoiceHandlers(served *server, dependencies Dependencies) error {
+	var err error
+	served.invoiceHandlers, err = newInvoiceHandlers(dependencies.Invoices, dependencies.Cursors)
+	return err
 }

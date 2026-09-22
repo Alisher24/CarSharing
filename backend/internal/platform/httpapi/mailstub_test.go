@@ -17,6 +17,7 @@ import (
 	"github.com/Alisher24/CarSharing/backend/internal/idempotency"
 	"github.com/Alisher24/CarSharing/backend/internal/mailstub"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/cursor"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/httpheader"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/timestamp"
 )
 
@@ -120,7 +121,7 @@ func (b *fakeMailBox) ByID(_ context.Context, id string) (mailstub.Message, erro
 	return mailstub.Message{}, mailstub.ErrMessageNotFound
 }
 
-func (b *fakeMailBox) ReadPage(_ context.Context, after *mailstub.Position, limit int) (mailstub.Page, error) {
+func (b *fakeMailBox) ReadPage(_ context.Context, after *cursor.Position, limit int) (mailstub.Page, error) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 	if b.failure != nil {
@@ -150,7 +151,7 @@ func (b *fakeMailBox) ReadPage(_ context.Context, after *mailstub.Position, limi
 	last := page[len(page)-1]
 	return mailstub.Page{
 		Messages: page,
-		Next:     &mailstub.Position{AcceptedAt: last.AcceptedAt, ID: last.ID},
+		Next:     &cursor.Position{Moment: last.AcceptedAt, ID: last.ID},
 	}, nil
 }
 
@@ -224,10 +225,10 @@ func mailstubCall(
 	t.Helper()
 	request := httptest.NewRequest(method, path, strings.NewReader(body))
 	if body != "" {
-		request.Header.Set(contentTypeHeader, jsonMediaType)
+		request.Header.Set(httpheader.ContentType, httpheader.JSON)
 	}
 	if token != "" {
-		request.Header.Set(authorizationHeader, "Bearer "+token)
+		request.Header.Set(httpheader.Authorization, "Bearer "+token)
 	}
 	for name, value := range headers {
 		request.Header.Set(name, value)
@@ -444,8 +445,8 @@ func TestADeliveryWhoseAnswerIsLostClosesTheConnection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request.Header.Set(contentTypeHeader, jsonMediaType)
-	request.Header.Set(authorizationHeader, "Bearer "+deliveryToken)
+	request.Header.Set(httpheader.ContentType, httpheader.JSON)
+	request.Header.Set(httpheader.Authorization, "Bearer "+deliveryToken)
 	request.Header.Set(deliveryKeyHeader, deliveredKey(t, invoiceID))
 
 	response, err := server.Client().Do(request)
@@ -604,7 +605,7 @@ func TestTheInboxRefusesEveryOtherMethod(t *testing.T) {
 func TestAReadOfTheInboxRefusesABody(t *testing.T) {
 	handler := mailstubInboxRouter(t, newFakeMailBox(), []byte(cursorKey))
 	answer := mailstubCall(t, handler, http.MethodGet, mailstubMessagesPath, "{}", "",
-		map[string]string{contentTypeHeader: jsonMediaType})
+		map[string]string{httpheader.ContentType: httpheader.JSON})
 	if answer.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("a read with a body answered %d %s", answer.Code, answer.Body.String())
 	}
@@ -659,7 +660,7 @@ func cursorIssuedForAnotherKey(t *testing.T, letter mailstub.Message) string {
 		t.Fatal(err)
 	}
 	issued, err := signer.Issue(
-		cursor.Position{CreatedAt: acceptedAt, ID: letter.ID},
+		cursor.Position{Moment: acceptedAt, ID: letter.ID},
 		cursor.AnonymousOperationOn(getMessagesOperation, cursor.Parameter{Name: "limit", Value: "1"}))
 	if err != nil {
 		t.Fatal(err)
@@ -684,7 +685,7 @@ func TestTheHeadersOfADeliveryAreNamedOnce(t *testing.T) {
 		boundary string
 	}{
 		{name: "the delivery key", client: mailstub.DeliveryKeyHeader, boundary: deliveryKeyHeader},
-		{name: "the request identifier", client: mailstub.RequestIDHeader, boundary: requestIDHeader},
+		{name: "the request identifier", client: httpheader.RequestID, boundary: httpheader.RequestID},
 	} {
 		if header.client != header.boundary {
 			t.Errorf("%s is %q to the sender and %q to the receiver", header.name, header.client, header.boundary)

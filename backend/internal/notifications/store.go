@@ -7,6 +7,7 @@ import (
 
 	"github.com/Alisher24/CarSharing/backend/internal/events"
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/cursor"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -72,13 +73,7 @@ FOR UPDATE OF note`
 	// the cursor was taken from. A page that starts at the newest record states no position: the
 	// comparison is then against the last moment there can be, where every stored one is below it,
 	// and the identifier it is compared with second never has to decide anything.
-	ownerPageSelection = notificationColumns + `
-WHERE note.user_id = $1
-  AND (note.created_at, note.id) <
-      (COALESCE($2::timestamptz, 'infinity'::timestamptz),
-       COALESCE($3::uuid, '00000000-0000-0000-0000-000000000000'::uuid))
-ORDER BY note.created_at DESC, note.id DESC
-LIMIT $4`
+
 )
 
 // Create stores the notification of one rental and kind at the moment the transaction fixed, and
@@ -159,25 +154,12 @@ func (s *Store) ByID(ctx context.Context, owner uuid.UUID, id string) (Notificat
 	return readNotification(ctx, s.pool, notificationByIDForSelection, id, owner)
 }
 
-// PageSize is how many notifications one page of the collection carries when the client states no
-// limit. It is the contract's declared default, stated here so the package that pages the collection
-// and the operation that serves it cannot disagree about it.
-const PageSize = 20
-
-// Position is where a page of a collection starts: the sort key of the notification the previous
-// page ended with. It is the pair the collection is ordered by, so a page read after it continues
-// exactly after that notification rather than at one the client guessed.
-type Position struct {
-	CreatedAt time.Time
-	ID        string
-}
-
 // Page is one page of an owner's notifications: the records it holds, and the position the page
 // after it starts from. The position is absent on the last and on the empty page, which is the
 // `next_cursor: null` the contract declares.
 type Page struct {
 	Notifications []Notification
-	Next          *Position
+	Next          *cursor.Position
 }
 
 // ReadPage reads one page of an owner's notifications after a position, in the order the collection
@@ -185,10 +167,10 @@ type Page struct {
 // more than it publishes, so whether anything follows is decided by the database rather than by the
 // page being shorter than the limit.
 func (s *Store) ReadPage(
-	ctx context.Context, owner uuid.UUID, after *Position, limit int,
+	ctx context.Context, owner uuid.UUID, after *cursor.Position, limit int,
 ) (Page, error) {
 	rows, err := database.QuerierFrom(ctx, s.pool).Query(ctx, ownerPageSelection,
-		owner, positionMoment(after), positionIdentifier(after), limit+1)
+		owner, after.MomentArgument(), after.IdentifierArgument(), limit+1)
 	if err != nil {
 		return Page{}, err
 	}
@@ -205,35 +187,8 @@ func (s *Store) ReadPage(
 	if err = rows.Err(); err != nil {
 		return Page{}, err
 	}
-	if len(records) <= limit {
-		return Page{Notifications: records}, nil
-	}
-
-	records = records[:limit]
-	last := records[len(records)-1]
-	return Page{
-		Notifications: records,
-		Next:          &Position{CreatedAt: last.CreatedAt, ID: last.ID},
-	}, nil
-}
-
-// positionMoment and positionIdentifier read the two parts of an optional position. A page that
-// starts at the newest record has none, and each part of the search key becomes a null the
-// selection reads as "before everything".
-func positionMoment(after *Position) *time.Time {
-	if after == nil {
-		return nil
-	}
-	moment := after.CreatedAt
-	return &moment
-}
-
-func positionIdentifier(after *Position) *string {
-	if after == nil {
-		return nil
-	}
-	identifier := after.ID
-	return &identifier
+	published, next := cursor.Cut(records, limit, notificationPosition)
+	return Page{Notifications: published, Next: next}, nil
 }
 
 // insert writes one notification unless the rental already has one of its kind. The conflict is the
@@ -320,29 +275,11 @@ func (s *Store) announce(ctx context.Context, stored Notification) error {
 func readNotification(
 	ctx context.Context, pool *pgxpool.Pool, selection string, arguments ...any,
 ) (Notification, error) {
-	rows, err := database.QuerierFrom(ctx, pool).Query(ctx, selection, arguments...)
-	if err != nil {
-		return Notification{}, err
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		if err = rows.Err(); err != nil {
-			return Notification{}, err
-		}
-		return Notification{}, ErrNotFound
-	}
-	var found Notification
-	if err = scanNotification(rows, &found); err != nil {
-		return Notification{}, err
-	}
-	if rows.Next() {
-		return Notification{}, errors.New("the selection matched more than one notification")
-	}
-	return found, rows.Err()
+	return database.ReadOne(ctx, database.QuerierFrom(ctx, pool),
+		scanNotification, ErrNotFound, selection, arguments...)
 }
 
-func scanNotification(rows pgx.Rows, found *Notification) error {
+func scanNotification(rows pgx.Row, found *Notification) error {
 	var exhausted []string
 	err := rows.Scan(
 		&found.ID,
@@ -365,3 +302,11 @@ func scanNotification(rows pgx.Rows, found *Notification) error {
 	found.Exhausted = fleet.SourceKinds(exhausted)
 	return nil
 }
+
+func notificationPosition(item Notification) cursor.Position {
+	return cursor.Position{Moment: item.CreatedAt, ID: item.ID}
+}
+
+var ownerPageSelection = notificationColumns + `
+WHERE note.user_id = $1
+  AND ` + cursor.Descending("note.created_at", "note.id", 2)

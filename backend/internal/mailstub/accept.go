@@ -3,7 +3,6 @@ package mailstub
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -38,10 +37,6 @@ func NewAcceptor(pool *pgxpool.Pool) (*Acceptor, error) {
 	return &Acceptor{pool: pool, store: NewStore(pool), faults: NewFaults(pool)}, nil
 }
 
-// momentStatement reads the moment one acceptance is written at. The database states it rather than
-// the process, so a letter and the ride that produced it are dated by one clock.
-const momentStatement = `SELECT clock_timestamp()`
-
 // Accept stores one letter under its key and answers what the delivery produced. A letter the key
 // already holds is answered as it stands, which is what makes a repeated delivery a repeat rather
 // than a second letter.
@@ -53,8 +48,8 @@ const momentStatement = `SELECT clock_timestamp()`
 func (a *Acceptor) Accept(ctx context.Context, key Key, request Request) (Receipt, error) {
 	var receipt Receipt
 	err := database.InTransaction(ctx, a.pool, func(ctx context.Context) error {
-		var moment time.Time
-		if err := database.QuerierFrom(ctx, a.pool).QueryRow(ctx, momentStatement).Scan(&moment); err != nil {
+		moment, err := database.Moment(ctx, database.QuerierFrom(ctx, a.pool))
+		if err != nil {
 			return err
 		}
 		stored, written, err := a.store.Accept(ctx, key, request, moment)

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Alisher24/CarSharing/backend/internal/platform/httpheader"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/internalclient"
 	"github.com/google/uuid"
 )
@@ -51,8 +52,8 @@ type Client struct{ call *internalclient.Client }
 
 // NewClient assembles the client over one address and one credential. Both are required: a client
 // without them would deliver nothing and report every attempt as a failure of the request.
-func NewClient(baseURL, token string) (*Client, error) {
-	call, err := internalclient.New(baseURL, token, internalclient.Settings{
+func NewClient(baseURL, token string, transport http.RoundTripper) (*Client, error) {
+	call, err := internalclient.New(baseURL, token, internalclient.Settings{Transport: transport,
 		Timeout:        RequestTimeout,
 		MaxAnswerBytes: maxAnswerBytes,
 	})
@@ -77,7 +78,7 @@ func (c *Client) Deliver(ctx context.Context, invoiceID string, request Request)
 	answer, err := c.call.Post(ctx, internalclient.Call{
 		Path:    DeliverPath,
 		Body:    MessageRequest{To: request.To, Subject: request.Subject, Text: request.Text},
-		Headers: map[string]string{DeliveryKeyHeader: key.String(), RequestIDHeader: uuid.NewString()},
+		Headers: map[string]string{DeliveryKeyHeader: key.String(), httpheader.RequestID: uuid.NewString()},
 	})
 	if err != nil {
 		return DeliveryReceipt{}, err
@@ -111,5 +112,4 @@ type MessageRequest struct {
 // so a rename on one side cannot leave the other sending a header nobody reads.
 const (
 	DeliveryKeyHeader = "Delivery-Key"
-	RequestIDHeader   = "X-Request-ID"
 )

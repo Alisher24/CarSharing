@@ -28,7 +28,7 @@ func (h notificationHandlers) GetNotifications(
 			Body: apiErrorBody(ctx, codeAuthenticationRequired, messageAuthenticationRequired),
 		}, nil
 	}
-	limit := pageLimitOf(request.Params.Limit, notifications.PageSize)
+	limit := pageLimitOf(request.Params.Limit, cursor.PageSize)
 
 	after, err := h.positionOf(request.Params.Cursor, caller, limit)
 	if err != nil {
@@ -52,13 +52,9 @@ func (h notificationHandlers) GetNotifications(
 // the collection.
 func (h notificationHandlers) positionOf(
 	presented *servedapi.Cursor, owner uuid.UUID, limit int,
-) (*notifications.Position, error) {
-	read, err := pagePositionOf(h.cursors, presented,
+) (*cursor.Position, error) {
+	return pagePositionOf(h.cursors, presented,
 		accountPageScope(getNotificationsOperation, owner, limit))
-	if err != nil || read == nil {
-		return nil, err
-	}
-	return &notifications.Position{CreatedAt: read.CreatedAt, ID: read.ID}, nil
 }
 
 // collectionBody renders one page of the collection, with the cursor that reads the page after it. A
@@ -82,10 +78,7 @@ func (h notificationHandlers) collectionBody(
 	if page.Next == nil {
 		return body, nil
 	}
-	issued, err := h.cursors.Issue(cursor.Position{
-		CreatedAt: page.Next.CreatedAt,
-		ID:        page.Next.ID,
-	}, accountPageScope(getNotificationsOperation, owner, limit))
+	issued, err := h.cursors.Issue(*page.Next, accountPageScope(getNotificationsOperation, owner, limit))
 	if err != nil {
 		return servedapi.NotificationCollection{}, err
 	}

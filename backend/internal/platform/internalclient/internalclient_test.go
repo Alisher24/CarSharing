@@ -3,10 +3,12 @@ package internalclient
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -42,7 +44,11 @@ func TestOneCallCarriesWhatItWasGiven(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := mustClient(t, server.URL, Settings{Timeout: time.Second, MaxAnswerBytes: 1 << 16})
+	client := mustClient(t, server.URL, Settings{
+		Transport:      http.DefaultTransport,
+		Timeout:        time.Second,
+		MaxAnswerBytes: 1 << 16,
+	})
 	answer, err := client.Post(context.Background(), Call{
 		Path:    testPath,
 		Body:    map[string]string{"subject": "Письмо"},
@@ -89,7 +95,11 @@ func TestARefusalIsReportedByItsCode(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := mustClient(t, server.URL, Settings{Timeout: time.Second, MaxAnswerBytes: 1 << 16})
+	client := mustClient(t, server.URL, Settings{
+		Transport:      http.DefaultTransport,
+		Timeout:        time.Second,
+		MaxAnswerBytes: 1 << 16,
+	})
 	answer, err := client.Post(context.Background(), Call{Path: testPath, Body: map[string]string{}})
 	if err != nil {
 		t.Fatalf("the call failed: %v", err)
@@ -105,15 +115,21 @@ func TestARefusalIsReportedByItsCode(t *testing.T) {
 // A service that does not answer within the bound of the call fails it, and so does one that closes
 // the connection without an answer: neither is reported as a refusal, because neither was one.
 func TestACallThatNeverArrivesFails(t *testing.T) {
-	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		time.Sleep(500 * time.Millisecond)
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer slow.Close()
-	client := mustClient(t, slow.URL, Settings{Timeout: 50 * time.Millisecond, MaxAnswerBytes: 1 << 16})
-	if _, err := client.Post(context.Background(), Call{Path: testPath}); err == nil {
-		t.Error("a call that timed out was reported as answered")
-	}
+	synctest.Test(t, func(t *testing.T) {
+		client := mustClient(t, "http://internal.invalid", Settings{
+			Timeout:        time.Second,
+			MaxAnswerBytes: 1 << 16,
+			Transport:      stalledTransport{},
+		})
+		started := time.Now()
+		_, err := client.Post(context.Background(), Call{Path: testPath})
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("the timed out call returned %v", err)
+		}
+		if elapsed := time.Since(started); elapsed != time.Second {
+			t.Fatalf("the call ended after %s instead of its timeout", elapsed)
+		}
+	})
 
 	broken := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		connection, _, err := w.(http.Hijacker).Hijack()
@@ -123,7 +139,11 @@ func TestACallThatNeverArrivesFails(t *testing.T) {
 		_ = connection.Close()
 	}))
 	defer broken.Close()
-	client = mustClient(t, broken.URL, Settings{Timeout: time.Second, MaxAnswerBytes: 1 << 16})
+	client := mustClient(t, broken.URL, Settings{
+		Transport:      http.DefaultTransport,
+		Timeout:        time.Second,
+		MaxAnswerBytes: 1 << 16,
+	})
 	if _, err := client.Post(context.Background(), Call{Path: testPath}); err == nil {
 		t.Error("a broken connection was reported as answered")
 	}
@@ -138,7 +158,11 @@ func TestAnAnswerIsReadWithinItsBound(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := mustClient(t, server.URL, Settings{Timeout: time.Second, MaxAnswerBytes: 64})
+	client := mustClient(t, server.URL, Settings{
+		Transport:      http.DefaultTransport,
+		Timeout:        time.Second,
+		MaxAnswerBytes: 64,
+	})
 	answer, err := client.Post(context.Background(), Call{Path: testPath})
 	if err != nil {
 		t.Fatalf("the call failed: %v", err)
@@ -157,17 +181,39 @@ func TestAnIncompleteClientIsRefused(t *testing.T) {
 		token  string
 		limits Settings
 	}{
-		{name: "no address", token: testToken, limits: Settings{Timeout: time.Second, MaxAnswerBytes: 1 << 16}},
 		{
-			name:   "no credential",
-			url:    "http://127.0.0.1:1",
-			limits: Settings{Timeout: time.Second, MaxAnswerBytes: 1 << 16},
+			name:  "no address",
+			token: testToken,
+			limits: Settings{
+				Transport:      http.DefaultTransport,
+				Timeout:        time.Second,
+				MaxAnswerBytes: 1 << 16,
+			},
+		},
+		{
+			name:  "no transport",
+			url:   "http://127.0.0.1:1",
+			token: testToken,
+			limits: Settings{
+				Timeout:        time.Second,
+				MaxAnswerBytes: 1 << 16,
+			},
+		},
+		{
+			name: "no credential",
+			url:  "http://127.0.0.1:1",
+			limits: Settings{
+				Transport:      http.DefaultTransport,
+				Timeout:        time.Second,
+				MaxAnswerBytes: 1 << 16,
+			},
 		},
 		{
 			name:  "no timeout",
 			url:   "http://127.0.0.1:1",
 			token: testToken,
 			limits: Settings{
+				Transport:      http.DefaultTransport,
 				MaxAnswerBytes: 1 << 16,
 			},
 		},
@@ -175,7 +221,7 @@ func TestAnIncompleteClientIsRefused(t *testing.T) {
 			name:  "no bound on the answer",
 			url:   "http://127.0.0.1:1",
 			token: testToken,
-			limits: Settings{
+			limits: Settings{Transport: http.DefaultTransport,
 				Timeout: time.Second,
 			},
 		},
@@ -186,4 +232,11 @@ func TestAnIncompleteClientIsRefused(t *testing.T) {
 			}
 		})
 	}
+}
+
+type stalledTransport struct{}
+
+func (stalledTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	<-request.Context().Done()
+	return nil, request.Context().Err()
 }

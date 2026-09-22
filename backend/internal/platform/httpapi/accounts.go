@@ -309,3 +309,9 @@ func snapshotOf(user auth.User, session sessions.Snapshot) servedapi.SessionSnap
 func retryAfterSeconds(wait time.Duration) int {
 	return int(math.Ceil(wait.Seconds()))
 }
+
+func registerAccounts(served *server, dependencies Dependencies) error {
+	var err error
+	served.accounts, err = newAccounts(dependencies)
+	return err
+}

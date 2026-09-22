@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Alisher24/CarSharing/backend/internal/fleet"
+	"github.com/Alisher24/CarSharing/backend/internal/platform/cursor"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/database"
 	"github.com/Alisher24/CarSharing/backend/internal/rentals/stage"
 	"github.com/google/uuid"
@@ -124,29 +125,11 @@ func readRental(
 	selection string,
 	arguments ...any,
 ) (Rental, error) {
-	rows, err := database.QuerierFrom(ctx, pool).Query(ctx, selection, arguments...)
-	if err != nil {
-		return Rental{}, err
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		if err = rows.Err(); err != nil {
-			return Rental{}, err
-		}
-		return Rental{}, ErrRentalNotFound
-	}
-	var found Rental
-	if err = scanRental(rows, &found); err != nil {
-		return Rental{}, err
-	}
-	if rows.Next() {
-		return Rental{}, errors.New("the selection matched more than one rental")
-	}
-	return found, rows.Err()
+	return database.ReadOne(ctx, database.QuerierFrom(ctx, pool),
+		scanRental, ErrRentalNotFound, selection, arguments...)
 }
 
-func scanRental(rows pgx.Rows, found *Rental) error {
+func scanRental(rows pgx.Row, found *Rental) error {
 	var exhausted []string
 	err := rows.Scan(
 		&found.ID,
@@ -265,30 +248,15 @@ func moveRide(
 	if transition.from == stage.Reserved {
 		statement = startRideStatement
 	}
-	rows, err := database.QuerierFrom(ctx, pool).Query(
-		ctx,
+	moved, err := database.ReadOne(
+		ctx, database.QuerierFrom(ctx, pool), scanRental, errRentalMoved,
 		statement,
 		target.ID,
 		transition.to,
 		moment,
 		transition.from,
 	)
-	if err != nil {
-		return Rental{}, err
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		if err = rows.Err(); err != nil {
-			return Rental{}, err
-		}
-		return Rental{}, errRentalMoved
-	}
-	var moved Rental
-	if err = scanRental(rows, &moved); err != nil {
-		return Rental{}, err
-	}
-	return moved, rows.Err()
+	return moved, err
 }
 
 const releaseRentalStatement = `
@@ -304,30 +272,18 @@ func endReservationAs(
 	ending stage.Stage,
 	at time.Time,
 ) (Rental, bool, error) {
-	rows, err := database.QuerierFrom(ctx, pool).Query(
-		ctx,
+	ended, err := database.ReadOne(
+		ctx, database.QuerierFrom(ctx, pool), scanRental, pgx.ErrNoRows,
 		releaseRentalStatement,
 		id,
 		stage.Reserved,
 		ending,
 		at,
 	)
-	if err != nil {
-		return Rental{}, false, err
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		if err = rows.Err(); err != nil {
-			return Rental{}, false, err
-		}
+	if errors.Is(err, pgx.ErrNoRows) {
 		return Rental{}, false, nil
 	}
-	var ended Rental
-	if err = scanRental(rows, &ended); err != nil {
-		return Rental{}, false, err
-	}
-	return ended, true, rows.Err()
+	return ended, err == nil, err
 }
 
 const completeRentalStatement = `
@@ -347,8 +303,8 @@ func completeRental(
 	target Rental,
 	ending Ending,
 ) (Rental, error) {
-	rows, err := database.QuerierFrom(ctx, pool).Query(
-		ctx,
+	ended, err := database.ReadOne(
+		ctx, database.QuerierFrom(ctx, pool), scanRental, errRentalNotEnded,
 		completeRentalStatement,
 		target.ID,
 		string(stage.Completed),
@@ -357,22 +313,7 @@ func completeRental(
 		fleet.SourceNames(ending.Exhausted),
 		rideStages,
 	)
-	if err != nil {
-		return Rental{}, err
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		if err = rows.Err(); err != nil {
-			return Rental{}, err
-		}
-		return Rental{}, errRentalNotEnded
-	}
-	var ended Rental
-	if err = scanRental(rows, &ended); err != nil {
-		return Rental{}, err
-	}
-	return ended, rows.Err()
+	return ended, err
 }
 
 // PreparedRental is one rental the demonstration installs or restores.
@@ -589,8 +530,6 @@ const (
 	lockRentalsStatement  = `SELECT id FROM rentals WHERE id = ANY($1) ORDER BY id FOR UPDATE`
 )
 
-const momentStatement = `SELECT clock_timestamp()`
-
 const dueReservationsStatement = `
 SELECT id
 FROM rentals
@@ -637,7 +576,7 @@ INSERT INTO demo_payment_outcomes (rental_id, outcome, set_at)
 VALUES ($1, $2, $3)
 ON CONFLICT (rental_id) DO UPDATE SET outcome = EXCLUDED.outcome, set_at = EXCLUDED.set_at`
 
-const ridePageSelection = `
+var ridePageSelection = `
 SELECT rental.id,
        rental.started_at,
        rental.ended_at,
@@ -653,8 +592,4 @@ LEFT JOIN invoices invoice ON invoice.rental_id = rental.id
 WHERE rental.user_id = $1
   AND rental.stage = 'completed'
   AND rental.started_at IS NOT NULL
-  AND (rental.ended_at, rental.id) <
-      (COALESCE($2::timestamptz, 'infinity'::timestamptz),
-       COALESCE($3::uuid, '00000000-0000-0000-0000-000000000000'::uuid))
-ORDER BY rental.ended_at DESC, rental.id DESC
-LIMIT $4`
+  AND ` + cursor.Descending("rental.ended_at", "rental.id", 2)

@@ -79,3 +79,9 @@ func finishRender(ctx context.Context) rentals.Render {
 		return encoded(http.StatusOK, body)
 	}
 }
+
+func registerFinishHandlers(served *server, dependencies Dependencies) error {
+	var err error
+	served.finishHandlers, err = newFinishHandlers(dependencies.Reservations)
+	return err
+}

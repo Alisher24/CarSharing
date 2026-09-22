@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/Alisher24/CarSharing/backend/internal/platform/httpheader"
 	"github.com/getkin/kin-openapi/openapi3filter"
 )
 
@@ -20,8 +21,7 @@ const (
 	mailDemoScheme    = "MailDemoToken"
 )
 
-// bearerPrefix is how the contract's http bearer credential is spelled.
-const bearerPrefix = "Bearer "
+// httpheader.BearerPrefix is how the contract's http bearer credential is spelled.
 
 // errCredentialNotConfigured refuses an operation whose capability this process was given no token
 // for. It is a failure of the installation rather than of the request, and it fails closed: an
@@ -113,7 +113,7 @@ func authenticateCapability(expected string, input *openapi3filter.Authenticatio
 		return errCredentialNotConfigured
 	}
 	presented := strings.TrimPrefix(
-		input.RequestValidationInput.Request.Header.Get(authorizationHeader), bearerPrefix)
+		input.RequestValidationInput.Request.Header.Get(httpheader.Authorization), httpheader.BearerPrefix)
 	if subtle.ConstantTimeCompare([]byte(presented), []byte(expected)) != 1 {
 		return errors.New("the presented credential is not one this installation accepts")
 	}

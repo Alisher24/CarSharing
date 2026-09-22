@@ -34,7 +34,7 @@ type mailstubInboxHandlers struct {
 func (h mailstubInboxHandlers) GetMessages(
 	ctx context.Context, request mailstubapi.GetMessagesRequestObject,
 ) (mailstubapi.GetMessagesResponseObject, error) {
-	limit := mailstub.PageSize
+	limit := cursor.PageSize
 	if request.Params.Limit != nil {
 		limit = *request.Params.Limit
 	}
@@ -69,7 +69,7 @@ type readPage struct {
 // that cannot be issued is a defect of the key this installation signs with rather than a condition
 // of the request, so it is reported rather than answered with a page that cannot be continued.
 func (h mailstubInboxHandlers) pageOf(
-	ctx context.Context, after *mailstub.Position, limit int,
+	ctx context.Context, after *cursor.Position, limit int,
 ) (readPage, error) {
 	page, err := h.inbox.ReadPage(ctx, after, limit)
 	if err != nil {
@@ -80,7 +80,7 @@ func (h mailstubInboxHandlers) pageOf(
 		return read, nil
 	}
 	issued, err := h.cursors.Issue(
-		cursor.Position{CreatedAt: page.Next.AcceptedAt, ID: page.Next.ID},
+		*page.Next,
 		h.inboxScopeOf(limit))
 	if err != nil {
 		return readPage{}, err
@@ -131,7 +131,7 @@ func (h mailstubInboxHandlers) inboxScopeOf(limit int) cursor.Scope {
 // installation — is the one refusal the contract declares for a cursor.
 func (h mailstubInboxHandlers) positionOf(
 	presented *mailstubapi.Cursor, limit int,
-) (*mailstub.Position, error) {
+) (*cursor.Position, error) {
 	if presented == nil {
 		return nil, nil
 	}
@@ -139,7 +139,7 @@ func (h mailstubInboxHandlers) positionOf(
 	if err != nil {
 		return nil, err
 	}
-	return &mailstub.Position{AcceptedAt: position.CreatedAt, ID: position.ID}, nil
+	return &position, nil
 }
 
 // collectionBody renders one page of the box, with the cursor that reads the page after it. A last

@@ -10,15 +10,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// What one stream is bounded by: how long it may take to write one frame, how often it proves a
-// private session while nothing happens, and how often it writes a comment so that nothing between
-// the API and the browser closes a connection that is merely quiet.
-const (
-	writeTimeout         = 5 * time.Second
-	sessionCheckInterval = 5 * time.Second
-	keepaliveInterval    = 15 * time.Second
-)
-
 // Reasons a stream ends. The first three are ordinary ends of a connection; a stream that ends for
 // any other reason is a failure of this server and is reported as one.
 var (
@@ -53,6 +44,8 @@ type SessionCheck func(ctx context.Context) (SessionState, error)
 
 // StreamOptions is what the transport tells a stream before it starts.
 type StreamOptions struct {
+	Timing StreamTiming
+
 	// Audience is who this stream may hear about.
 	Audience Audience
 
@@ -65,6 +58,9 @@ type StreamOptions struct {
 }
 
 func (o StreamOptions) validate() error {
+	if err := o.Timing.Validate(); err != nil {
+		return err
+	}
 	if o.Audience.Owner != uuid.Nil && o.Session == nil {
 		return fmt.Errorf("%w: private stream session check", ErrIncompleteStream)
 	}
@@ -85,11 +81,11 @@ func (h *Hub) Serve(ctx context.Context, w io.Writer, options StreamOptions) err
 	defer h.forget(subscription)
 	defer subscription.Close()
 
-	if err := writeFrame(w, readyFrame(options.EstablishedAt)); err != nil {
+	if err := writeFrame(w, readyFrame(options.EstablishedAt), options.Timing.WriteTimeout); err != nil {
 		return fmt.Errorf("%w: %w", ErrClientGone, err)
 	}
 
-	keepalive := time.NewTicker(keepaliveInterval)
+	keepalive := time.NewTicker(options.Timing.KeepaliveInterval)
 	defer keepalive.Stop()
 	sessionChecks, stopSessionChecks := sessionTicker(options)
 	defer stopSessionChecks()
@@ -105,11 +101,11 @@ func (h *Hub) Serve(ctx context.Context, w io.Writer, options StreamOptions) err
 			if err := proven(ctx, options); err != nil {
 				return err
 			}
-			if err := writeFrame(w, signal.frame()); err != nil {
+			if err := writeFrame(w, signal.frame(), options.Timing.WriteTimeout); err != nil {
 				return fmt.Errorf("%w: %w", ErrClientGone, err)
 			}
 		case <-keepalive.C:
-			if err := writeFrame(w, keepaliveFrame); err != nil {
+			if err := writeFrame(w, keepaliveFrame, options.Timing.WriteTimeout); err != nil {
 				return fmt.Errorf("%w: %w", ErrClientGone, err)
 			}
 		case <-sessionChecks:
@@ -135,7 +131,7 @@ func sessionTicker(options StreamOptions) (<-chan time.Time, func()) {
 	if options.Audience.Owner == uuid.Nil {
 		return nil, func() {}
 	}
-	ticker := time.NewTicker(sessionCheckInterval)
+	ticker := time.NewTicker(options.Timing.SessionCheckInterval)
 	return ticker.C, ticker.Stop
 }
 
@@ -162,13 +158,13 @@ func proven(ctx context.Context, options StreamOptions) error {
 // writeFrame writes one frame within the stream's write bound. The write runs in its own goroutine
 // because a client that has stopped reading blocks it: the bound is what turns such a client into a
 // closed stream instead of a connection held open for as long as it likes.
-func writeFrame(w io.Writer, frame []byte) error {
+func writeFrame(w io.Writer, frame []byte, timeout time.Duration) error {
 	written := make(chan error, 1)
 	go func() {
 		_, err := w.Write(frame)
 		written <- err
 	}()
-	timer := time.NewTimer(writeTimeout)
+	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
 	case err := <-written:

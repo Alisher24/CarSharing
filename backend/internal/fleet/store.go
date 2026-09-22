@@ -81,8 +81,6 @@ ORDER BY vehicle.id`
 
 	onePublishedVehicle = publishedVehicles + `
 WHERE vehicle.id = $2`
-
-	observedAtQuery = `SELECT now()`
 )
 
 // Snapshot reads every published vehicle together with the instant it was read at.
@@ -131,8 +129,8 @@ func (s *Store) read(ctx context.Context, selection string, arguments ...any) (S
 	if err != nil {
 		return Snapshot{}, err
 	}
-	var observedAt time.Time
-	if err = database.QuerierFrom(ctx, s.pool).QueryRow(ctx, observedAtQuery).Scan(&observedAt); err != nil {
+	observedAt, err := database.Moment(ctx, database.QuerierFrom(ctx, s.pool))
+	if err != nil {
 		return Snapshot{}, err
 	}
 	return Snapshot{ObservedAt: observedAt, Vehicles: vehicles}, nil

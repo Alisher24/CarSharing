@@ -8,6 +8,7 @@ import (
 
 	"github.com/Alisher24/CarSharing/backend/internal/auth"
 	servedapi "github.com/Alisher24/CarSharing/backend/internal/contracts/servedapi"
+	"github.com/Alisher24/CarSharing/backend/internal/events"
 	"github.com/Alisher24/CarSharing/backend/internal/invoices"
 	"github.com/Alisher24/CarSharing/backend/internal/notifications"
 	"github.com/Alisher24/CarSharing/backend/internal/platform/cursor"
@@ -41,6 +42,7 @@ func TestIncompleteApplicationIsRefusedAtConstruction(t *testing.T) {
 		{"cursor signer", func(d *Dependencies) { d.Cursors = mustTestSigner(t) }},
 		{"invoice reads", func(d *Dependencies) { d.Invoices = fixedInvoices{} }},
 		{"event streams", func(d *Dependencies) { d.Events = fixedStreams{} }},
+		{"stream timing", func(d *Dependencies) { d.StreamTiming = events.DefaultStreamTiming() }},
 	}
 
 	for _, step := range steps {
@@ -80,7 +82,7 @@ func (fixedReservations) Current(context.Context, uuid.UUID) (rentals.Current, e
 }
 
 func (fixedReservations) Rides(
-	context.Context, uuid.UUID, *rentals.RidePosition, int,
+	context.Context, uuid.UUID, *cursor.Position, int,
 ) (rentals.RidePage, error) {
 	return rentals.RidePage{}, nil
 }
@@ -118,7 +120,7 @@ func (fixedReservations) PayInvoice(
 type fixedNotifications struct{}
 
 func (fixedNotifications) Collection(
-	context.Context, uuid.UUID, *notifications.Position, int,
+	context.Context, uuid.UUID, *cursor.Position, int,
 ) (notifications.Collection, error) {
 	return notifications.Collection{}, nil
 }
@@ -136,7 +138,7 @@ func (fixedInvoices) ByID(context.Context, uuid.UUID, string) (invoices.Invoice,
 }
 
 func (fixedInvoices) ReadPage(
-	context.Context, uuid.UUID, *invoices.Position, int,
+	context.Context, uuid.UUID, *cursor.Position, int,
 ) (invoices.Page, error) {
 	return invoices.Page{}, nil
 }
