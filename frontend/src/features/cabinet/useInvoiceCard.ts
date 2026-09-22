@@ -1,15 +1,16 @@
 import { useCallback, useMemo } from 'react';
 import type { InvoiceView } from '../../shared/api/current.ts';
 import { fetchInvoice } from '../../shared/api/invoices.ts';
-import type { Resource } from '../../shared/api/Resource.ts';
-import { useResource, type ResourceRead } from '../../shared/api/useResource.ts';
-import { sessionOf, type Account } from '../account/useAccount.ts';
-import { answersOf } from '../events/documentAnswers.ts';
-import { createReadCoordinator, type ReadCoordinator } from '../events/coordinator.ts';
-import { usePrivateCycle } from '../events/privateCycle.ts';
-import type { AnswerHandlers, DocumentKind } from '../events/readCycle.ts';
-import type { PrivateFeed } from '../events/usePrivateEvents.ts';
-import { isNewerVersion } from '../events/version.ts';
+import { identityOf } from '../../shared/account/identity.ts';
+import type { Account } from '../../shared/account/session.ts';
+import { answersOf } from '../../shared/read/documentAnswers.ts';
+import { createReadCoordinator, type ReadCoordinator } from '../../shared/read/coordinator.ts';
+import type { Resource } from '../../shared/read/Resource.ts';
+import type { AnswerHandlers, DocumentKind } from '../../shared/read/readCycle.ts';
+import { useReadCycle } from '../../shared/read/useReadCycle.ts';
+import type { CycleFeed } from '../../shared/read/useReadCycle.ts';
+import { useResource, type ResourceRead } from '../../shared/read/useResource.ts';
+import { isNewerVersion } from '../../shared/read/version.ts';
 
 /** The one document the reader of a single invoice keeps up to date. */
 const INVOICE_DOCUMENTS: readonly DocumentKind[] = ['invoices'];
@@ -32,8 +33,8 @@ export type InvoiceCard = {
  * service, so the failure to read them is the same failure here: nothing tells a person that
  * somebody else's invoice exists.
  */
-export function useInvoiceCard(account: Account, invoiceId: string, events: PrivateFeed): InvoiceCard {
-  const session = sessionOf(account);
+export function useInvoiceCard(account: Account, invoiceId: string, events: CycleFeed): InvoiceCard {
+  const session = identityOf(account).session;
 
   const state = useMemo(() => ({ version: undefined as string | undefined }), [session, invoiceId]);
   const coordinator = useMemo(() => coordinatorFor(session, state), [session, state]);
@@ -48,7 +49,7 @@ export function useInvoiceCard(account: Account, invoiceId: string, events: Priv
   );
   const handle = useResource<InvoiceView | undefined>(load, read);
 
-  usePrivateCycle(coordinator, events, INVOICE_DOCUMENTS);
+  useReadCycle(coordinator, events, INVOICE_DOCUMENTS);
 
   return { resource: handle.resource, retry: handle.retry };
 }

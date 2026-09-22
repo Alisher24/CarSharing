@@ -1,6 +1,7 @@
-import type { FleetSnapshot } from '../../shared/api/catalog';
-import type { Resource } from '../../shared/api/Resource';
-import { INTERFACE_LOCALE } from '../../shared/locale';
+import type { FleetSnapshot } from '../../shared/api/catalog.ts';
+import { RETRY_ACTION } from '../../shared/copy.ts';
+import type { Resource } from '../../shared/read/Resource.ts';
+import { clockMoment } from '../../shared/time.ts';
 
 /** What the strip says while the first reading is still on its way. */
 const LOADING = 'Загружаем парк…';
@@ -10,12 +11,6 @@ const STALE = 'Данные устарели';
 
 /** What it says when nothing has ever been read, which is not the same as an empty fleet. */
 const NEVER_LOADED = 'Не удалось загрузить парк';
-
-const timeFormat = new Intl.DateTimeFormat(INTERFACE_LOCALE, {
-  hour: '2-digit',
-  minute: '2-digit',
-  second: '2-digit',
-});
 
 type FleetStatusProps = { resource: Resource<FleetSnapshot>; onRetry: () => void };
 
@@ -30,14 +25,14 @@ export function FleetStatus({ resource, onRetry }: FleetStatusProps) {
   }
 
   if (resource.phase === 'ready') {
-    return <p className="fleet-status">Обновлено в {timeFormat.format(resource.loadedAt)}</p>;
+    return <p className="fleet-status">Обновлено в {clockMoment(resource.loadedAt)}</p>;
   }
 
   return (
     <p className="fleet-status fleet-status-warning" role="status">
       {warningText(resource)}
       <button className="fleet-retry" type="button" onClick={onRetry}>
-        Повторить
+        {RETRY_ACTION}
       </button>
     </p>
   );
@@ -46,5 +41,6 @@ export function FleetStatus({ resource, onRetry }: FleetStatusProps) {
 /** A snapshot that is still on screen says when it was taken; one that never arrived cannot. */
 function warningText(resource: Resource<FleetSnapshot>): string {
   if (resource.phase !== 'stale') return NEVER_LOADED;
-  return `${STALE} · последнее обновление в ${timeFormat.format(resource.loadedAt)}`;
+
+  return `${STALE} · последнее обновление в ${clockMoment(resource.loadedAt)}`;
 }

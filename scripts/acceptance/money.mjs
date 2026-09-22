@@ -1,10 +1,12 @@
 // How an amount of the contract is written for a person: whole tyiyn, both minor digits, and the unit
-// the interface writes. It is the rule `frontend/src/features/fleet/money.ts` applies, restated here
-// because a browser check compares a letter and a screen against an invoice the service published, and
-// a check that read the expected text out of the thing it checks would prove nothing.
+// the interface writes. It is the rule `frontend/src/shared/money.ts` applies, restated here because a
+// browser check compares a letter and a screen against an invoice the service published, and a check
+// that read the expected text out of the thing it checks would prove nothing.
 //
-// Both parts the rule turns on are taken from `Intl` with the locale that file declares rather than
-// assumed: the grouping and the decimal mark of `ru-RU` are the characters the screen carries too.
+// The two parts of the rule a check cannot derive from the amount it is checking — the locale, and the
+// unit an amount is written with — are read from that declaration by `scripts/money-declaration.test.mjs`
+// rather than assumed: a change to either is a change here, not a check that compares against a unit
+// nobody writes.
 const INTERFACE_LOCALE = 'ru-RU';
 
 /** How many tyiyn make one som. */

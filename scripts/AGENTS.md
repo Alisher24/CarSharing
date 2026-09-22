@@ -18,6 +18,9 @@ the root `AGENTS.md`.
   idempotency window and rate limits shared by the contract, processes and acceptance checks.
 - `node --test scripts/shutdown-grace-period.test.mjs scripts/stream-proxy-bounds.test.mjs` — the
   independent timing bounds shared by processes and stack configuration.
+- `node --test scripts/money-declaration.test.mjs` — the locale and the unit an amount is written
+  with, held between `frontend/src/shared/money.ts` and the oracle `scripts/acceptance/money.mjs`
+  restates on purpose.
 - `node --env-file=.env --test --test-concurrency=1 "scripts/acceptance/*.test.mjs"` — the HTTP
   acceptance suites with the same public settings Compose receives.
 - `node scripts/generate-contracts.mjs` / `node scripts/check-contracts.mjs` — the entry points behind

@@ -24,6 +24,9 @@
   --radius-md: 12px;
   --radius-lg: 22px;
   --radius-pill: 100px;
+  --dot-size-small: 8px;
+  --shadow-marker: 0 1px 4px #213b2759;
+  --shadow-card: 0 18px 48px #213b271f;
   --color-ink: #193f36;
   --color-ink-hover: #2c5849;
   --color-ink-muted: #526459;
@@ -43,6 +46,20 @@
   --color-border-soft: #e2e6dc;
   --color-border-row: #edf0e7;
   --color-danger: #b00020;
+
+  /* The one rule for a pill a person has chosen, and the padding each size of pill is drawn with.
+     They are declared here because the same pill is a filter chip, a view tab, an account tab and a
+     cabinet tab, and a copy of the rule is how the four come to look like four controls. */
+  --color-chosen: var(--color-ink);
+  --color-on-chosen: var(--color-on-ink);
+  --padding-pill: 8px 16px;
+  --padding-pill-compact: 7px 14px;
+  --padding-pill-wide: 9px 16px;
+  --padding-pill-header: 10px 18px;
+  --padding-retry: 5px 12px;
+  --padding-notice: 8px 12px;
+  --padding-caption: 6px 12px;
+  --padding-close: 4px 10px;
 
   font-family: Inter, 'Segoe UI', Arial, sans-serif;
   color: var(--color-ink);

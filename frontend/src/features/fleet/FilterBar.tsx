@@ -6,8 +6,8 @@ import {
   withPowertrainToggled,
   withStatusToggled,
   type FleetFilters,
-} from './filters';
-import { POWERTRAIN_LABELS, STATUS_LABELS } from './fleetCopy';
+} from '../../shared/vehicle/filters.ts';
+import { POWERTRAIN_LABELS, STATUS_LABELS } from '../../shared/vehicle/spell.ts';
 
 type FilterBarProps = { filters: FleetFilters; onChange: (filters: FleetFilters) => void };
 

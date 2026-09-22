@@ -1,40 +1,22 @@
-import { useState } from 'react';
-import { isLiveRental, type CurrentSnapshot, type Rental, type ReservedRental } from '../../shared/api/current.ts';
-import type { Resource } from '../../shared/api/Resource.ts';
-import { loadedValue } from '../../shared/api/Resource.ts';
-import type { Account } from '../account/useAccount.ts';
-import type { Notifications } from '../notifications/useNotifications.ts';
-import { commandText } from './commandPhase.ts';
+import { isLiveRental, type CurrentSnapshot, type Rental } from '../../shared/api/current.ts';
+import { identityOf } from '../../shared/account/identity.ts';
+import type { Notifications } from '../../shared/account/notifications.ts';
+import type { Account } from '../../shared/account/session.ts';
+import { usePayment, type Payment } from '../../shared/command/usePayment.ts';
+import type { UnfinishedCommand } from '../../shared/command/unfinishedCommand.ts';
+import { withinRepeatWindow } from '../../shared/command/unfinishedCommand.ts';
+import { REPEAT_ACTION, REPEAT_EXPIRED, UNKNOWN_COMMAND } from '../../shared/copy.ts';
+import type { Resource } from '../../shared/read/Resource.ts';
+import { loadedValue } from '../../shared/read/Resource.ts';
+import { currentRental, type ServerClock } from '../../shared/ride/serverClock.ts';
+import { NOTHING_CURRENT } from '../../shared/ride/spell.ts';
+import { useClockTick } from '../../shared/ride/useClockTick.ts';
 import type { CompletedRideResult } from './completedResult.ts';
-import type { Countdown, ServerClock } from './countdown.ts';
 import { FinishedRideView } from './FinishedRideView.tsx';
-import {
-  CANCEL_ACTION,
-  CANCEL_CONFIRMED,
-  CANCEL_QUESTION,
-  CANCEL_WARNING,
-  currentRental,
-  EXPIRY_PENDING,
-  GO_TO_VEHICLE,
-  KEEP_ACTION,
-  limitText,
-  NOTHING_CURRENT,
-  PANEL_HEADING,
-  rateTextOf,
-  REPEAT_ACTION,
-  REPEAT_EXPIRED,
-  RIDE_RUNNING,
-  TARIFF_CHANGED,
-  UNKNOWN_COMMAND,
-  vehicleName,
-} from './reservationCopy.ts';
+import { limitText, PANEL_HEADING } from './reservationCopy.ts';
+import { ReservedRental } from './ReservedRental.tsx';
 import { RideView } from './RideView.tsx';
-import { START_ACTION } from './rideCopy.ts';
-import { TariffRates } from './TariffRates.tsx';
-import { withinRepeatWindow, type UnfinishedCommand } from './unfinishedCommand.ts';
 import { useCompletedRideResult } from './useCompletedRideResult.ts';
-import { useCountdown } from './useCountdown.ts';
-import { usePayment, type Payment } from './usePayment.ts';
 import type { Reservations } from './useReservations.ts';
 import type { RideCommands } from './useRideCommands.ts';
 
@@ -78,18 +60,17 @@ export function ReservationPanel({
   onShowVehicle,
 }: ReservationPanelProps) {
   const snapshot = loadedValue(resource);
-  const paid = usePayment(account);
+  const { session, csrfToken } = identityOf(account);
+  const paid = usePayment(session, csrfToken);
   const result = useCompletedRideResult({ ride, notifications, paid });
   if (snapshot === undefined) return null;
 
-  const rental = currentRental(snapshot);
-  const receivedAt = resource.phase === 'ready' || resource.phase === 'stale' ? resource.loadedAt : new Date();
-  const clock: ServerClock = { serverTime: snapshot.server_time, receivedAt };
+  const clock: ServerClock = { serverTime: snapshot.server_time, receivedAt: loadedMoment(resource) };
   return (
     <section className="reservation-panel" aria-label={PANEL_HEADING}>
       <h2 className="reservation-panel-heading">{PANEL_HEADING}</h2>
       <CurrentState
-        rental={rental}
+        rental={currentRental(snapshot)}
         result={result}
         paid={paid}
         reservations={reservations}
@@ -101,6 +82,17 @@ export function ReservationPanel({
       <UnknownCommand held={repeatableOf(reservations, ride)} onRepeat={repeatOf(reservations, ride)} />
     </section>
   );
+}
+
+/**
+ * The local moment the answer on screen arrived at, which every interval is measured from. A reading
+ * that is not on screen any more has no moment of its own, so the clock the panel holds is the one
+ * that was taken when it was shown.
+ */
+function loadedMoment(resource: Resource<CurrentSnapshot | undefined>): Date {
+  if (resource.phase === 'ready' || resource.phase === 'stale') return resource.loadedAt;
+
+  return new Date();
 }
 
 /**
@@ -160,89 +152,18 @@ function CurrentRental({
   onShowVehicle: (vehicleId: string) => void;
 }) {
   if (!isLiveRental(rental)) return null;
-  if (rental.state === 'reserved') {
-    return (
-      <ReservedRental
-        rental={rental}
-        reservations={reservations}
-        ride={ride}
-        clock={clock}
-        onShowVehicle={onShowVehicle}
-      />
-    );
+  if (rental.state !== 'reserved') {
+    return <RideView rental={rental} ride={ride} clock={clock} onShowVehicle={onShowVehicle} />;
   }
 
-  return <RideView rental={rental} ride={ride} clock={clock} onShowVehicle={onShowVehicle} />;
-}
-
-function ReservedRental({
-  rental,
-  reservations,
-  ride,
-  clock,
-  onShowVehicle,
-}: {
-  rental: ReservedRental;
-  reservations: Reservations;
-  ride: RideCommands;
-  clock: ServerClock;
-  onShowVehicle: (vehicleId: string) => void;
-}) {
-  const [asking, setAsking] = useState(false);
-  const countdown = useCountdown({ expiresAt: rental.expires_at, ...clock });
-  const sending = reservations.phase.state === 'sending' && reservations.phase.action === 'cancel';
-  const starting = ride.phase.state === 'sending' && ride.phase.action === 'start';
-  const notice = cancellingNotice(reservations) ?? startingNotice(ride);
-
   return (
-    <div className="reservation-panel-current">
-      <p className="reservation-panel-vehicle">{vehicleName(rental)}</p>
-      <p className="reservation-panel-time" role="status">
-        {countdown === undefined ? RIDE_RUNNING : countdownText(countdown)}
-      </p>
-
-      <TariffRates rates={rateTextOf(rental.tariff_snapshot)} />
-      {reservations.ratesChanged && <p className="reservation-panel-notice">{TARIFF_CHANGED}</p>}
-
-      <div className="reservation-panel-actions">
-        <button
-          className="action-button"
-          type="button"
-          disabled={starting || sending}
-          onClick={() => ride.begin(rental.id)}
-        >
-          {START_ACTION}
-        </button>
-        <button className="action-button" type="button" onClick={() => onShowVehicle(rental.vehicle.id)}>
-          {GO_TO_VEHICLE}
-        </button>
-        <button className="action-button" type="button" disabled={sending || starting} onClick={() => setAsking(true)}>
-          {CANCEL_ACTION}
-        </button>
-      </div>
-
-      {asking && (
-        <div className="reservation-panel-confirm" role="group" aria-label={CANCEL_QUESTION}>
-          <p className="reservation-panel-question">{CANCEL_QUESTION}</p>
-          <p className="reservation-panel-warning">{CANCEL_WARNING}</p>
-          <button
-            className="action-button"
-            type="button"
-            onClick={() => {
-              setAsking(false);
-              reservations.cancel(rental.id);
-            }}
-          >
-            {CANCEL_ACTION}
-          </button>
-          <button className="action-button" type="button" onClick={() => setAsking(false)}>
-            {KEEP_ACTION}
-          </button>
-        </div>
-      )}
-
-      {notice !== undefined && <p className="reservation-panel-notice">{notice}</p>}
-    </div>
+    <ReservedRental
+      rental={rental}
+      reservations={reservations}
+      ride={ride}
+      clock={clock}
+      onShowVehicle={onShowVehicle}
+    />
   );
 }
 
@@ -256,50 +177,32 @@ function repeatOf(reservations: Reservations, ride: RideCommands): () => void {
   return reservations.repeatable === undefined ? ride.repeat : reservations.repeat;
 }
 
-/** What the panel says about the last cancellation, if it was the last command. */
-function cancellingNotice(reservations: Reservations): string | undefined {
-  const { phase } = reservations;
-  if (phase.state === 'done' && phase.action === 'cancel') return CANCEL_CONFIRMED;
-  if (phase.state === 'refused' && phase.action === 'cancel') return commandText(phase);
-
-  return undefined;
-}
-
-/**
- * What the panel says about a refused start, which is the one ride command a reservation can send: why
- * the ride could not begin — an unfitting vehicle, a reservation that has run out — is what the person
- * has to read before deciding what to do with the reservation.
- */
-function startingNotice(ride: RideCommands): string | undefined {
-  const { phase } = ride;
-  if (phase.state === 'refused' && phase.action === 'start') return commandText(phase);
-
-  return undefined;
-}
-
 /**
  * UnknownCommand offers to settle a command whose answer never arrived. It is the only control that
  * sends a command with a key that was already used: a new booking is refused while the outcome is
  * unknown, because a new key would hide what the stored one already did.
  */
 function UnknownCommand({ held, onRepeat }: { held: UnfinishedCommand | undefined; onRepeat: () => void }) {
+  const now = useClockTick();
   if (held === undefined) return null;
 
   return (
     <div className="reservation-panel-unknown" role="status">
       <p className="reservation-panel-notice">{UNKNOWN_COMMAND}</p>
-      {withinRepeatWindow(held, Date.now()) ? (
-        <button className="action-button" type="button" onClick={onRepeat}>
-          {REPEAT_ACTION}
-        </button>
-      ) : (
-        <p className="reservation-panel-notice">{REPEAT_EXPIRED}</p>
-      )}
+      <RepeatCommand held={held} now={now} onRepeat={onRepeat} />
     </div>
   );
 }
 
-function countdownText(countdown: Countdown): string {
-  if (countdown.state === 'left') return `Осталось ${countdown.text}`;
-  return EXPIRY_PENDING;
+/** The one control that settles an unknown outcome, or what is said instead of it past its window. */
+function RepeatCommand({ held, now, onRepeat }: { held: UnfinishedCommand; now: Date; onRepeat: () => void }) {
+  if (!withinRepeatWindow(held, now.getTime())) {
+    return <p className="reservation-panel-notice">{REPEAT_EXPIRED}</p>;
+  }
+
+  return (
+    <button className="action-button" type="button" onClick={onRepeat}>
+      {REPEAT_ACTION}
+    </button>
+  );
 }

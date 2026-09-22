@@ -1,7 +1,7 @@
 import { Marker, type Map as MapLibreMap } from 'maplibre-gl';
-import type { Vehicle } from '../../shared/api/catalog';
-import { POWERTRAIN_LABELS, statusText } from '../fleet/fleetCopy';
-import { statusColourProperty } from './markerStyle';
+import type { Vehicle } from '../../shared/api/catalog.ts';
+import { POWERTRAIN_LABELS, statusText } from '../../shared/vehicle/spell.ts';
+import { statusColourProperty } from './markerStyle.ts';
 
 /** What the marker layer is showing right now, so a redraw changes only what differs. */
 export type MarkerSelection = { vehicles: readonly Vehicle[]; selectedId: string | undefined };

@@ -1,9 +1,10 @@
 import type { InvoiceView } from '../../shared/api/current.ts';
 import { fetchInvoices } from '../../shared/api/history.ts';
-import { sessionOf, type Account } from '../account/useAccount.ts';
-import type { DocumentKind } from '../events/readCycle.ts';
-import type { PrivateFeed } from '../events/usePrivateEvents.ts';
-import { isNewerVersion } from '../events/version.ts';
+import { identityOf } from '../../shared/account/identity.ts';
+import type { Account } from '../../shared/account/session.ts';
+import type { DocumentKind } from '../../shared/read/readCycle.ts';
+import { isNewerVersion } from '../../shared/read/version.ts';
+import type { CycleFeed } from '../../shared/read/useReadCycle.ts';
 import type { Replaces } from './feedPages.ts';
 import { useFeed, type Feed, type ReadFeedPage } from './useFeed.ts';
 
@@ -33,9 +34,9 @@ const readInvoicePage: ReadFeedPage<InvoiceRecord> = (cursor, signal) =>
   }));
 
 /** useInvoiceFeed reads the signed-in person's own invoices, newest first. */
-export function useInvoiceFeed(account: Account, events: PrivateFeed): Feed<InvoiceRecord> {
+export function useInvoiceFeed(account: Account, events: CycleFeed): Feed<InvoiceRecord> {
   return useFeed<InvoiceRecord>({
-    session: sessionOf(account),
+    session: identityOf(account).session,
     document: INVOICES_DOCUMENT,
     events,
     read: readInvoicePage,

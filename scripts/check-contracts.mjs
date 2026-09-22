@@ -69,11 +69,12 @@ runNode([
   'scripts/rate-limit-settings.test.mjs',
   'scripts/shutdown-grace-period.test.mjs',
   'scripts/stream-proxy-bounds.test.mjs',
+  'scripts/money-declaration.test.mjs',
 ]);
 // npm supplies its CLI path on Windows and Unix when invoked through the documented npm script.
 assert.ok(process.env.npm_execpath, 'Run: npm --prefix tools/openapi run check');
 runNode([process.env.npm_execpath, 'run', 'build'], join(repositoryRoot, 'frontend'));
 console.log(
-  'PASS: deterministic generation, all contracts/examples, Go tests/vet, setup and the stack declarations, ' +
-    'frontend build.',
+  'PASS: deterministic generation, all contracts/examples, Go tests/vet, setup and the declarations shared with ' +
+    'the interface, frontend build.',
 );

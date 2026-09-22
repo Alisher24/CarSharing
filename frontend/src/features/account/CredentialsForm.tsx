@@ -1,12 +1,12 @@
 import type { FormEvent } from 'react';
-import { ENTRY_ACTIONS, ENTRY_INTENTS, ENTRY_TAB_TITLES, ENTRY_TABS_LABEL } from './accountCopy';
-import { CredentialInput } from './CredentialInput';
-import { CREDENTIAL_FIELDS } from './credentialRules';
-import { refusalText } from './refusalText';
-import { useCredentialChecks } from './useCredentialChecks';
-import type { AccountIntent } from './accountIntent';
-import type { Submission } from './useAccount';
-import type { Credentials } from '../../shared/api/session';
+import { ENTRY_ACTIONS, ENTRY_INTENTS, ENTRY_TAB_TITLES, ENTRY_TABS_LABEL } from './accountCopy.ts';
+import { CredentialInput } from './CredentialInput.tsx';
+import { CREDENTIAL_FIELDS } from './credentialRules.ts';
+import { refusalText } from './refusalText.ts';
+import { useCredentialChecks } from './useCredentialChecks.ts';
+import type { AccountIntent } from './accountIntent.ts';
+import type { Submission } from './useAccount.ts';
+import type { Credentials } from '../../shared/api/session.ts';
 
 type CredentialsFormProps = {
   /** Which operation the form is asking for, which is the tab the person chose. */

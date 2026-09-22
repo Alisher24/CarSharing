@@ -1,8 +1,8 @@
 import type { CurrentSnapshot, Rental } from '../../shared/api/current.ts';
-import { answersOf } from '../events/documentAnswers.ts';
-import type { AnswerHandlers, DocumentKind } from '../events/readCycle.ts';
-import { versionsOf } from '../events/observedResource.ts';
-import { isNewerTimestamp } from '../events/version.ts';
+import { answersOf } from '../../shared/read/documentAnswers.ts';
+import type { AnswerHandlers, DocumentKind } from '../../shared/read/readCycle.ts';
+import { versionsOf } from '../../shared/read/observedResource.ts';
+import { isNewerTimestamp } from '../../shared/read/version.ts';
 
 /** What one session of reading the account's own rental knows, which one answer needs to store. */
 export type CurrentSession = {

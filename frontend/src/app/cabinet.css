@@ -42,7 +42,7 @@
 }
 
 .cabinet-tab {
-  padding: 8px 16px;
+  padding: var(--padding-pill);
   font-size: var(--font-size-detail);
   color: var(--color-ink-muted);
   border: 1px solid var(--color-border);
@@ -52,14 +52,6 @@
 .cabinet-tab:hover {
   color: var(--color-ink);
   background: var(--color-surface-highlight);
-}
-
-/* The feed a person came through stays marked while they read one of its records, so the cabinet
-   never looks as though they left it. */
-.cabinet-tab[aria-current='page'] {
-  color: var(--color-on-ink);
-  background: var(--color-ink);
-  border-color: var(--color-ink);
 }
 
 .feed {

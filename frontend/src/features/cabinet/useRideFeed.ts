@@ -1,7 +1,8 @@
 import { fetchRides, type RideSummary } from '../../shared/api/history.ts';
-import { sessionOf, type Account } from '../account/useAccount.ts';
-import type { DocumentKind } from '../events/readCycle.ts';
-import type { PrivateFeed } from '../events/usePrivateEvents.ts';
+import { identityOf } from '../../shared/account/identity.ts';
+import type { Account } from '../../shared/account/session.ts';
+import type { DocumentKind } from '../../shared/read/readCycle.ts';
+import type { CycleFeed } from '../../shared/read/useReadCycle.ts';
 import type { Replaces } from './feedPages.ts';
 import { useFeed, type Feed, type ReadFeedPage } from './useFeed.ts';
 
@@ -19,9 +20,9 @@ const readRidePage: ReadFeedPage<RideSummary> = (cursor, signal) =>
   fetchRides(cursor, signal).then((page) => ({ records: page.items, nextCursor: page.next_cursor }));
 
 /** useRideFeed reads the rides the signed-in person has finished, newest first. */
-export function useRideFeed(account: Account, events: PrivateFeed): Feed<RideSummary> {
+export function useRideFeed(account: Account, events: CycleFeed): Feed<RideSummary> {
   return useFeed<RideSummary>({
-    session: sessionOf(account),
+    session: identityOf(account).session,
     document: RIDES_DOCUMENT,
     events,
     read: readRidePage,

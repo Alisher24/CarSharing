@@ -1,16 +1,20 @@
 import { useEffect, useRef } from 'react';
-import { sessionOf, useAccount, type Account, type Submission } from '../features/account/useAccount';
-import type { AccountIntent } from '../features/account/accountIntent';
-import { useConnection, type Connection } from '../features/connection/useConnection';
-import type { EventsConnection } from '../features/events/useEventStream';
-import { useEvents } from '../features/events/useEvents';
-import { usePrivateEvents, type PrivateFeed } from '../features/events/usePrivateEvents';
-import { useCatalog, type Catalog } from '../features/fleet/useCatalog';
-import { useNotifications, type Notifications } from '../features/notifications/useNotifications';
-import { useCurrentRental, type CurrentRental } from '../features/reservation/useCurrentRental';
-import { useReservations, type Reservations } from '../features/reservation/useReservations';
-import { useRideCommands, type RideCommands } from '../features/reservation/useRideCommands';
-import type { Credentials } from '../shared/api/session';
+import { useAccount } from '../features/account/useAccount.ts';
+import type { Submission } from '../shared/account/session.ts';
+import type { AccountIntent } from '../features/account/accountIntent.ts';
+import { useConnection, type Connection } from '../features/connection/useConnection.ts';
+import { useCatalog, type Catalog } from '../features/fleet/useCatalog.ts';
+import { useEvents } from '../features/live/useEvents.ts';
+import { usePrivateEvents } from '../features/live/usePrivateEvents.ts';
+import { useNotifications, type Notifications } from '../features/notifications/useNotifications.ts';
+import { useCurrentRental, type CurrentRental } from '../features/reservation/useCurrentRental.ts';
+import { useReservations, type Reservations } from '../features/reservation/useReservations.ts';
+import { useRideCommands, type RideCommands } from '../features/reservation/useRideCommands.ts';
+import { identityOf } from '../shared/account/identity.ts';
+import type { Account } from '../shared/account/session.ts';
+import type { Credentials } from '../shared/api/session.ts';
+import type { CycleFeed } from '../shared/read/useReadCycle.ts';
+import type { EventsConnection } from '../shared/read/useEventStream.ts';
 
 /**
  * Everything the application reads and can do, whichever address is on screen. The session, the two
@@ -32,7 +36,7 @@ export type Application = {
   leave: () => Promise<void>;
 
   /** The private stream, which every reader of the account's own records takes its signals from. */
-  privateEvents: PrivateFeed;
+  privateEvents: CycleFeed;
 
   catalog: Catalog;
   current: CurrentRental;
@@ -48,7 +52,7 @@ export function useApplication(): Application {
   const events = useEvents();
   const catalog = useCatalog(events);
 
-  const privateEvents = usePrivateEvents(sessionOf(account), recheck);
+  const privateEvents = usePrivateEvents(identityOf(account).session, recheck);
   useSessionCheckOnRecovery(events.connection, recheck);
 
   // What the person is doing now, and the commands that change it, are read and held here rather

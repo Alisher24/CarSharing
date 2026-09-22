@@ -5,7 +5,7 @@ import { describe, test } from 'node:test';
 const CONTRACT = await readFile(new URL('../openapi/public.yaml', import.meta.url), 'utf8');
 const SERVICE_STORE = await readFile(new URL('../backend/internal/idempotency/store.go', import.meta.url), 'utf8');
 const BROWSER_COMMAND = await readFile(
-  new URL('../frontend/src/features/reservation/unfinishedCommand.ts', import.meta.url),
+  new URL('../frontend/src/shared/command/unfinishedCommand.ts', import.meta.url),
   'utf8',
 );
 

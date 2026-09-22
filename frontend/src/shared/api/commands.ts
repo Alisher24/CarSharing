@@ -1,4 +1,4 @@
-import type { ApiError } from './generated/types.gen';
+import type { ApiError } from './generated/types.gen.ts';
 
 /**
  * What one attempt at a command of the service produced, whoever sent it and whatever it asked for.
@@ -15,19 +15,12 @@ export type CommandResult<T> =
 /** What one command is sent with: the token of the session and the key of the attempt. */
 export type CommandCredentials = { csrfToken: string; key: string };
 
-// The session cookie is HttpOnly, so nothing here reads or writes it; the CSRF token comes from the
-// session the caller holds in memory, and the browser attaches Origin itself.
-export const sameOriginRequest = { credentials: 'same-origin', cache: 'no-store' } as const;
-
-/** The origin the service demands of a command, which is the one this document is served from. */
-export const originHeader = () => ({ Origin: window.location.origin });
-
 /**
  * The headers every command carries: the origin it is sent from, the token of the session, and the
  * key that makes a repeat the same command rather than a second one.
  */
 export function commandHeaders(credentials: CommandCredentials) {
-  return { ...originHeader(), 'X-CSRF-Token': credentials.csrfToken, 'Idempotency-Key': credentials.key };
+  return { Origin: window.location.origin, 'X-CSRF-Token': credentials.csrfToken, 'Idempotency-Key': credentials.key };
 }
 
 /**

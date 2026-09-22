@@ -1,11 +1,6 @@
 import { getInvoice, payInvoice as payInvoiceRequest } from './generated/sdk.gen';
-import {
-  answerOf,
-  commandHeaders,
-  sameOriginRequest,
-  type CommandCredentials,
-  type CommandResult,
-} from './commands.ts';
+import { answerOf, commandHeaders, type CommandCredentials, type CommandResult } from './commands.ts';
+import { sameOriginRequest } from './request.ts';
 import type { InvoiceView, PayResult } from './generated/types.gen';
 
 export type { Invoice, InvoiceView, PayResult, Payment } from './generated/types.gen';

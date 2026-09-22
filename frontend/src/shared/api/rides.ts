@@ -1,12 +1,7 @@
 import { finishRental, pauseRental, resumeRental, startRental } from './generated/sdk.gen';
 import type { FinishResult, RentalCommandResult } from './generated/types.gen';
-import {
-  answerOf,
-  commandHeaders,
-  sameOriginRequest,
-  type CommandCredentials,
-  type CommandResult,
-} from './commands.ts';
+import { answerOf, commandHeaders, type CommandCredentials, type CommandResult } from './commands.ts';
+import { sameOriginRequest } from './request.ts';
 
 /**
  * The commands that move a rental through its ride: a reservation becomes a ride, the ride is held,

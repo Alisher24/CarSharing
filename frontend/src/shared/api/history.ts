@@ -1,11 +1,8 @@
 import { getInvoices, getRides } from './generated/sdk.gen';
+import { sameOriginRequest } from './request.ts';
 import type { InvoiceCollection, RideCollection } from './generated/types.gen';
 
 export type { InvoiceCollection, RideCollection, RideSummary, VehicleReference } from './generated/types.gen';
-
-// Both collections belong to one account: the browser sends the session cookie, and the service
-// answers the rides and the invoices of the caller rather than of anybody the request could name.
-const sameOriginRequest = { credentials: 'same-origin', cache: 'no-store' } as const;
 
 /**
  * fetchRides reads one page of the rides the caller has finished, newest first. A cursor continues

@@ -1,32 +1,23 @@
 import { Link, useParams } from 'react-router';
 import { INVOICE_PARAMETER, INVOICES_ADDRESS } from '../../app/addresses.ts';
 import type { InvoiceView } from '../../shared/api/current.ts';
-import { loadedValue } from '../../shared/api/Resource.ts';
-import type { Account } from '../account/useAccount.ts';
-import type { PrivateFeed } from '../events/usePrivateEvents.ts';
-import { found } from '../fleet/useCatalog.ts';
-import { ResourceNotice } from '../fleet/ResourceNotice.tsx';
-import { commandText } from '../reservation/commandPhase.ts';
-import { PAID_AT, paidAtText, paymentActionText, paymentText } from '../reservation/paymentCopy.ts';
-import { completionText } from '../reservation/rideCopy.ts';
-import { useReadAfterPayment, usePayment, type Payment } from '../reservation/usePayment.ts';
-import { BACK_TO_INVOICES, INVOICE_ABSENCE } from './cabinetCopy.ts';
+import { identityOf } from '../../shared/account/identity.ts';
+import type { Account } from '../../shared/account/session.ts';
+import { commandText } from '../../shared/command/commandPhase.ts';
+import { usePayment, type Payment } from '../../shared/command/usePayment.ts';
+import { useReadAfterPayment } from '../../shared/command/useReadAfterPayment.ts';
+import { ResourceNotice } from '../../shared/components/ResourceNotice.tsx';
+import { loadedValue } from '../../shared/read/Resource.ts';
+import { found } from '../../shared/read/presence.ts';
+import type { CycleFeed } from '../../shared/read/useReadCycle.ts';
+import { PAID_AT, paidAtText, PAYMENT_STATE, paymentActionText, paymentText } from '../../shared/ride/paymentCopy.ts';
+import { COMPLETION_REASON, completionText } from '../../shared/ride/spell.ts';
+import { BACK_TO_INVOICES } from '../../shared/copy.ts';
+import { INVOICE_ABSENCE } from './cabinetCopy.ts';
 import { FeedValue } from './FeedValue.tsx';
-import {
-  INVOICE_ISSUED_AT,
-  INVOICE_PAYMENT,
-  INVOICE_TOTAL,
-  LINE_AMOUNT,
-  LINE_MINUTES,
-  LINE_RATE,
-  invoiceLineRows,
-  invoiceRow,
-  type InvoiceLineRow,
-} from './invoiceRows.ts';
+import { INVOICE_ISSUED_AT, LINE_AMOUNT, LINE_MINUTES, LINE_RATE, invoiceLineRows, invoiceRow } from './invoiceRows.ts';
+import type { InvoiceLineRow } from './invoiceRows.ts';
 import { useInvoiceCard } from './useInvoiceCard.ts';
-
-/** What is written before why the ride this invoice was issued for ended. */
-const INVOICE_COMPLETION = 'Причина окончания';
 
 /**
  * InvoiceCard is one invoice of the account in full: the two lines the charge was made of, with the
@@ -38,10 +29,11 @@ const INVOICE_COMPLETION = 'Причина окончания';
  * nothing has settled offers the payment, because a debt refuses the next reservation and closing it
  * must not depend on the panel of the last ride still being on screen.
  */
-export function InvoiceCard({ account, events }: { account: Account; events: PrivateFeed }) {
+export function InvoiceCard({ account, events }: { account: Account; events: CycleFeed }) {
   const invoiceId = useParams()[INVOICE_PARAMETER] ?? '';
   const card = useInvoiceCard(account, invoiceId, events);
-  const paid = usePayment(account);
+  const { session, csrfToken } = identityOf(account);
+  const paid = usePayment(session, csrfToken);
   useReadAfterPayment(paid, card.retry);
 
   const view = loadedValue(card.resource);
@@ -57,6 +49,12 @@ export function InvoiceCard({ account, events }: { account: Account; events: Pri
   );
 }
 
+/**
+ * What the invoice states, which is every number of the letter it came from: the total, which heads
+ * the card and is stated nowhere else, the moment it was issued, why the ride ended, where paying it
+ * stands, and the lines it was charged of. One amount of one invoice is written once on the screen a
+ * person checks it against the letter.
+ */
 function InvoiceDetails({ view, paid }: { view: InvoiceView; paid: Payment }) {
   const row = invoiceRow(view);
   const paidAt = paidAtText(view.payment);
@@ -66,9 +64,8 @@ function InvoiceDetails({ view, paid }: { view: InvoiceView; paid: Payment }) {
       <p className="invoice-card-total">{row.total}</p>
       <dl className="details">
         <FeedValue term={INVOICE_ISSUED_AT} value={row.issuedAt} />
-        <FeedValue term={INVOICE_COMPLETION} value={completionText(view.invoice.completion)} />
-        <FeedValue term={INVOICE_TOTAL} value={row.total} />
-        <FeedValue term={INVOICE_PAYMENT} value={paymentText(view.payment)} />
+        <FeedValue term={COMPLETION_REASON} value={completionText(view.invoice.completion)} />
+        <FeedValue term={PAYMENT_STATE} value={paymentText(view.payment)} />
         {paidAt !== undefined && <FeedValue term={PAID_AT} value={paidAt} />}
       </dl>
 

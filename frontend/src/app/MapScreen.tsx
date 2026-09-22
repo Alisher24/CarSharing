@@ -1,14 +1,18 @@
 import { useCallback, useState } from 'react';
-import { FleetView } from '../features/fleet/FleetView';
-import type { VehicleBooking } from '../features/fleet/VehicleCard';
-import { ReservationPanel } from '../features/reservation/ReservationPanel';
-import { ReservationWarning } from '../features/reservation/ReservationWarning';
-import { commandText } from '../features/reservation/commandPhase';
-import { limitAllowsBooking, limitText, SIGN_IN_TO_BOOK } from '../features/reservation/reservationCopy';
-import type { Reservations } from '../features/reservation/useReservations';
-import type { Application } from './useApplication';
-import { loadedValue } from '../shared/api/Resource';
-import type { CurrentSnapshot } from '../shared/api/current';
+import { FleetView } from '../features/fleet/FleetView.tsx';
+import type { FleetMapPane } from '../features/fleet/FleetView.tsx';
+import type { VehicleBooking } from '../features/fleet/VehicleCard.tsx';
+import { FleetMap } from '../features/map/FleetMap.tsx';
+import { ReservationPanel } from '../features/reservation/ReservationPanel.tsx';
+import { ReservationWarning } from '../features/reservation/ReservationWarning.tsx';
+import { limitAllowsBooking, limitText } from '../features/reservation/reservationCopy.ts';
+import type { Reservations } from '../features/reservation/useReservations.ts';
+import type { Account } from '../shared/account/session.ts';
+import type { CurrentSnapshot } from '../shared/api/current.ts';
+import { commandText } from '../shared/command/commandPhase.ts';
+import { SIGN_IN_TO_BOOK } from '../shared/copy.ts';
+import { loadedValue } from '../shared/read/Resource.ts';
+import type { Application } from './useApplication.ts';
 
 type MapScreenProps = {
   application: Application;
@@ -28,7 +32,22 @@ export function MapScreen({ application }: MapScreenProps) {
 
   const select = useCallback((vehicleId: string) => setSelectedId(vehicleId), []);
   const clearSelection = useCallback(() => setSelectedId(undefined), []);
-  const booking = bookingOf(account.state === 'signed-in', loadedValue(current.resource), reservations);
+  const booking = bookingOf(account, loadedValue(current.resource), reservations);
+
+  // The map belongs to its own feature and the fleet states what it is about, so the screen the two
+  // share hands the map over rather than either feature naming the other.
+  const map = useCallback<FleetMapPane>(
+    (vehicles, zones) => (
+      <FleetMap
+        vehicles={vehicles}
+        zones={zones}
+        onRetryZones={catalog.zones.retry}
+        selectedId={selectedId}
+        onSelect={select}
+      />
+    ),
+    [catalog.zones.retry, selectedId, select],
+  );
 
   return (
     <>
@@ -45,6 +64,7 @@ export function MapScreen({ application }: MapScreenProps) {
       <FleetView
         catalog={catalog}
         booking={booking}
+        map={map}
         selectedId={selectedId}
         onSelect={select}
         onClearSelection={clearSelection}
@@ -59,10 +79,11 @@ export function MapScreen({ application }: MapScreenProps) {
  * and the server decides every command again whatever the control looked like.
  */
 function bookingOf(
-  signedIn: boolean,
+  account: Account,
   snapshot: CurrentSnapshot | undefined,
   reservations: Reservations,
 ): VehicleBooking {
+  const signedIn = account.state === 'signed-in';
   return {
     signedIn,
     limit: signedIn ? limitText(snapshot) : SIGN_IN_TO_BOOK,

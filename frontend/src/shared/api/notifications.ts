@@ -1,4 +1,5 @@
 import { getNotifications, readNotification } from './generated/sdk.gen';
+import { originHeader, sameOriginRequest } from './request.ts';
 import type { NotificationCollection } from './generated/types.gen';
 
 export type {
@@ -7,12 +8,6 @@ export type {
   RentalCompletedNotification,
   ReservationExpiringNotification,
 } from './generated/types.gen';
-
-// The collection of one account is private: the browser sends the session cookie, and the token of
-// the session authorizes the read that changes one notification.
-const sameOriginRequest = { credentials: 'same-origin', cache: 'no-store' } as const;
-
-const originHeader = () => ({ Origin: window.location.origin });
 
 /**
  * fetchNotifications reads the newest page of the caller's own notifications. The page is the window

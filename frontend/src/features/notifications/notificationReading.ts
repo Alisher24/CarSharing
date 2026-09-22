@@ -1,12 +1,8 @@
 import type { NotificationCollection } from '../../shared/api/notifications.ts';
-import type { Resource } from '../../shared/api/Resource.ts';
-import { isNewerTimestamp } from '../events/version.ts';
+import type { ReadingResource, ShownCollection } from '../../shared/account/notifications.ts';
+import { isNewerTimestamp } from '../../shared/read/version.ts';
 
-/** One read of the collection, together with the account it was read for. */
-export type NotificationReading = { session: string; collection: NotificationCollection };
-
-/** The collection the interface shows, and the moment the answer that carried it arrived. */
-export type ShownCollection = { collection: NotificationCollection; receivedAt: Date };
+export type { NotificationReading, ShownCollection } from '../../shared/account/notifications.ts';
 
 /**
  * Whether one answer is worth storing over the one already held. An answer computed at a moment not
@@ -24,10 +20,7 @@ export function updatesCollection(held: NotificationCollection | undefined, inco
  * was read for, so a switch to another one shows nothing of the previous account — whether the read
  * of the new one is still on its way, failed, or never happens at all.
  */
-export function shownCollection(
-  resource: Resource<NotificationReading | undefined>,
-  session: string | undefined,
-): ShownCollection | undefined {
+export function shownCollection(resource: ReadingResource, session: string | undefined): ShownCollection | undefined {
   if (resource.phase !== 'ready' && resource.phase !== 'stale') return undefined;
 
   const reading = resource.value;

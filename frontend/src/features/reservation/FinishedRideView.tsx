@@ -1,19 +1,19 @@
 import { Link } from 'react-router';
 import { invoiceAddress } from '../../app/addresses.ts';
-import { OPEN_INVOICE } from '../cabinet/cabinetCopy.ts';
-import { commandText } from './commandPhase.ts';
-import type { CompletedRideCharge, CompletedRideResult } from './completedResult.ts';
-import { PAID_AT, PAYMENT_STATE, paidAtText, paymentActionText, paymentText } from './paymentCopy.ts';
+import { commandText } from '../../shared/command/commandPhase.ts';
+import type { Payment } from '../../shared/command/usePayment.ts';
+import { PAID_AT, paidAtText, PAYMENT_STATE, paymentActionText, paymentText } from '../../shared/ride/paymentCopy.ts';
+import { amountText } from '../../shared/ride/fares.ts';
 import {
   COMPLETION_REASON,
   completionText,
   FINISHED_AT,
   finishedAtText,
   INVOICE_TOTAL,
-  invoiceAmountText,
   RIDE_FINISHED,
-} from './rideCopy.ts';
-import type { Payment } from './usePayment.ts';
+} from '../../shared/ride/spell.ts';
+import { OPEN_INVOICE } from '../../shared/copy.ts';
+import type { CompletedRideCharge, CompletedRideResult } from './completedResult.ts';
 
 /**
  * FinishedRideView is what a person reads about a ride that is over: which vehicle it was, why it
@@ -67,7 +67,7 @@ function ChargeLines({ charge }: { charge: CompletedRideCharge }) {
   return (
     <>
       <dt>{INVOICE_TOTAL}</dt>
-      <dd>{invoiceAmountText(charge.totalAmountTyiyn)}</dd>
+      <dd>{amountText(charge.totalAmountTyiyn)}</dd>
       <dt>{PAYMENT_STATE}</dt>
       <dd>{paymentText(charge.payment)}</dd>
       {paidAt !== undefined && (

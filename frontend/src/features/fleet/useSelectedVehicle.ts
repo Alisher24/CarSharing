@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { Vehicle } from '../../shared/api/catalog';
+import type { Vehicle } from '../../shared/api/catalog.ts';
 
 /**
  * useSelectedVehicle answers what an open card is about. It follows the newest reading of the
