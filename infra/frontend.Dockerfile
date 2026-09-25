@@ -14,7 +14,7 @@
 # together by `tools/basemap/manifest.test.mjs`.
 FROM protomaps/go-pmtiles:v1.31.2@sha256:06574f01f55a78f78f887bc7ebf729a5c093c0d6e17d9876300cfcb0758b59d3 AS extractor
 
-FROM node:24.21.0-alpine@sha256:be80f76cf40ec8e42b9bec49f60a55e0660f30af58d3e5a25530785b30ea67e2 AS basemap
+FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS basemap
 # The declaration and the tools that read it are laid out exactly as the repository lays them out,
 # because each tool resolves the declaration from its own place. That is what keeps the addresses in
 # one file rather than in a copy this Dockerfile would have to be kept in step with.
@@ -29,7 +29,7 @@ RUN node tools/basemap/extract.mjs frontend/public
 RUN node tools/basemap/assets.mjs frontend/public
 RUN node tools/basemap/verify.mjs frontend/public
 
-FROM node:24.21.0-alpine@sha256:be80f76cf40ec8e42b9bec49f60a55e0660f30af58d3e5a25530785b30ea67e2 AS dev
+FROM node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS dev
 WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
