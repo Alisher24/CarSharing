@@ -9,7 +9,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/oapi-codegen/nethttp-middleware v1.2.0
-	github.com/oapi-codegen/runtime v1.7.0
+	github.com/oapi-codegen/runtime v1.8.0
 	github.com/pressly/goose/v3 v3.28.0
 	golang.org/x/crypto v0.57.0
 )
